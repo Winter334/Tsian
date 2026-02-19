@@ -1,0 +1,107 @@
+/**
+ * Inventory Zustand Store
+ *
+ * 维护从 Yjs 同步来的本地状态，供 UI 响应式读取。
+ * 内部变更方法（以 _ 前缀标记）仅由 handlers 调用，UI 只读取数据。
+ *
+ * @module inventory/store
+ */
+
+import type { ItemInstance } from "@/domain/entities/item";
+import type { SkillInstance } from "@/domain/entities/skill";
+import { create } from "zustand";
+import { immer } from "zustand/middleware/immer";
+
+// ─── 状态接口 ─────────────────────────────────────────────
+
+export interface InventoryState {
+  /** 按角色 ID 分组的物品列表 */
+  items: Record<string, ItemInstance[]>;
+  /** 按角色 ID 分组的技能列表 */
+  skills: Record<string, SkillInstance[]>;
+
+  // ── 内部变更方法（仅由 handlers 调用）──
+  _setCharacterItems(characterId: string, items: ItemInstance[]): void;
+  _setCharacterSkills(characterId: string, skills: SkillInstance[]): void;
+  _addItem(characterId: string, item: ItemInstance): void;
+  _removeItem(characterId: string, instanceId: string, quantity?: number): void;
+  _addSkill(characterId: string, skill: SkillInstance): void;
+  _removeSkill(characterId: string, instanceId: string): void;
+  _clear(): void;
+}
+
+// ─── Store 创建 ───────────────────────────────────────────
+
+export const useInventoryStore = create<InventoryState>()(
+  immer((set) => ({
+    items: {},
+    skills: {},
+
+    _setCharacterItems(characterId: string, items: ItemInstance[]) {
+      set((state) => {
+        state.items[characterId] = items;
+      });
+    },
+
+    _setCharacterSkills(characterId: string, skills: SkillInstance[]) {
+      set((state) => {
+        state.skills[characterId] = skills;
+      });
+    },
+
+    _addItem(characterId: string, item: ItemInstance) {
+      set((state) => {
+        if (!state.items[characterId]) {
+          state.items[characterId] = [];
+        }
+        state.items[characterId].push(item);
+      });
+    },
+
+    _removeItem(characterId: string, instanceId: string, quantity?: number) {
+      set((state) => {
+        const charItems = state.items[characterId];
+        if (!charItems) return;
+
+        const index = charItems.findIndex((i) => i.instanceId === instanceId);
+        if (index === -1) return;
+
+        if (quantity !== undefined && quantity < charItems[index].quantity) {
+          // 减少数量
+          charItems[index].quantity -= quantity;
+        } else {
+          // 完全移除
+          charItems.splice(index, 1);
+        }
+      });
+    },
+
+    _addSkill(characterId: string, skill: SkillInstance) {
+      set((state) => {
+        if (!state.skills[characterId]) {
+          state.skills[characterId] = [];
+        }
+        state.skills[characterId].push(skill);
+      });
+    },
+
+    _removeSkill(characterId: string, instanceId: string) {
+      set((state) => {
+        const charSkills = state.skills[characterId];
+        if (!charSkills) return;
+
+        const index = charSkills.findIndex((s) => s.instanceId === instanceId);
+        if (index === -1) return;
+
+        charSkills.splice(index, 1);
+      });
+    },
+
+    _clear() {
+      set((state) => {
+        state.items = {};
+        state.skills = {};
+      });
+    },
+  })),
+);

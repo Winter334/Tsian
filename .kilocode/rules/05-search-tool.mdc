@@ -1,0 +1,15 @@
+---
+description: 代码搜索工具
+globs: **/*
+---
+
+# 代码搜索工具
+
+## 优先使用 ace-tool MCP
+
+当需要搜索代码库、定位实现、理解调用链或探索未知代码区域时，**优先使用 ace-tool MCP 的 `search_context` 工具**。
+### 使用规则
+
+- ✅ **代码定位/架构理解/调用链追踪**：优先使用 `ace-tool.search_context`
+- ✅ **精确查找某符号的所有引用**：使用 `search_files`（正则精确匹配）
+- ✅ **确认文件是否存在/目录结构**：使用 `list_files`

@@ -1,0 +1,2068 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>test</title>
+    <link rel="stylesheet" href="./style.css">
+
+  </head>
+    
+  <body>
+  <body class="pre-boot">
+  <svg class="svg-engine" aria-hidden="true" style="position:absolute;width:0;height:0;pointer-events:none">
+    <defs>
+      <filter id="glow-v7-cyan" color-interpolation-filters="sRGB" x="-50%" y="-200%" width="200%" height="500%">
+        <fegaussianblur in="SourceGraphic" stdDeviation="4" result="blur4" />
+        <fegaussianblur in="SourceGraphic" stdDeviation="19" result="blur19" />
+        <fegaussianblur in="SourceGraphic" stdDeviation="9" result="blur9" />
+        <fegaussianblur in="SourceGraphic" stdDeviation="30" result="blur30" />
+        <fecolormatrix in="blur4" result="color-0-blur" type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1 0" />
+        <feoffset in="color-0-blur" result="layer-0-offsetted" dx="0" dy="0" />
+        <fecolormatrix in="blur19" result="color-1-blur" type="matrix" values="0 0 0 0 0 0 0.95 0 0 0 0 0 1 0 0 0 0 0 1 0" />
+        <feoffset in="color-1-blur" result="layer-1-offsetted" dx="0" dy="2" />
+        <fecolormatrix in="blur9" result="color-2-blur" type="matrix" values="0 0 0 0 0 0 0.5 0 0 0 0 0 1 0 0 0 0 0 0.7 0" />
+        <feoffset in="color-2-blur" result="layer-2-offsetted" dx="0" dy="2" />
+        <fecolormatrix in="blur30" result="color-3-blur" type="matrix" values="0 0 0 0 0 0 0.2 0 0 0 0 0 0.8 0 0 0 0 0 0.6 0" />
+        <feoffset in="color-3-blur" result="layer-3-offsetted" dx="0" dy="2" />
+        <femerge>
+          <femergenode in="layer-3-offsetted" />
+          <femergenode in="layer-2-offsetted" />
+          <femergenode in="layer-1-offsetted" />
+          <femergenode in="layer-0-offsetted" />
+          <femergenode in="SourceGraphic" />
+        </femerge>
+      </filter>
+      
+    </defs>
+  </svg>
+  <div class="page-container">
+    <div class="noise-overlay"></div>
+    <div class="flash-overlay" id="flashOverlay"></div>
+    <canvas id="fx-canvas"></canvas>
+    <div class="overlay" id="uiOverlay"></div>
+    <div class="logo-container" id="logoContainer" tabindex="0" role="button" aria-label="Initialize System">
+      <div class="style-layer layer-new"></div>
+      <div class="style-layer layer-holographic"></div>
+      <div class="style-layer layer-cybernetic"></div>
+      <div class="style-layer layer-depressed"></div>
+      <div class="tech-ring ring-1"></div>
+      <div class="tech-ring ring-2"></div>
+      <div class="tech-ring ring-3"></div>
+      <div class="tech-ring ring-4"></div>
+      <img class="logo" id="logoImage" src="https://agiletech.pro/wp-content/uploads/2025/05/imageedit_264_3420605703.png" alt="Agile Tech Logo" crossorigin="anonymous" fetchpriority="high" decoding="async" draggable="false">
+      <div class="hint">Initialize System</div>
+    </div>
+    <section class="hero" id="main-content">
+      <div class="trust-bar holographic-reveal">
+        <div class="trust-item"><img class="trust-icon" src="https://agiletech.pro/wp-content/uploads/2025/09/texas-icon.svg" alt="DFW"><span class="trust-label">Dallas-Fort Worth</span></div>
+        <div class="trust-divider">
+          <div class="divider-blade"></div>
+          <div class="divider-glow"></div>
+        </div>
+        <div class="trust-item"><img class="trust-icon" src="https://agiletech.pro/wp-content/uploads/2025/09/power-icon.svg" alt="Support"><span class="trust-label">24/7 Support</span></div>
+        <div class="trust-divider">
+          <div class="divider-blade"></div>
+          <div class="divider-glow"></div>
+        </div>
+        <div class="trust-item"><img class="trust-icon" src="https://agiletech.pro/wp-content/uploads/2025/09/cloud-shield-icon.svg" alt="Experts"><span class="trust-label">Certified Experts</span></div>
+      </div>
+      <header class="hero-heading holographic-reveal">
+        <h2 class="headline-primary" data-text="Enterprise Technology">Enterprise Technology</h2>
+        <h1 class="headline-tech">Small Business Prices</h1>
+        <p class="headline-secondary-line">Cut IT Costs<span class="accent-housing"><span class="headline-accent">70%</span></span>While<strong>Boosting Performance</strong></p>
+      </header>
+      <div class="carousel-wrapper holographic-reveal">
+        <div class="carousel-housing">
+          <div class="housing-frame">
+            <div class="carousel-viewport">
+              <div class="ring"></div>
+            </div>
+            <div class="interaction-guide"><span class="guide-text">Drag to explore services</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="hero-cta holographic-reveal">
+        <div class="hero-cta-inner">
+          <div class="cta-logo-container">
+            <div class="logo-depth-frame" aria-hidden="true"></div><img src="https://agiletech.pro/wp-content/uploads/2025/02/MicrosoftTeams-image-11.png" alt="Microsoft Partner Logo" loading="lazy" decoding="async">
+          </div>
+          <div class="cta-messaging">
+            <p class="cta-headline"><strong>Stop overpaying for IT.</strong> Get enterprise-grade support at <span class="headline-emphasis-housing"><span class="headline-emphasis" data-text="70% less">70% less</span></span> than competitors.</p>
+            
+            <p class="cta-details">Intelligent automation, 24/7 reliability, and stunning digital design—without enterprise overhead. We turn IT from a cost center into your <strong class="text-accent">competitive advantage.</strong></p>
+          </div>
+          <div class="cta-actions">
+            <a class="btn-primary" href="#"><span>Get Free IT Assessment</span>
+              <div class="sparks"></div>
+            </a>
+            <button class="btn btn-circuit-relay calculator-trigger" aria-controls="calculator-modal" aria-haspopup="dialog"><span class="btn-text">Calculate Savings</span>
+              <div class="sparks"></div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+  <section class="statistics-section" aria-labelledby="stats-heading">
+    <div class="section-header">
+      <h2 id="stats-heading" class="heading-2" data-text="Performance That Transforms"><span class="heading-highlight">Performance That</span> <span class="heading-accent-word" data-text="Transforms">Transforms</span></h2>
+      <p class="section-subtitle">Real metrics from real businesses achieving extraordinary results</p>
+    </div>
+    <div class="carousel-shell" aria-label="Our Services Carousel">
+      <div class="container" id="carousel" role="region" aria-live="polite">
+        <div class="slider"></div>
+        <div class="progress-wrap">
+          <div class="progress" id="progress"></div>
+        </div>
+        <span class="counter" id="counter">1 / 4</span>
+      </div>
+      <button class="btn btn-utility prev" aria-label="Previous Service" id="prev">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </button>
+      <button class="btn btn-utility next" aria-label="Next Service" id="next">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+          <path d="M9 18l6-6-6-6" />
+        </svg>
+      </button>
+      <div class="trail" role="tablist" aria-label="Service slides"></div>
+    </div>
+    <div class="calculator-button-wrapper">
+      <div class="calculator-style-wrapper">
+        <button class="btn btn-circuit-relay calculator-trigger" aria-controls="calculator-modal" aria-haspopup="dialog"><span class="btn-text">Calculate Savings</span>
+          <div class="sparks"></div>
+        </button>
+      </div>
+    </div>
+  </section>
+  <section class="quantum-advantage-section" aria-labelledby="quantum-heading">
+    <div class="quantum-field-container">
+      <div class="quantum-environment-system" aria-hidden="true">
+        <div class="quantum-atmospheric-layer"></div>
+        <div class="quantum-precision-grid"></div>
+        <div class="quantum-interference-field"></div>
+        <div class="quantum-particle-system"></div>
+      </div>
+      <div class="section-header">
+        <h2 id="quantum-heading" class="heading-2 quantum-title" data-text="Your Unfair Advantage"><span class="heading-highlight">Your Unfair</span><span class="heading-accent-word" data-text="Advantage">Advantage</span></h2>
+        <p class="section-subtitle quantum-subtitle">Three strategic pillars that separate industry leaders from the competition.</p>
+      </div>
+      <div class="quantum-terminal-array" id="quantum-array"></div>
+    </div>
+    <svg id="connection-field" aria-hidden="true">
+      <defs>
+        <lineargradient id="connection-primary" x1="0" y1="0" x2="100%" y2="0">
+          <stop offset="0" stop-color="rgba(0, 255, 255, 0.1)" />
+          <stop offset="50%" stop-color="rgba(0, 255, 255, 0.8)" />
+          <stop offset="100%" stop-color="rgba(0, 255, 255, 0.1)" />
+        </lineargradient>
+        <lineargradient id="connection-secondary" x1="0" y1="0" x2="100%" y2="0">
+          <stop offset="0" stop-color="rgba(139, 92, 246, 0.1)" />
+          <stop offset="50%" stop-color="rgba(139, 92, 246, 0.8)" />
+          <stop offset="100%" stop-color="rgba(139, 92, 246, 0.1)" />
+        </lineargradient>
+        <filter id="connection-glow">
+          <fegaussianblur stdDeviation="3" result="coloredBlur" />
+          <femerge>
+            <femergenode in="coloredBlur" />
+            <femergenode in="SourceGraphic" />
+          </femerge>
+        </filter>
+      </defs>
+    </svg>
+  </section>
+  <section class="process-timeline" aria-labelledby="process-title">
+    <div class="section-header">
+      <h2 id="process-title" class="heading-2"><span class="heading-highlight">METHODOLOGY</span><span class="heading-accent-word">Strategic Process</span></h2>
+    </div>
+    <div class="timeline-wrapper">
+      <svg class="timeline-svg-connector" aria-hidden="true">
+        <path id="timeline-trace" fill="none" />
+        <path id="timeline-trace-glow" fill="none" stroke-linecap="round" />
+      </svg>
+      <div class="timeline-steps" role="tablist">
+        <button class="timeline-step" role="tab" id="tab-step1" aria-controls="panel-step1" aria-selected="true">
+          <div class="module-icon-wrapper">
+            <div class="module-plate"><img class="module-glyph" src="https://agiletech.pro/wp-content/uploads/2025/04/innovate-svgrepo-com.svg" alt="Strategic Assessment Icon"></div>
+          </div>
+          <div class="step-meta"><span class="step-index">01 //</span>
+            <div class="step-label"><span class="label-bracket bracket-left">[</span><span class="label-text">Assessment</span><span class="label-bracket bracket-right">]</span></div>
+          </div>
+        </button>
+        <button class="timeline-step" role="tab" id="tab-step2" aria-controls="panel-step2">
+          <div class="module-icon-wrapper">
+            <div class="module-plate"><img class="module-glyph" src="https://agiletech.pro/wp-content/uploads/2025/04/pzaat7ja5etl5mq0brlm.webp" alt="Expert Implementation Icon"></div>
+          </div>
+          <div class="step-meta"><span class="step-index">02 //</span>
+            <div class="step-label"><span class="label-bracket bracket-left">[</span><span class="label-text">Implementation</span><span class="label-bracket bracket-right">]</span></div>
+          </div>
+        </button>
+        <button class="timeline-step" role="tab" id="tab-step3" aria-controls="panel-step3">
+          <div class="module-icon-wrapper">
+            <div class="module-plate"><img class="module-glyph" src="https://agiletech.pro/wp-content/uploads/2025/03/message-square-code.svg" alt="Clear Communication Icon"></div>
+          </div>
+          <div class="step-meta"><span class="step-index">03 //</span>
+            <div class="step-label"><span class="label-bracket bracket-left">[</span><span class="label-text">Communication</span><span class="label-bracket bracket-right">]</span></div>
+          </div>
+        </button>
+        <button class="timeline-step" role="tab" id="tab-step4" aria-controls="panel-step4">
+          <div class="module-icon-wrapper">
+            <div class="module-plate"><img class="module-glyph" src="https://agiletech.pro/wp-content/uploads/2025/03/9042868_people_rounded_icon.svg" alt="Ongoing Success Icon"></div>
+          </div>
+          <div class="step-meta"><span class="step-index">04 //</span>
+            <div class="step-label"><span class="label-bracket bracket-left">[</span><span class="label-text">Optimization</span><span class="label-bracket bracket-right">]</span></div>
+          </div>
+        </button>
+      </div>
+    </div>
+    <div class="timeline-content-wrapper">
+      <div class="timeline-panel active" role="tabpanel" id="panel-step1" aria-labelledby="tab-step1">
+        <h3 class="panel-title" data-final="Strategic Assessment">Strategic Assessment</h3>
+        <p class="panel-body">We initiate with a deep-dive analysis of your current infrastructure. Identifying cost inefficiencies and performance bottlenecks to engineer a precise roadmap for high-yield digital transformation.</p>
+      </div>
+      <div class="timeline-panel" role="tabpanel" id="panel-step2" aria-labelledby="tab-step2" hidden>
+        <h3 class="panel-title" data-final="Expert Implementation">Expert Implementation</h3>
+        <p class="panel-body">Deployment of scalable, enterprise-grade architecture. We prioritize flawless execution using cutting-edge stacks that ensure your technology becomes a robust asset rather than a liability.</p>
+      </div>
+      <div class="timeline-panel" role="tabpanel" id="panel-step3" aria-labelledby="tab-step3" hidden>
+        <h3 class="panel-title" data-final="Clear Communication">Clear Communication</h3>
+        <p class="panel-body">Transparency is paramount. We maintain proactive, jargon-free channels that keep stakeholders aligned. Real-time updates ensure you maintain total visibility over the project lifecycle.</p>
+      </div>
+      <div class="timeline-panel" role="tabpanel" id="panel-step4" aria-labelledby="tab-step4" hidden>
+        <h3 class="panel-title" data-final="Ongoing Success">Ongoing Success</h3>
+        <p class="panel-body">Post-deployment, we shift to continuous optimization and 24/7 heuristic monitoring. We secure maximum ROI by preemptively neutralizing threats and adapting systems to market shifts.</p>
+      </div>
+    </div>
+  </section>
+  <section id="services-section" class="agile-services-section enhanced" aria-labelledby="agile-services-heading">
+    <div class="section-header enhanced">
+      <h2 id="agile-services-heading" class="heading-2 enhanced" data-text="Our Core Services"><span class="heading-highlight">Our Core</span><span class="heading-accent-word" data-text="Services">Services</span></h2>
+      <p class="section-subtitle">Comprehensive technology solutions designed to accelerate your business growth</p>
+    </div>
+    <div class="agile-services-container">
+      <div class="agile-services-tabs-layout">
+        <div class="agile-services-tabs-list" id="service-tabs-list" role="tablist" aria-orientation="vertical"></div>
+        <div class="agile-services-tabs-panels" id="service-panels-list"></div>
+      </div>
+    </div>
+  </section>
+  <section class="gallery-section" aria-labelledby="gallery-heading" id="gallery-section">
+    <div class="nebula-fog"></div>
+    <div class="starry-background"></div>
+    <div class="gallery-header">
+      <div class="header-interface-plate">
+        <div class="interface-top-rail">
+          <div class="rail-status-light" aria-hidden="true"></div>
+          <span class="rail-text">CASE STUDY ARCHIVE</span>
+          <span class="rail-separator" aria-hidden="true">//</span>
+          <span class="rail-meta">SELECTED WORKS</span>
+        </div>
+        <h2 id="gallery-heading" class="gallery-heading">Real Results for <br class="mobile-break" /><span class="gallery-accent" data-text="Real Businesses">Real Businesses</span></h2>
+        <div class="interface-content-lockup">
+          <p class="gallery-subheading">Precision engineering that transforms potential into <span class="text-highlight">measurable performance</span>.</p>
+        </div>
+      </div>
+    </div>
+    <div class="gallery-viewport-fog">
+      <div class="gallery" role="img" aria-label="Portfolio gallery showcasing our work">
+        <div class="gallery_line" data-direction="up"></div>
+        <div class="gallery_line" data-direction="down"></div>
+        <div class="gallery_line" data-direction="up"></div>
+      </div>
+    </div>
+    <div class="gallery-cta-position">
+      <a class="btn-ceramic" href="/branding-logo-design-services"><span>Explore Case Studies</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="m9 18 6-6-6-6"></path>
+        </svg></a>
+    </div>
+  </section>
+  <div class="apple-modal apple-service-modal" id="servicePreview" role="dialog" aria-modal="true" aria-labelledby="previewTitle" hidden>
+    <div class="apple-modal-backdrop" aria-hidden="true"></div>
+    <div class="apple-modal-container">
+      <div class="apple-modal-panel">
+        <div class="modal-icon-container service-icon-container">
+          <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 1024 1024">
+            <defs>
+              <linearGradient id="iconMetallicGradient" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="#f0f0f0" />
+                <stop offset="10%" stop-color="#d0d0d0" />
+                <stop offset="50%" stop-color="#a0a0a0" />
+                <stop offset="90%" stop-color="#606060" />
+                <stop offset="100%" stop-color="#505050" />
+              </linearGradient>
+              <filter id="strong-inner">
+                <feFlood flood-color="#fff2" />
+                <feComposite operator="out" in2="SourceGraphic" />
+                <feMorphology operator="dilate" radius="8" />
+                <feGaussianBlur stdDeviation="32" />
+                <feComposite operator="atop" in2="SourceGraphic" />
+              </filter>
+            </defs>
+            <path fill="url(#iconMetallicGradient)" filter="url(#strong-inner)" d="M488.1 414.7V303.4L300.9 428l83.6 55.8zm254.1 137.7v-79.8l-59.8 39.9zM512 64C264.6 64 64 264.6 64 512s200.6 448 448 448s448-200.6 448-448S759.4 64 512 64m278 533c0 1.1-.1 2.1-.2 3.1c0 .4-.1.7-.2 1a14.2 14.2 0 0 1-.8 3.2c-.2.6-.4 1.2-.6 1.7c-.2.4-.4.8-.5 1.2c-.3.5-.5 1.1-.8 1.6c-.2.4-.4.7-.7 1.1c-.3.5-.7 1-1 1.5c-.3.4-.5.7-.8 1c-.4.4-.8.9-1.2 1.3c-.3.3-.6.6-1 .9c-.4.4-.9.8-1.4 1.1c-.4.3-.7.6-1.1.8c-.1.1-.3.2-.4.3L525.2 786c-4 2.7-8.6 4-13.2 4c-4.7 0-9.3-1.4-13.3-4L244.6 616.9c-.1-.1-.3-.2-.4-.3l-1.1-.8c-.5-.4-.9-.7-1.3-1.1c-.3-.3-.6-.6-1-.9c-.4-.4-.8-.8-1.2-1.3a7 7 0 0 1-.8-1c-.4-.5-.7-1-1-1.5c-.2-.4-.5-.7-.7-1.1c-.3-.5-.6-1.1-.8-1.6c-.2-.4-.4-.8-.5-1.2c-.2-.6-.4-1.2-.6-1.7c-.1-.4-.3-.8-.4-1.2c-.2-.7-.3-1.3-.4-2c-.1-.3-.1-.7-.2-1c-.1-1-.2-2.1-.2-3.1V427.9c0-1 .1-2.1.2-3.1c.1-.3.1-.7.2-1a14.2 14.2 0 0 1 .8-3.2c.2-.6-.4-1.2.6-1.7c.2-.4.4-.8.5-1.2c.2-.5.5-1.1.8-1.6c.2-.4.4.7-.7-1.1c.6-.9 1.2-1.7 1.8-2.5c.4-.4.8-.9 1.2-1.3c.3-.3.6-.6 1-.9c.4-.4.9.8 1.3-1.1s.7-.6 1.1-.8c.1-.1-.3.2-.4-.3L498.7 239c8-5.3 18.5-5.3 26.5 0l254.1 169.1c.1.1.3.2.4.3l1.1.8l1.4 1.1c.3.3.6.6 1 .9c.4.4.8.8 1.2 1.3c.7.8 1.3 1.6 1.8 2.5c.2.4.5.7.7 1.1c.3.5.6 1 .8 1.6c.2.4.4.8.5 1.2c.2.6.4 1.2.6 1.7c.1.4.3.8.4 1.2c.2.7.3 1.3.4 2c.1.3.1.7.2 1c.1 1 .2 2.1.2 3.1zm-254.1 13.3v111.3L723.1 597l-83.6-55.8zM281.8 472.6v79.8l59.8-39.9zM512 456.1l-84.5 56.4l84.5 56.4l84.5-56.4zM723.1 428L535.9 303.4v111.3l103.6 69.1zM384.5 542L300.9 597l187.2 124.6V610.3z" />
+          </svg>
+        </div>
+        <div class="light-layer">
+          <div class="slit"></div>
+          <div class="lumen">
+            <div class="min"></div>
+            <div class="mid"></div>
+            <div class="hi"></div>
+          </div>
+          <div class="bloom"></div>
+          <div class="darken">
+            <div class="sl"></div>
+            <div class="ll"></div>
+            <div class="slt"></div>
+            <div class="srt"></div>
+          </div>
+        </div>
+        <header class="apple-modal-header">
+          <div class="modal-header-text service-header-text">
+            <h3 id="previewTitle" class="modal-title apple-service-title"></h3>
+            <p class="modal-subtitle apple-service-subtitle"></p>
+          </div>
+          <button class="btn-utility" aria-label="Close service details" type="button">
+            <svg fill="none" viewBox="0 0 24 24" height="22" width="22">
+              <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-linecap="round" stroke-width="2" />
+            </svg>
+          </button>
+        </header>
+        <div class="apple-modal-content">
+          <div class="service-description-card">
+            <p class="service-description"></p>
+          </div>
+          <div class="service-features-card">
+            <div class="features-header">
+              <div class="features-icon-system">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path d="M9 12l2 2 4-4" />
+                  <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c2.12.0 4.04.74 5.57 1.97" />
+                </svg>
+              </div>
+              <h4>Core Features</h4>
+            </div>
+            <ul class="feature-list service-features"></ul>
+          </div>
+          <div class="service-features-card premium-panel">
+            <div class="features-header">
+              <div class="features-icon-system">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                </svg>
+              </div>
+              <h4>Premium Add-ons</h4>
+              <span class="premium-badge">Enhanced</span>
+            </div>
+            <ul class="feature-list" id="premium-features-list"></ul>
+          </div>
+        </div>
+        <div class="premium-toggle-container">
+          <a class="btn-neon-edge" href="#"><span>Explore Service</span></a>
+          <div class="premium-toggle-wrapper">
+            <label class="switch-component">
+              <input class="switch__input" id="premiumToggle" type="checkbox" role="switch">
+              <span class="switch__base-outer"></span>
+              <span class="switch__base-inner"></span>
+              <svg class="switch__base-neon" viewBox="0 0 40 24" width="40px" height="24px">
+                <defs>
+                  <filter id="switch-glow">
+                    <feGaussianBlur result="coloredBlur" stdDeviation="1"></feGaussianBlur>
+                    <feMerge>
+                      <feMergeNode in="coloredBlur"></feMergeNode>
+                      <feMergeNode in="SourceGraphic"></feMergeNode>
+                    </feMerge>
+                  </filter>
+                  <linearGradient id="switch-gradient1" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stop-color="hsl(220, 10%, 80%)" />
+                    <stop offset="100%" stop-color="hsl(220, 10%, 60%)" />
+                  </linearGradient>
+                  <linearGradient id="switch-gradient2" x1="0.7" y1="0" x2="0.3" y2="1">
+                    <stop offset="25%" stop-color="hsla(220, 10%, 80%, 0)" />
+                    <stop offset="50%" stop-color="hsla(220, 10%, 80%, 0.3)" />
+                    <stop offset="100%" stop-color="hsla(220, 10%, 60%, 0.3)" />
+                  </linearGradient>
+                </defs>
+                <path fill="none" filter="url(#switch-glow)" stroke="url(#switch-gradient1)" stroke-width="1" stroke-dasharray="0 104.26 0" stroke-dashoffset="0.01" stroke-linecap="round" d="m.5,12C.5,5.649,5.649.5,12,.5h16c6.351,0,11.5,5.149,11.5,11.5s-5.149,11.5-11.5,11.5H12C5.649,23.5.5,18.351.5,12Z" />
+              </svg>
+              <span class="switch__knob-container">
+                <span class="switch__knob">
+                  <svg class="switch__knob-neon" viewBox="0 0 32 32">
+                    <defs>
+                      <filter id="switch-knob-glow">
+                        <feGaussianBlur result="coloredBlur" stdDeviation="1"></feGaussianBlur>
+                        <feMerge>
+                          <feMergeNode in="coloredBlur"></feMergeNode>
+                          <feMergeNode in="SourceGraphic"></feMergeNode>
+                        </feMerge>
+                      </filter>
+                      <linearGradient id="switch-knob-gradient" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stop-color="hsl(220, 10%, 80%)" />
+                        <stop offset="100%" stop-color="hsl(220, 10%, 60%)" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="16" cy="16" r="14" fill="none" filter="url(#switch-knob-glow)" stroke="url(#switch-knob-gradient)" stroke-width="1" />
+                  </svg>
+                </span>
+              </span>
+              <span class="switch__knob-shadow"></span>
+            </label>
+            <span class="premium-toggle-label" id="toggleLabel">Standard</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="apple-modal apple-calculator-modal" id="calculator-modal" role="dialog" aria-modal="true">
+    <div class="apple-modal-backdrop"></div>
+    <div class="apple-modal-container">
+      <div class="apple-calculator-panel">
+        <div class="modal-icon-container calculator-icon-container">
+          <svg width="64" height="64" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="calcIconGradient" x1="0" x2="0" y1="0" y2="1">
+                <stop stop-color="#f0f0f0" offset="0%" />
+                <stop stop-color="#d0d0d0" offset="10%" />
+                <stop stop-color="#a0a0a0" offset="50%" />
+                <stop stop-color="#606060" offset="90%" />
+                <stop stop-color="#505050" offset="100%" />
+              </linearGradient>
+              <filter id="calcIconFilter">
+                <feFlood flood-color="#fff2" />
+                <feComposite in2="SourceGraphic" operator="out" />
+                <feMorphology operator="dilate" radius="8" />
+                <feGaussianBlur stdDeviation="32" />
+                <feComposite in2="SourceGraphic" operator="atop" />
+              </filter>
+            </defs>
+            <path d="M488.1 414.7V303.4L300.9 428l83.6 55.8zm254.1 137.7v-79.8l-59.8 39.9zM512 64C264.6 64 64 264.6 64 512s200.6 448 448 448s448-200.6 448-448S759.4 64 512 64m278 533c0 1.1-.1 2.1-.2 3.1c0 .4-.1.7-.2 1a14.2 14.2 0 0 1-.8 3.2c-.2.6-.4 1.2-.6 1.7c-.2.4-.4.8-.5 1.2c-.3.5-.5 1.1-.8 1.6c-.2.4-.4.7-.7 1.1c-.3.5-.7 1-1 1.5c-.3.4-.5.7-.8 1c-.4.4-.8.9-1.2 1.3c-.3.3-.6.6-1 .9c-.4.4-.9.8-1.4 1.1c-.4.3-.7.6-1.1.8c-.1.1-.3.2-.4.3L525.2 786c-4 2.7-8.6 4-13.2 4c-4.7 0-9.3-1.4-13.3-4L244.6 616.9c-.1-.1-.3-.2-.4-.3l-1.1-.8c-.5-.4-.9-.7-1.3-1.1c-.3-.3-.6-.6-1-.9c-.4-.4-.8-.8-1.2-1.3a7 7 0 0 1-.8-1c-.4-.5-.7-1-1-1.5c-.2-.4-.5-.7-.7-1.1c-.3-.5-.6-1.1-.8-1.6c-.2-.4-.4-.8-.5-1.2c-.2-.6-.4-1.2-.6-1.7c-.1-.4-.3-.8-.4-1.2c-.2-.7-.3-1.3-.4-2c-.1-.3-.1-.7-.2-1c-.1-1-.2-2.1-.2-3.1V427.9c0-1 .1-2.1.2-3.1c.1-.3.1-.7.2-1a14.2 14.2 0 0 1 .8-3.2c.2-.6-.4-1.2.6-1.7c.2-.4.4-.8.5-1.2c.2-.5.5-1.1.8-1.6c.2-.4.4.7-.7-1.1c.6-.9 1.2-1.7 1.8-2.5c.4-.4.8-.9 1.2-1.3c.3-.3.6-.6 1-.9c.4-.4.9.8 1.3-1.1s.7-.6 1.1-.8c.1-.1-.3.2-.4-.3L498.7 239c8-5.3 18.5-5.3 26.5 0l254.1 169.1c.1.1.3.2.4.3l1.1.8l1.4 1.1c.3.3.6.6 1 .9c.4.4.8.8 1.2 1.3c.7.8 1.3 1.6 1.8 2.5c.2.4.5.7.7 1.1c.3.5.6 1 .8 1.6c.2.4.4.8.5 1.2c.2.6.4 1.2.6 1.7c.1.4.3.8.4 1.2c.2.7.3 1.3.4 2c.1.3.1.7.2 1c.1 1 .2 2.1.2 3.1zm-254.1 13.3v111.3L723.1 597l-83.6-55.8zM281.8 472.6v79.8l59.8-39.9zM512 456.1l-84.5 56.4l84.5 56.4l84.5-56.4zM723.1 428L535.9 303.4v111.3l103.6 69.1zM384.5 542L300.9 597l187.2 124.6V610.3z" fill="url(#calcIconGradient)" filter="url(#calcIconFilter)" />
+          </svg>
+        </div>
+        <div class="light-layer">
+          <div class="slit"></div>
+          <div class="lumen">
+            <div class="min"></div>
+            <div class="mid"></div>
+            <div class="hi"></div>
+          </div>
+          <div class="bloom"></div>
+          <div class="darken">
+            <div class="sl"></div>
+            <div class="ll"></div>
+            <div class="slt"></div>
+            <div class="srt"></div>
+          </div>
+        </div>
+        <header class="apple-calculator-header">
+          <div class="calculator-header-text">
+            <h3 class="apple-calculator-title">Savings Calculator</h3>
+            <p class="apple-calculator-subtitle">Advanced cost analysis system</p>
+          </div>
+          <button class="btn-utility" aria-label="Close calculator" type="button"><svg fill="none" viewBox="0 0 24 24" height="22" width="22">
+              <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-linecap="round" stroke-width="2" />
+            </svg></button>
+        </header>
+        <div class="apple-step-progress">
+          <div class="progress-indicators" style="--active-step:1">
+            <div class="progress-indicator active" data-step="1">1</div>
+            <div class="progress-indicator" data-step="2">2</div>
+            <div class="progress-indicator" data-step="3">3</div>
+          </div>
+        </div>
+        <div class="apple-calculator-content" id="calcContent">
+          <div class="calc-step active-step" id="calc-step-1" data-step="1">
+            <div class="form-group">
+              <div class="select-wrapper">
+                <select id="industry" class="form-input" required>
+                  <option value="" disabled selected>Select your industry</option>
+                  <option value="healthcare">Healthcare</option>
+                  <option value="finance">Finance</option>
+                  <option value="legal">Legal</option>
+                  <option value="retail">Retail</option>
+                  <option value="manufacturing">Manufacturing</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group slider-group">
+              <div class="slider-header"><label for="employees" class="slider-label">Number of Employees</label>
+                <div class="slider-value"><span class="value-number" id="employeesValue">10</span><span class="value-unit">employees</span></div>
+              </div>
+              <div class="slider-container"><input type="range" id="employees" class="slider-input" min="1" max="500" value="10" step="1" style="--progress-percent:2%"></div>
+            </div>
+            <div class="form-group slider-group">
+              <div class="slider-header"><label for="devices" class="slider-label">Number of Devices</label>
+                <div class="slider-value"><span class="value-number" id="devicesValue">20</span><span class="value-unit">devices</span></div>
+              </div>
+              <div class="slider-container"><input type="range" id="devices" class="slider-input" min="1" max="1000" value="20" step="1" style="--progress-percent:2%"></div>
+            </div>
+          </div>
+          <div class="calc-step" id="calc-step-2" data-step="2">
+            <div class="form-group slider-group">
+              <div class="slider-header"><label for="current-cost" class="slider-label">Current Annual IT Budget</label>
+                <div class="slider-value"><span class="value-number" id="current-costValue">$50,000</span><span class="value-unit">per year</span></div>
+              </div>
+              <div class="slider-container"><input type="range" id="current-cost" class="slider-input" min="0" max="500000" value="50000" step="1000" style="--progress-percent:10%"></div>
+            </div>
+            <div class="form-group slider-group">
+              <div class="slider-header"><label for="support-cost" class="slider-label">Annual Support & Maintenance</label>
+                <div class="slider-value"><span class="value-number" id="support-costValue">$10,000</span><span class="value-unit">per year</span></div>
+              </div>
+              <div class="slider-container"><input type="range" id="support-cost" class="slider-input" min="0" max="100000" value="10000" step="500" style="--progress-percent:10%"></div>
+            </div>
+          </div>
+          <div class="calc-step" id="calc-step-3" data-step="3">
+            <div class="result-display">
+              <div class="result-screen">
+                <div class="results-grid" id="resultsGrid"></div>
+              </div>
+            </div>
+            <p class="disclaimer">Estimates based on industry averages and your inputs. Actual savings may vary.</p>
+          </div>
+        </div>
+        <div class="apple-calculator-navigation">
+          <button class="btn-neon-edge back-btn" type="button" hidden>
+            <svg fill="none" viewBox="0 0 24 24" class="button-icon" height="16" width="16">
+              <path d="M19 12H5m7-7-7 7 7 7" stroke-linecap="round" stroke-width="2" stroke-linejoin="round" />
+            </svg><span>Previous</span>
+          </button>
+          <button class="btn-neon-edge next-btn" type="button"><span>Continue</span><svg fill="none" viewBox="0 0 24 24" class="button-icon" height="16" width="16">
+              <path d="M5 12h14m-7-7 7 7-7 7" stroke-linecap="round" stroke-width="2" stroke-linejoin="round" />
+            </svg></button>
+          <button class="btn-neon-edge start-over-btn" type="button" hidden><span>Reset Analysis</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/Draggable.min.js" defer></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const SERVICES_DATA = [{
+          src: "https://agiletech.pro/wp-content/uploads/2025/05/unDrawCards_1746767216215_gzqup8.webp",
+          label: "Web Design",
+          alt: "Architecture",
+          description: "Custom websites that convert visitors into customers",
+          features: ["Mobile-responsive design", "SEO optimization", "Fast loading speeds", "Content management", "Analytics integration"],
+          premiumFeatures: ["Advanced parallax & scroll animations", "Custom CMS training & documentation"]
+        },
+        {
+          src: "https://agiletech.pro/wp-content/uploads/2025/05/unDrawCards_1746764394864_j9xi27.webp",
+          label: "Smart Home",
+          alt: "Automation",
+          description: "Intelligent automation for modern workspaces",
+          features: ["Smart lighting systems", "Climate control", "Security integration", "Voice assistants", "Energy monitoring"],
+          premiumFeatures: ["Automated routine programming", "Cross-platform device ecosystem"]
+        },
+        {
+          src: "https://agiletech.pro/wp-content/uploads/2025/05/unDrawCards_1746767518443_0jaovr.webp",
+          label: "IT Support",
+          alt: "Infrastructure",
+          description: "Reliable technology support when you need it most",
+          features: ["24/7 remote support", "Proactive monitoring", "Help desk services", "System maintenance", "Backup solutions"],
+          premiumFeatures: ["Priority 1-hour response SLA", "Dedicated technical account manager"]
+        },
+        {
+          src: "https://agiletech.pro/wp-content/uploads/2025/05/unDrawCards_1746767504656_w9rbhj.webp",
+          label: "Brand Identity",
+          alt: "Identity",
+          description: "Professional branding that makes you stand out",
+          features: ["Logo design", "Brand guidelines", "Marketing materials", "Digital assets", "Brand strategy"],
+          premiumFeatures: ["3D logo variations & mockups", "Animated brand motion graphics package"]
+        },
+        {
+          src: "https://agiletech.pro/wp-content/uploads/2025/05/unDrawCards_1746764378514_shcthg-1.webp",
+          label: "Cybersecurity",
+          alt: "Defense",
+          description: "Enterprise-grade security for small business budgets",
+          features: ["Cloud security", "Data encryption", "Threat monitoring", "Compliance support", "Employee training"],
+          premiumFeatures: ["Quarterly penetration testing", "24/7 SOC incident response team"]
+        },
+        {
+          src: "https://agiletech.pro/wp-content/uploads/2025/05/image-1-1.webp",
+          label: "Business Consulting",
+          alt: "Consulting",
+          description: "Strategic guidance for digital transformation",
+          features: ["Technology planning", "Process optimization", "Digital strategy", "Cost analysis", "Growth planning"],
+          premiumFeatures: ["Competitive market intelligence reports", "Custom ROI tracking dashboard"]
+        },
+        {
+          src: "https://agiletech.pro/wp-content/uploads/2025/05/unDrawCards_1746833452707_6nkqdf.webp",
+          label: "AI Solutions",
+          alt: "Intelligence",
+          description: "Smart automation to streamline your operations",
+          features: ["Workflow automation", "AI chatbots", "Data analysis", "Process optimization", "Custom integrations"],
+          premiumFeatures: ["Custom model training on your data", "Advanced predictive analytics engine"]
+        },
+        {
+          src: "https://agiletech.pro/wp-content/uploads/2025/05/unDrawCards_1746833400232_of6avb.webp",
+          label: "Custom Tools",
+          alt: "Software",
+          description: "Tailored solutions for unique business needs",
+          features: ["Custom applications", "Database solutions", "API integrations", "Mobile apps", "System migrations"],
+          premiumFeatures: ["Premium cloud hosting & CDN", "Ongoing maintenance & feature updates"]
+        },
+        {
+          src: "https://agiletech.pro/wp-content/uploads/2025/05/unDrawCards_1746767343115_xe67z5.webp",
+          label: "Digital Marketing",
+          alt: "Growth",
+          description: "Grow your audience and increase online visibility",
+          features: ["SEO optimization", "Social media management", "Content marketing", "Email campaigns", "Analytics tracking"],
+          premiumFeatures: ["Conversion rate optimization (CRO)", "Multi-platform retargeting campaigns"]
+        }
+      ];
+      const CORE_SERVICES_DATA = [{
+          title: 'IT Services',
+          sub: 'Cut Costs by 70%',
+          tagline: 'Strategic Engineering',
+          head: 'Stop Overpaying',
+          headStrong: 'For Technology',
+          desc: 'Slash costs 70% while boosting performance and eliminating downtime headaches—all at a fraction of traditional costs. Our precision audit reveals hidden inefficiencies instantly.',
+          cta: 'Learn More',
+          link: '/it-services-technology-consulting',
+          img: 'https://agiletech.pro/wp-content/uploads/2025/04/pzaat7ja5etl5mq0brlm.webp',
+          visual: 'https://agiletech.pro/wp-content/uploads/2025/04/tech.webp'
+        },
+        {
+          title: 'Branding',
+          sub: 'Build Instant Trust',
+          tagline: 'Identity Systems',
+          head: 'Build Instant',
+          headStrong: 'Market Trust',
+          desc: 'Professional branding that builds instant trust and turns prospects into loyal customers. We craft visual identities that resonate with authority and precision.',
+          cta: 'View Portfolio',
+          link: '/branding-logo-design-services',
+          img: 'https://agiletech.pro/wp-content/uploads/2025/04/jytro8ydec4534yy7bwj.webp',
+          visual: 'https://agiletech.pro/wp-content/uploads/2025/02/undraw_choose-color_qtyu.svg'
+        },
+        {
+          title: 'Web Development',
+          sub: 'Convert Visitors',
+          tagline: 'Digital Platforms',
+          head: 'Turn Visitors',
+          headStrong: 'Into Customers',
+          desc: 'Websites that work as hard as you do. High-performance, SEO-optimized platforms built for growth, speed, and maximum conversion rates.',
+          cta: 'Start Project',
+          link: '/web-app-development-services',
+          img: 'https://agiletech.pro/wp-content/uploads/2025/04/tmkru4jphap5wdmh1vwp.webp',
+          visual: 'https://agiletech.pro/wp-content/uploads/2025/04/d5anxw8o4aqjkbg30dw7.webp'
+        },
+        {
+          title: 'Smart Home',
+          sub: 'Automate Everything',
+          tagline: 'Automation Logic',
+          head: 'Experience The',
+          headStrong: 'Future Today',
+          desc: 'Control everything from anywhere. Boost productivity and comfort while cutting energy costs with intelligent automation—all controlled at your fingertips.',
+          cta: 'Explore Systems',
+          link: '/smart-home-services',
+          img: 'https://agiletech.pro/wp-content/uploads/2025/04/qrhjjrvxxrjtihsqzquy.webp',
+          visual: 'https://agiletech.pro/wp-content/uploads/2025/04/de5ppwno0s1cex4jzdca.webp'
+        },
+        {
+          title: 'AI Integration',
+          sub: 'Automate & Accelerate',
+          tagline: 'Neural Integration',
+          head: 'Automate &',
+          headStrong: 'Accelerate',
+          desc: 'Let AI handle the repetitive work so you can focus on growth. Gain data-driven insights and stay ahead of competitors with tailored AI strategies.',
+          cta: 'Initialize AI',
+          link: '/ai-integration',
+          img: 'https://agiletech.pro/wp-content/uploads/2025/04/esyjtfs3upjrxe50zvq7.webp',
+          visual: 'https://agiletech.pro/wp-content/uploads/2025/04/undraw_two-factor-authentication_8tds-1.svg'
+        }
+      ];
+      const TERMINAL_DATA = [{
+          id: '01',
+          type: 'cost-optimization',
+          class: 'COST_OPTIMIZATION_ENGINE',
+          label: 'COST_REDUCTION_COEFFICIENT',
+          value: '70',
+          unit: '%',
+          title: 'Slash IT Costs',
+          emp: 'by 70%',
+          desc: 'Stop overpaying. Get enterprise-grade solutions at small business prices with guaranteed savings.',
+          btn: {
+            link: '#calculator-modal',
+            class: 'btn btn-shiny-border calculator-trigger',
+            text: 'Calculate Savings',
+            icon: '<rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="8" y1="10" x2="16" y2="10"></line><line x1="8" y1="14" x2="16" y2="14"></line><line x1="8" y1="18" x2="12" y2="18"></line>'
+          }
+        },
+        {
+          id: '02',
+          type: 'scalability-engine',
+          class: 'SCALABILITY_ENGINE',
+          label: 'GROWTH_ACCELERATION_INDEX',
+          value: '∞',
+          unit: '↑',
+          title: 'Scale Without',
+          emp: 'Headaches',
+          desc: 'Focus on growing your business, not managing IT. We handle the complexity so you can grow.',
+          progressClass: 'infinite-progress',
+          btn: {
+            link: '#gallery-section',
+            class: 'btn btn-shiny-border',
+            text: 'See Real Results',
+            icon: '<rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="m21 15-5-5L5 21"></path>'
+          }
+        },
+        {
+          id: '03',
+          type: 'reliability-matrix',
+          class: 'RELIABILITY_MATRIX',
+          label: 'UPTIME_GUARANTEE_INDEX',
+          value: '99.9',
+          unit: '%',
+          title: 'Eliminate',
+          emp: 'Downtime',
+          desc: 'Sleep soundly knowing your systems are monitored 24/7. Our proactive approach prevents issues.',
+          btn: {
+            link: '#protection-section',
+            class: 'btn btn-shiny-border',
+            text: 'Ensure Reliability',
+            icon: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>'
+          }
+        }
+      ];
+      const STATS_DATA = [{
+          value: 42000,
+          suffix: "+",
+          prefix: "$",
+          label: "Average Annual Savings",
+          context: "Stop overpaying for technology.",
+          illustration: "https://agiletech.pro/wp-content/uploads/2025/05/undraw_transfer-money_h9s3.svg"
+        },
+        {
+          value: "Zero",
+          label: "Downtime Worries",
+          context: "Sleep soundly with 24/7 monitoring.",
+          illustration: "https://agiletech.pro/wp-content/uploads/2025/05/undraw_time-management_fedt.svg"
+        },
+        {
+          value: 15,
+          suffix: " min",
+          label: "Response Guarantee",
+          context: "Problems fixed fast, every time.",
+          illustration: "https://agiletech.pro/wp-content/uploads/2025/05/undraw_fast-loading_ae60.svg"
+        },
+        {
+          value: 99,
+          suffix: "%",
+          label: "Client Satisfaction",
+          context: "Based on verified feedback.",
+          illustration: "https://agiletech.pro/wp-content/uploads/2025/05/undraw_love-it_8pc0.svg"
+        }
+      ];
+      const GALLERY_IMAGES = ["https://agiletech.pro/wp-content/uploads/2025/04/imageedit_37_5358811043.webp", "https://agiletech.pro/wp-content/uploads/2025/04/Tejas-Mobile-Veterinary-Services-1.webp", "https://agiletech.pro/wp-content/uploads/2025/04/imageedit_38_8322432003-1.webp", "https://agiletech.pro/wp-content/uploads/2025/04/imageedit_85_5545232879.webp", "https://agiletech.pro/wp-content/uploads/2025/04/Screensh1ot-2024-08-07-224039.jpg", "https://agiletech.pro/wp-content/uploads/2025/01/jherring2332_Flat_geometric_vector_graphic_logo_for_tech_compan_927548ad-4adc-4328-bbfa-893cb4988c10-e1745961845386.webp", "https://agiletech.pro/wp-content/uploads/2025/04/imageedit_78_9477860199.webp", "https://agiletech.pro/wp-content/uploads/2025/04/result-2.jpg", "https://agiletech.pro/wp-content/uploads/2025/02/new.png", "https://agiletech.pro/wp-content/uploads/2025/04/imageedit_65_6607528909.png", "https://agiletech.pro/wp-content/uploads/2025/04/original-a3f1b2fad2fc01bc2cef04b6a152c893-e1745371718270.webp", "https://agiletech.pro/wp-content/uploads/2025/04/rhr.webp"];
+      const canvas = document.getElementById('fx-canvas');
+      const ctx = canvas.getContext('2d', {
+        alpha: true
+      });
+      const logoBtn = document.getElementById('logoContainer');
+      const uiOverlay = document.getElementById('uiOverlay');
+      const flashOverlay = document.getElementById('flashOverlay');
+      const layerHolo = document.querySelector('.layer-holographic');
+      const layerCyber = document.querySelector('.layer-cybernetic');
+      const rings = document.querySelectorAll('.tech-ring');
+      let width, height, cx, cy, dpr = 1;
+      const ringRotation = [0, 0, 0, 0];
+
+      function resize() {
+        dpr = window.devicePixelRatio || 1;
+        const rect = document.body.getBoundingClientRect();
+        width = rect.width;
+        height = rect.height;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        ctx.scale(dpr, dpr);
+        cx = width / 2;
+        cy = height / 2;
+      }
+      window.addEventListener('resize', resize);
+      resize();
+      let isHolding = false,
+        holdStart = 0,
+        sequenceActive = false,
+        systemOnline = false;
+      let manualPhysics = false,
+        suctionMode = false,
+        suctionStrength = 0;
+      let warpFactor = 0.5,
+        targetWarpFactor = 0.5,
+        gravityActive = false;
+      const STARS_COUNT = 800;
+      const TAU = Math.PI * 2;
+      const stars = [],
+        debris = [],
+        shockwaves = [],
+        lightning = [];
+      class Star {
+        constructor() {
+          this.reset();
+        }
+        reset() {
+          this.x = Math.random() * width;
+          this.y = Math.random() * height;
+          this.z = Math.random() * width;
+          this.size = Math.random() * 1.5;
+          this.px = 0;
+          this.py = 0;
+          this.alpha = 1;
+          this.isExploding = false;
+          this.vx = 0;
+          this.vy = 0;
+          this.wobblePhase = Math.random() * TAU;
+          this.twinkleSpeed = 0.05 + Math.random() * 0.1;
+          this.twinkleVal = Math.random() * TAU;
+          this.color = Math.random() > 0.8 ? "200, 255, 255" : "255, 255, 255";
+        }
+        explode() {
+          this.isExploding = true;
+          const angle = Math.atan2(this.y - cy, this.x - cx);
+          const speed = 15 + 30 * Math.random();
+          this.vx = Math.cos(angle) * speed;
+          this.vy = Math.sin(angle) * speed;
+          const zVal = (this.z > 1) ? this.z : 1;
+          this.px = (this.x - cx) * (128.0 / zVal) + cx;
+          this.py = (this.y - cy) * (128.0 / zVal) + cy;
+          this.x = this.px;
+          this.y = this.py;
+        }
+        update(dt) {
+          this.twinkleVal += this.twinkleSpeed * dt;
+          if (this.isExploding) {
+            this.x += this.vx * dt;
+            this.y += this.vy * dt;
+            this.vx *= Math.pow(0.95, dt);
+            this.vy *= Math.pow(0.95, dt);
+            this.alpha *= Math.pow(0.94, dt);
+            return;
+          }
+          if (suctionMode) {
+            const dx = cx - this.x,
+              dy = cy - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const pullFactor = ((suctionStrength * 50) / (dist + 10) + (suctionStrength * 0.05)) * dt;
+            this.x += dx * pullFactor - (dy * 0.04 * dt);
+            this.y += dy * pullFactor + (dx * 0.04 * dt);
+            if (dist < 10) {
+              const angle = Math.random() * TAU,
+                r = Math.max(width, height) * 0.8;
+              this.x = cx + Math.cos(angle) * r;
+              this.y = cy + Math.sin(angle) * r;
+              this.z = Math.random() * width;
+            }
+            const k = 128.0 / (this.z > 0 ? this.z : 1);
+            this.px = (this.x - cx) * k + cx;
+            this.py = (this.y - cy) * k + cy;
+          } else {
+            this.z -= warpFactor * dt;
+            if (this.z <= 1 || this.z > width * 1.5) {
+              this.z = (this.z <= 1) ? width : 2;
+              this.x = Math.random() * width;
+              this.y = Math.random() * height;
+            }
+            let wobbleX = 0,
+              wobbleY = 0;
+            if (isHolding && !sequenceActive) {
+              const wobbleAmount = Math.min((performance.now() - holdStart) / 1000, 1) * 2;
+              this.wobblePhase += 0.2 * dt;
+              wobbleX = Math.sin(this.wobblePhase) * wobbleAmount;
+              wobbleY = Math.cos(this.wobblePhase) * wobbleAmount;
+            }
+            const k = 128.0 / (this.z > 0 ? this.z : 1);
+            this.px = ((this.x - cx) * k + cx) + wobbleX;
+            this.py = ((this.y - cy) * k + cy) + wobbleY;
+          }
+        }
+      }
+      for (let i = 0; i < STARS_COUNT; i++) stars.push(new Star());
+
+      function createLightningBolt(x, y, radius, segments) {
+        let path = [{
+          x: x,
+          y: y
+        }];
+        const angle = Math.random() * TAU;
+        const tx = x + Math.cos(angle) * radius;
+        const ty = y + Math.sin(angle) * radius;
+        const dist = Math.sqrt((tx - x) ** 2 + (ty - y) ** 2);
+        for (let i = 0; i < segments; i++) {
+          const progress = (i + 1) / segments;
+          path.push({
+            x: x + (tx - x) * progress + (Math.random() - 0.5) * (dist * 0.25),
+            y: y + (ty - y) * progress + (Math.random() - 0.5) * (dist * 0.25)
+          });
+        }
+        path.push({
+          x: tx,
+          y: ty
+        });
+        lightning.push({
+          path,
+          life: 1
+        });
+      }
+      let lastTime = 0;
+
+      function animate(time) {
+        const dt = lastTime ? (time - lastTime) / 16.666 : 1;
+        lastTime = time;
+        ctx.clearRect(0, 0, width, height);
+        if (!manualPhysics) warpFactor += (targetWarpFactor - warpFactor) * 0.08 * dt;
+        if ((isHolding || sequenceActive) && !systemOnline) {
+          const intensity = Math.min(100, Math.max(0, (warpFactor / 30) * 100));
+          const fluctuateSpeed = 0.002 + (intensity * 0.0005);
+          const mix = (Math.sin(time * fluctuateSpeed) + 1) / 2;
+          layerHolo.style.setProperty('--holographic-intensity', intensity + (suctionMode ? Math.random() * 20 : 0));
+          if (logoBtn.classList.contains('calibrating') || logoBtn.classList.contains('vacuum-state')) {
+            layerHolo.style.opacity = mix;
+            layerCyber.style.opacity = 1 - mix;
+          }
+        } else {
+          layerHolo.style.opacity = '';
+          layerCyber.style.opacity = '';
+        }
+        if (gravityActive && suctionMode) {
+          suctionStrength *= Math.pow(1.06, dt);
+          if (suctionStrength > 2) canvas.style.transform = `translate(${Math.random()*4-2}px, ${Math.random()*4-2}px)`;
+        }
+        if (!systemOnline) {
+          const wave = Math.sin(time * 0.0015);
+          const speedMult = isHolding ? 15 : (sequenceActive ? 40 : 1);
+          ringRotation[0] += (0.2 + wave * 0.05) * speedMult * dt;
+          ringRotation[1] -= (0.3 + wave * 0.02) * speedMult * dt;
+          ringRotation[2] += (0.5 - wave * 0.04) * speedMult * dt;
+          ringRotation[3] -= (0.1 + wave * 0.06) * speedMult * dt;
+          for (let i = 0; i < 4; i++) rings[i].style.transform = `rotate(${ringRotation[i]}deg)`;
+        }
+        if (isHolding || sequenceActive) {
+          const shake = isHolding ? Math.random() * 2 : 0;
+          const gX = cx + shake,
+            gY = cy + shake;
+          const gradient = ctx.createRadialGradient(gX, gY, 10, gX, gY, 400);
+          gradient.addColorStop(0, suctionMode ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 255, 255, 0.2)');
+          gradient.addColorStop(1, 'transparent');
+          ctx.fillStyle = gradient;
+          ctx.fillRect(gX - 400, gY - 400, 800, 800);
+        }
+        ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < STARS_COUNT; i++) {
+          const s = stars[i];
+          if (systemOnline && !s.isExploding) continue;
+          s.update(dt);
+          if (s.alpha <= 0.01 || s.px < -50 || s.px > width + 50 || s.py < -50 || s.py > height + 50) continue;
+          const twinkleAlpha = 0.7 + 0.3 * Math.sin(s.twinkleVal);
+          ctx.globalAlpha = s.alpha * twinkleAlpha;
+          ctx.fillStyle = `rgb(${s.color})`;
+          if (s.isExploding) {
+            const speed = Math.sqrt(s.vx * s.vx + s.vy * s.vy);
+            ctx.save();
+            ctx.translate(s.x, s.y);
+            ctx.rotate(Math.atan2(s.vy, s.vx));
+            ctx.beginPath();
+            ctx.ellipse(0, 0, Math.min(speed * 3, 50), 1, 0, 0, TAU);
+            ctx.fill();
+            ctx.restore();
+          } else if (suctionMode) {
+            const dx = cx - s.px,
+              dy = cy - s.py;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const proximity = 1000 / (dist + 10);
+            const stretch = Math.min(dist, suctionStrength * 50 * proximity);
+            const angle = Math.atan2(dy, dx);
+            ctx.strokeStyle = `rgba(${s.color}, ${Math.min(0.9, proximity/50)})`;
+            ctx.lineWidth = Math.min(s.size, 2);
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(s.px, s.py);
+            ctx.quadraticCurveTo(s.px - Math.cos(angle) * stretch * 0.5 + (dy * 0.01), s.py - Math.sin(angle) * stretch * 0.5 - (dx * 0.01), s.px - Math.cos(angle) * stretch, s.py - Math.sin(angle) * stretch);
+            ctx.stroke();
+          } else {
+            ctx.beginPath();
+            if (s.size < 1.5) ctx.rect(s.px, s.py, s.size, s.size);
+            else ctx.arc(s.px, s.py, s.size, 0, TAU);
+            ctx.fill();
+            if (Math.abs(warpFactor) > 5) {
+              ctx.beginPath();
+              ctx.moveTo(s.px, s.py);
+              const k2 = 128.0 / Math.max(1, s.z + (warpFactor * 2));
+              ctx.lineTo((s.x - cx) * k2 + cx, (s.y - cy) * k2 + cy);
+              ctx.strokeStyle = `rgba(${s.color}, ${s.alpha * 0.4})`;
+              ctx.lineWidth = s.size;
+              ctx.stroke();
+            }
+          }
+        }
+        for (let i = debris.length - 1; i >= 0; i--) {
+          const d = debris[i];
+          d.x += d.vx * dt;
+          d.y += d.vy * dt;
+          d.vx *= Math.pow(0.93, dt);
+          d.vy *= Math.pow(0.93, dt);
+          d.life -= d.decay * dt;
+          d.angle += d.spin * dt;
+          if (d.life <= 0) {
+            debris.splice(i, 1);
+            continue;
+          }
+          ctx.globalAlpha = d.life;
+          ctx.fillStyle = d.color;
+          ctx.save();
+          ctx.translate(d.x, d.y);
+          ctx.rotate(d.angle);
+          ctx.beginPath();
+          ctx.rect(-1.5, -1.5, 3, 3);
+          ctx.fill();
+          ctx.restore();
+        }
+        for (let i = shockwaves.length - 1; i >= 0; i--) {
+          const sw = shockwaves[i];
+          sw.size += (sw.maxSize - sw.size) * 0.15 * dt;
+          sw.life -= 0.02 * dt;
+          if (sw.life <= 0) {
+            shockwaves.splice(i, 1);
+            continue;
+          }
+          const drawRing = (offset, color) => {
+            ctx.beginPath();
+            ctx.arc(cx, cy, Math.max(0, sw.size + offset), 0, TAU);
+            ctx.lineWidth = 40 * sw.life;
+            ctx.strokeStyle = `rgba(${color}, ${sw.life * 0.8})`;
+            ctx.stroke();
+          };
+          drawRing(10, '0, 255, 255');
+          drawRing(-10, '255, 0, 0');
+          drawRing(0, '255, 255, 255');
+        }
+        if (lightning.length > 0) {
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = "#00ffff";
+          ctx.lineWidth = 2;
+          for (let i = lightning.length - 1; i >= 0; i--) {
+            const bolt = lightning[i];
+            bolt.life -= 0.1 * dt;
+            if (bolt.life <= 0) {
+              lightning.splice(i, 1);
+              continue;
+            }
+            ctx.globalAlpha = bolt.life;
+            ctx.strokeStyle = `rgba(0, 255, 255, ${bolt.life})`;
+            ctx.beginPath();
+            ctx.moveTo(bolt.path[0].x, bolt.path[0].y);
+            for (let p of bolt.path) ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+          }
+          ctx.shadowBlur = 0;
+        }
+        if (isHolding && !sequenceActive && performance.now() - holdStart > 1200) logoBtn.classList.add('primed');
+        requestAnimationFrame(animate);
+      }
+      requestAnimationFrame(animate);
+      let lightningInterval;
+      const startHold = (e) => {
+        if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+        if (sequenceActive || systemOnline || isHolding) return;
+        isHolding = true;
+        holdStart = performance.now();
+        logoBtn.classList.add('calibrating');
+        targetWarpFactor = 30;
+        document.title = "Initializing...";
+        if (navigator.vibrate) navigator.vibrate(20);
+        lightningInterval = setInterval(() => {
+          if (!isHolding || sequenceActive) {
+            clearInterval(lightningInterval);
+            return;
+          }
+          createLightningBolt(cx, cy, 200, 5);
+          if (navigator.vibrate) navigator.vibrate(5);
+        }, 100);
+      };
+      const endHold = (e) => {
+        if (e.type === 'keyup' && e.key !== 'Enter' && e.key !== ' ') return;
+        if (!isHolding || sequenceActive || systemOnline) return;
+        isHolding = false;
+        logoBtn.classList.remove('calibrating');
+        clearInterval(lightningInterval);
+        targetWarpFactor = 0.5;
+        document.title = "System Initialization";
+        if (performance.now() - holdStart > 1200) triggerSequence();
+        else logoBtn.classList.remove('primed');
+      };
+      ['mousedown', 'touchstart'].forEach(e => logoBtn.addEventListener(e, startHold, {
+        passive: true
+      }));
+      ['mouseup', 'touchend'].forEach(e => window.addEventListener(e, endHold, {
+        passive: true
+      }));
+      logoBtn.addEventListener('keydown', startHold);
+      logoBtn.addEventListener('keyup', endHold);
+      async function triggerSequence() {
+        sequenceActive = true;
+        logoBtn.classList.remove('primed');
+        logoBtn.classList.add('locked');
+        manualPhysics = true;
+        document.title = "WARNING: SINGULARITY";
+        const startT = performance.now();
+        while (performance.now() - startT < 300) {
+          warpFactor *= 0.85;
+          if (Math.abs(warpFactor) < 0.1) warpFactor = 0;
+          await new Promise(r => setTimeout(r, 16));
+        }
+        warpFactor = 0;
+        for (let i = 0; i < 8; i++) {
+          const angle = Math.random() * TAU;
+          const dist = 600 * Math.random();
+          createLightningBolt(cx, cy, dist, 8);
+        }
+        await new Promise(r => setTimeout(r, 100));
+        logoBtn.classList.add('vacuum-state');
+        suctionMode = true;
+        suctionStrength = 0.1;
+        gravityActive = true;
+        await new Promise(r => setTimeout(r, 1100));
+        gravityActive = false;
+        logoBtn.classList.add('imploding');
+        document.querySelectorAll('.tech-ring, .hint').forEach(el => el.style.opacity = '0');
+        await new Promise(r => setTimeout(r, 200));
+        canvas.style.transform = `none`;
+        flashOverlay.classList.add('active');
+        document.body.classList.add('chromatic-impact');
+        if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
+        suctionMode = false;
+        manualPhysics = false;
+        warpFactor = 5;
+        targetWarpFactor = 0.5;
+        for (let s of stars) s.explode();
+        for (let i = 0; i < 180; i++) {
+          const angle = Math.random() * TAU,
+            speed = Math.random() * 25 + 5;
+          debris.push({
+            x: cx,
+            y: cy,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 1.0,
+            decay: Math.random() * 0.02 + 0.01,
+            color: Math.random() > 0.3 ? "rgb(255,255,255)" : "rgb(0,255,255)",
+            angle: Math.random() * TAU,
+            spin: (Math.random() - 0.5) * 0.2
+          });
+        }
+        shockwaves.push({
+          size: 1,
+          maxSize: Math.max(width, height) * 0.9,
+          life: 1
+        });
+        uiOverlay.classList.add('faded');
+        logoBtn.style.opacity = '0';
+        await new Promise(r => setTimeout(r, 200));
+        logoBtn.classList.remove('imploding', 'locked', 'vacuum-state');
+        logoBtn.classList.add('online');
+        document.title = "System Online";
+        systemOnline = true;
+        setTimeout(() => {
+          flashOverlay.classList.remove('active');
+          document.body.classList.remove('chromatic-impact');
+        }, 300);
+        await new Promise(r => setTimeout(r, 300));
+        revealPageContent();
+      }
+
+      function revealPageContent() {
+        logoBtn.style.transition = 'opacity 0.3s ease-out';
+        logoBtn.style.opacity = '0';
+        setTimeout(() => {
+          document.body.classList.remove('pre-boot');
+          const heroSection = document.querySelector('.hero');
+          const trustBar = heroSection.querySelector('.trust-bar');
+          if (heroSection && logoBtn && trustBar) {
+            heroSection.insertBefore(logoBtn, trustBar);
+            logoBtn.style.position = 'relative';
+            logoBtn.style.top = 'auto';
+            logoBtn.style.left = 'auto';
+            logoBtn.style.margin = '0 auto 2rem';
+            logoBtn.style.transform = 'none';
+          }
+          setTimeout(() => {
+            logoBtn.style.transition = 'opacity 0.7s ease-in';
+            logoBtn.style.opacity = '1';
+            setTimeout(() => {
+              logoBtn.style.transition = '';
+            }, 600);
+          }, 350);
+          setTimeout(() => {
+            document.querySelectorAll('.hero-heading, .carousel-wrapper, .hero-cta').forEach((el, i) => {
+              if (el.style.opacity === "0" || el.style.opacity === "") {
+                el.style.transition = `opacity 1s ease-out ${i * 0.1}s, transform 1s cubic-bezier(0.19, 1, 0.22, 1) ${i * 0.1}s`;
+                el.style.opacity = "1";
+                el.style.transform = "translateY(0)";
+              }
+            });
+          }, 400);
+        }, 300);
+      }
+
+      function rafThrottle(fn) {
+        let id = null,
+          lastArgs, lastThis;
+        return function(...args) {
+          lastArgs = args;
+          lastThis = this;
+          if (id) return;
+          id = requestAnimationFrame(() => {
+            id = null;
+            fn.apply(lastThis, lastArgs);
+          });
+        };
+      }
+      class DashboardServices {
+        constructor(selector) {
+          this.root = document.querySelector(selector);
+          if (!this.root) return;
+          this.tabList = this.root.querySelector(".agile-services-tabs-list");
+          this.panelContainer = this.root.querySelector(".agile-services-tabs-panels");
+          this.init();
+        }
+        init() {
+          this.render();
+          this.setupTabs();
+          this.setupEventListeners();
+        }
+        render() {
+          this.tabList.innerHTML = CORE_SERVICES_DATA.map((s, i) => `
+            <button class="agile-service-tab ${i === 0 ? 'active' : ''}" role="tab" aria-selected="${i === 0}" data-index="${i}">
+              <div class="tab-depth-layer"></div>
+              <div class="tab-content-layer">
+                <div class="agile-service-icon"><img src="${s.img}" alt="${s.title}" loading="lazy" decoding="async"></div>
+                <div class="agile-service-title-wrapper"><h3 class="agile-service-title">${s.title}</h3><p class="agile-service-preview">${s.sub}</p></div>
+              </div>
+            </button>`).join('');
+          this.panelContainer.innerHTML = CORE_SERVICES_DATA.map((s, i) => `
+            <div class="agile-service-panel ${i === 0 ? 'active' : ''}" role="tabpanel" data-index="${i}">
+              <div class="panel-depth-layer"></div>
+              <div class="agile-service-content">
+                <div class="agile-service-info" data-index-display="0${i + 1}">
+                  <h4 class="agile-service-tagline">${s.tagline}</h4>
+                  <h3 class="heading-2 panel-title">${s.head}<strong>${s.headStrong}</strong></h3>
+                  <p class="text-body">${s.desc}</p>
+                  <a class="btn-inset" href="${s.link}"><div class="case-body layer"></div><div class="bezel layer"></div><div class="indices">${s.cta}</div><div class="sparks"></div></a>
+                </div>
+                <div class="agile-service-visual"><img src="${s.visual}" alt="${s.title}" loading="lazy" decoding="async"></div>
+              </div>
+            </div>`).join('');
+        }
+        setupTabs() {
+          this.tabs = this.tabList.querySelectorAll(".agile-service-tab");
+          this.panels = this.panelContainer.querySelectorAll(".agile-service-panel");
+        }
+        setupEventListeners() {
+          this.tabs.forEach((tab, index) => {
+            tab.addEventListener("click", () => this.switchTab(index));
+            tab.addEventListener("keydown", e => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                this.switchTab(index);
+              }
+            });
+          });
+        }
+        switchTab(index) {
+          if (index < 0 || index >= this.tabs.length) return;
+          this.tabs.forEach((tab, i) => {
+            const isActive = i === index;
+            tab.classList.toggle("active", isActive);
+            tab.setAttribute("aria-selected", isActive);
+          });
+          this.panels.forEach((panel, i) => panel.classList.toggle("active", i === index));
+          const activePanel = this.panels[index];
+          if (activePanel) {
+            activePanel.style.animation = "none";
+            activePanel.offsetHeight;
+            activePanel.style.animation = "";
+          }
+        }
+      }
+      class QuantumTerminalSystem {
+        constructor() {
+          this.container = document.getElementById("quantum-array");
+          this.connectionField = document.getElementById("connection-field");
+          if (this.container) this.init();
+        }
+        init() {
+          this.render();
+          this.terminals = this.container.querySelectorAll(".quantum-terminal-enhanced");
+          this.initializeInteractions();
+          this.initializeConnections();
+        }
+        render() {
+          this.container.innerHTML = TERMINAL_DATA.map(t => `
+            <article class="quantum-terminal-enhanced" data-terminal="${t.type}" data-quantum-id="${t.id}" tabindex="0">
+              <div class="quantum-information-display">
+                <header class="terminal-control-header">
+                  <div class="terminal-identification"><span class="quantum-terminal-id">${t.id}</span>
+                    <div class="system-diagnostics"><div class="diagnostic-indicator status-optimal"></div><span class="diagnostic-label">OPTIMAL</span></div>
+                  </div>
+                  <div class="terminal-classification"><span class="classification-label">${t.class}</span></div>
+                </header>
+                <div class="quantum-data-core">
+                  <div class="primary-metric-display">
+                    <div class="metric-context-label">${t.label}</div>
+                    <div class="metric-visualization-container">
+                      <div class="metric-hologram"><span class="metric-primary-value">${t.value}</span><span class="metric-unit-designation">${t.unit}</span></div>
+                      <div class="metric-progress-architecture">
+                        <div class="progress-substrate"></div><div class="progress-fill ${t.progressClass || ''}" style="${!t.progressClass ? '--progress-value:'+t.value+'%' : ''}"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="information-architecture">
+                    <h3 class="quantum-terminal-title"><span class="title-primary">${t.title}</span><span class="title-emphasis">${t.emp}</span></h3>
+                    <p class="quantum-information-description">${t.desc}</p>
+                  </div>
+                </div>
+                <div class="quantum-interface-controls"><a class="${t.btn.class}" href="${t.btn.link}" role="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${t.btn.icon}</svg><span>${t.btn.text}</span></a></div>
+              </div><span class="shine shine-top"></span><span class="shine shine-bottom"></span><span class="glow glow-top"></span><span class="glow glow-bottom"></span>
+            </article>`).join('');
+        }
+        initializeInteractions() {
+          const resetAllTerminals = () => {
+            this.terminals.forEach(t => t.classList.remove("is-active"));
+          };
+          this.terminals.forEach(terminal => {
+            terminal.addEventListener("click", e => {
+              e.stopPropagation();
+              const wasActive = terminal.classList.contains("is-active");
+              resetAllTerminals();
+              if (!wasActive) terminal.classList.add("is-active");
+            });
+          });
+          document.addEventListener("click", () => {
+            resetAllTerminals();
+          });
+        }
+        initializeConnections() {
+          if (!this.connectionField || this.terminals.length < 2) return;
+          const calculateConnectionPath = (startEl, endEl) => {
+            const startRect = startEl.getBoundingClientRect(),
+              endRect = endEl.getBoundingClientRect(),
+              fieldRect = this.connectionField.getBoundingClientRect();
+            const startX = startRect.right - fieldRect.left,
+              startY = startRect.top + startRect.height / 2 - fieldRect.top;
+            const endX = endRect.left - fieldRect.left,
+              endY = endRect.top + endRect.height / 2 - fieldRect.top;
+            return `M ${startX} ${startY} C ${startX + (endX - startX) * .5} ${startY}, ${startX + (endX - startX) * .5} ${endY}, ${endX} ${endY}`;
+          };
+          const updateConnections = () => {
+            this.connectionField.innerHTML = this.connectionField.querySelector("defs").outerHTML;
+            if (window.innerWidth <= 768) return;
+            for (let i = 0; i < this.terminals.length - 1; i++) {
+              const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+              path.setAttribute("d", calculateConnectionPath(this.terminals[i], this.terminals[i + 1]));
+              path.setAttribute("stroke", `url(#${i % 2 === 0 ? "connection-primary" : "connection-secondary"})`);
+              path.setAttribute("stroke-width", "2");
+              path.setAttribute("fill", "none");
+              path.setAttribute("filter", "url(#connection-glow)");
+              const length = path.getTotalLength();
+              path.style.strokeDasharray = length;
+              path.style.strokeDashoffset = length;
+              path.style.animation = `draw-line 2s ease-out ${i*.3}s forwards, flow-line 4s linear ${i*.3+2}s infinite`;
+              this.connectionField.appendChild(path);
+            }
+          };
+          if (!document.getElementById("svg-animations")) {
+            const style = document.createElement("style");
+            style.id = "svg-animations";
+            style.innerHTML = `@keyframes draw-line { to { stroke-dashoffset: 0; } } @keyframes flow-line { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -200; } }`;
+            document.head.appendChild(style);
+          }
+          updateConnections();
+          window.addEventListener('resize', rafThrottle(updateConnections));
+        }
+      }
+      class ExecutiveTechCarousel {
+        constructor() {
+          this.ring = document.querySelector(".ring");
+          this.container = document.querySelector(".carousel-viewport");
+          this.housing = document.querySelector(".carousel-housing");
+          this.guide = document.querySelector(".interaction-guide");
+          if (!this.ring || !this.container) return;
+          this.numCards = SERVICES_DATA.length;
+          this.angleStep = 360 / this.numCards;
+          this.modalAnimation = null;
+          this.currentIndex = 0;
+          this.rotationY = 180;
+          this.autoRotate = true;
+          this.isDragging = false;
+          this.init();
+        }
+        init() {
+          this.createServiceCards();
+          this.setupCarousel();
+          this.setupEventListeners();
+          this.setupModal();
+        }
+        createServiceCards() {
+          const fragment = document.createDocumentFragment();
+          const cardDims = this.getCardDimensions();
+          SERVICES_DATA.forEach((service, index) => {
+            const card = document.createElement("div");
+            card.className = "service-card loading";
+            card.dataset.serviceIndex = index;
+            Object.assign(card.style, {
+              width: `${cardDims.width}px`,
+              height: `${cardDims.height}px`,
+              marginLeft: `${-cardDims.width / 2}px`,
+              marginTop: `${-cardDims.height / 2}px`
+            });
+            card.innerHTML = `<div class="card-loading"><div class="loading-indicator"></div></div><div class="card-content"><img class="card-image" src="${service.src}" alt="${service.alt}" loading="${index < 3 ? 'eager' : 'lazy'}" style="opacity: 0"/><div class="card-interface"><span class="service-label">${service.label}</span><span class="service-subtitle">${service.alt}</span></div></div>`;
+            const img = card.querySelector(".card-image");
+            const onImageReady = () => {
+              card.classList.remove("loading");
+              img.style.opacity = "1";
+              const loader = card.querySelector(".card-loading");
+              if (loader) loader.remove();
+            };
+            if (img.complete) {
+              onImageReady();
+            } else {
+              img.onload = onImageReady;
+              img.onerror = () => {
+                card.classList.remove("loading");
+                card.classList.add("fallback");
+              };
+            }
+            card.addEventListener("click", () => {
+              if (!this.isDragging) this.showModal(service);
+            });
+            fragment.appendChild(card);
+          });
+          this.ring.appendChild(fragment);
+        }
+        getCardDimensions() {
+          const width = window.innerWidth;
+          if (width < 500) return {
+            width: 280,
+            height: 380,
+            translateZ: 400
+          };
+          if (width < 900) return {
+            width: 300,
+            height: 420,
+            translateZ: 500
+          };
+          return {
+            width: 340,
+            height: 460,
+            translateZ: 620
+          };
+        }
+        setupCarousel() {
+          const cardDims = this.getCardDimensions();
+          this.container.style.perspective = `${cardDims.translateZ * 4}px`;
+          if (typeof gsap !== "undefined") {
+            gsap.set(this.ring, {
+              rotationY: this.rotationY
+            });
+            Array.from(this.ring.children).forEach((card, i) => {
+              gsap.set(card, {
+                rotateY: i * -this.angleStep,
+                transformOrigin: `50% 50% ${cardDims.translateZ}px`,
+                z: -cardDims.translateZ
+              });
+            });
+            gsap.to(this.ring.children, {
+              opacity: 1,
+              y: 0,
+              duration: 1,
+              stagger: 0.1,
+              ease: "power2.out",
+              delay: 0.5
+            });
+          }
+          this.startAutoRotation();
+        }
+        setupEventListeners() {
+          let startX = 0,
+            lastX = 0;
+          const onDragStart = (e) => {
+            this.isDragging = true;
+            this.stopAutoRotation();
+            startX = (e.touches ? e.touches[0].clientX : e.clientX);
+            lastX = startX;
+          };
+          const onDragMove = (e) => {
+            if (!this.isDragging) return;
+            const x = (e.touches ? e.touches[0].clientX : e.clientX);
+            this.rotationY += (x - lastX) * 0.25;
+            lastX = x;
+            if (typeof gsap !== "undefined") gsap.set(this.ring, {
+              rotationY: this.rotationY
+            });
+          };
+          const onDragEnd = () => {
+            this.isDragging = false;
+            this.startAutoRotation();
+          };
+          this.container.addEventListener("pointerdown", onDragStart);
+          window.addEventListener("pointermove", onDragMove);
+          window.addEventListener("pointerup", onDragEnd);
+        }
+        startAutoRotation() {
+          if (this.autoRotateFn) cancelAnimationFrame(this.autoRotateFn);
+          const animate = () => {
+            if (!this.isDragging && document.visibilityState === 'visible') {
+              this.rotationY -= 0.04;
+              if (typeof gsap !== "undefined") gsap.set(this.ring, {
+                rotationY: this.rotationY
+              });
+            }
+            this.autoRotateFn = requestAnimationFrame(animate);
+          };
+          this.autoRotateFn = requestAnimationFrame(animate);
+        }
+        stopAutoRotation() {
+          cancelAnimationFrame(this.autoRotateFn);
+        }
+        setupModal() {
+          this.modal = document.getElementById("servicePreview");
+          if (!this.modal) return;
+          const toggle = this.modal.querySelector(".switch__input");
+          const toggleLabel = this.modal.querySelector(".premium-toggle-label");
+          if (toggle && toggleLabel) {
+            toggle.addEventListener("change", (e) => {
+              const isChecked = e.target.checked;
+              this.modal.classList.toggle("premium-active", isChecked);
+              toggleLabel.textContent = isChecked ? "Premium" : "Standard";
+              toggleLabel.classList.toggle("active", isChecked);
+              this.togglePremiumFeatures(isChecked);
+            });
+          }
+          this.modal.addEventListener("click", (e) => {
+            if (e.target.closest(".btn-utility") || e.target.classList.contains("apple-modal-backdrop")) {
+              this.modal.classList.remove("active");
+              document.body.style.overflow = "";
+            }
+          });
+        }
+        togglePremiumFeatures(showPremium) {
+          const standardItems = this.modal.querySelectorAll(".service-features .feature-item");
+          const premiumPanel = this.modal.querySelector(".service-features-card.premium-panel");
+          if (showPremium) {
+            standardItems.forEach(item => item.classList.add("enhanced"));
+            if (premiumPanel) premiumPanel.classList.add("visible");
+          } else {
+            standardItems.forEach(item => item.classList.remove("enhanced"));
+            if (premiumPanel) premiumPanel.classList.remove("visible");
+          }
+        }
+        addPremiumFeatures(modal, premiumFeatures) {
+          const premiumPanel = modal.querySelector(".service-features-card.premium-panel");
+          const premiumList = modal.querySelector("#premium-features-list");
+          if (!premiumPanel || !premiumList) return;
+          premiumList.innerHTML = premiumFeatures
+            .map(feature => `
+      <li class="feature-item feature-card-inset">
+        <div class="check-icon"></div>
+        <span>${feature}</span>
+      </li>
+    `)
+            .join("");
+          premiumPanel.classList.add("visible");
+        }
+        showModal(serviceData) {
+          const modal = this.modal; // use consistent reference
+          if (!modal) return;
+          // Stop carousel rotation
+          this.stopAutoRotation();
+          // --- BASELINE RESET (Always Standard Mode) ---
+          const toggle = modal.querySelector(".switch__input");
+          const toggleLabel = modal.querySelector(".premium-toggle-label");
+          const premiumPanel = modal.querySelector(".service-features-card.premium-panel");
+          const premiumList = modal.querySelector("#premium-features-list");
+          // Remove premium-active class
+          modal.classList.remove("premium-active");
+          // Reset toggle
+          if (toggle) toggle.checked = false;
+          // Reset toggle label
+          if (toggleLabel) {
+            toggleLabel.textContent = "Standard";
+            toggleLabel.classList.remove("active");
+          }
+          // Reset premium panel
+          if (premiumPanel) premiumPanel.classList.remove("visible");
+          if (premiumList) premiumList.innerHTML = "";
+          // Reset enhanced classes on standard items
+          this.togglePremiumFeatures(false);
+          // Hide separator
+          const separator = modal.querySelector("#separator");
+          if (separator) separator.classList.add("hidden");
+          // --- POPULATE TEXT FIELDS ---
+          modal.querySelector(".apple-service-title").textContent = serviceData.label;
+          modal.querySelector(".apple-service-subtitle").textContent = serviceData.alt;
+          modal.querySelector(".service-description").textContent = serviceData.description;
+          // --- STANDARD FEATURES LIST ---
+          const featuresContainer = modal.querySelector(".service-features");
+          if (featuresContainer && serviceData.features) {
+            featuresContainer.innerHTML = serviceData.features
+              .map(feature => `
+        <li class="feature-item feature-card-inset">
+          <div class="check-icon"></div>
+          <span>${feature}</span>
+        </li>
+      `)
+              .join("");
+          }
+          // --- PREMIUM FEATURES ---
+          if (serviceData.premiumFeatures?.length > 0) {
+            this.addPremiumFeatures(modal, serviceData.premiumFeatures);
+          }
+          // --- ACTION BUTTON UPDATE ---
+          const actionBtn = modal.querySelector(".apple-modal-actions .btn-primary");
+          if (actionBtn) {
+            const href = `#${serviceData.label.toLowerCase().replace(/\s+/g, "-")}-section`;
+            actionBtn.setAttribute("href", href);
+            const btnText = actionBtn.querySelector("span");
+            if (btnText) btnText.textContent = "Explore Service";
+          }
+          // --- ACTIVATE MODAL ---
+          modal.classList.add("active");
+          modal.setAttribute("aria-hidden", "false");
+          document.body.style.overflow = "hidden";
+          // --- ANIMATIONS ---
+          if (typeof gsap !== "undefined") {
+            gsap.fromTo(
+              modal.querySelector(".apple-modal-backdrop"), {
+                opacity: 0
+              }, {
+                opacity: 1,
+                duration: 0.4
+              }
+            );
+            gsap.fromTo(
+              modal.querySelector(".apple-modal-container"), {
+                opacity: 0,
+                scale: 0.9,
+                y: 50
+              }, {
+                opacity: 1,
+                scale: 1,
+                y: 0,
+                duration: 0.6,
+                ease: "elastic.out(1, 0.6)"
+              }
+            );
+          }
+        }
+      }
+      class StatisticsSliderTransplant {
+        constructor(selector) {
+          this.shell = document.querySelector(selector);
+          if (!this.shell) return;
+          this.slider = this.shell.querySelector(".slider");
+          this.trail = this.shell.querySelector(".trail");
+          this.progress = this.shell.querySelector("#progress");
+          this.counter = this.shell.querySelector("#counter");
+          this.init();
+        }
+        init() {
+          this.slider.style.width = `${STATS_DATA.length * 100}%`;
+          this.slider.innerHTML = STATS_DATA.map((s, i) => `
+            <section class="box box${i + 1}" role="tabpanel">
+              <div class="bg"></div>
+              <div class="details">
+                  <div class="stat-value">${s.prefix || ''}${s.value}${s.suffix || ''}</div>
+                  <h1>${s.label}</h1>
+                  <p>${s.context}</p>
+                  <span><a href="#" class="btn btn-neon-glow calculator-trigger">Get Started</a></span>
+              </div>
+              <div class="illustration"><img src="${s.illustration}" alt="${s.label}" class="bubble" loading="lazy"></div>
+            </section>
+          `).join("");
+          this.trail.innerHTML = STATS_DATA.map((_, i) => `<div role="tab" data-index="${i}">${i + 1}</div>`).join("");
+          this.trail.style.gridTemplateColumns = `repeat(${STATS_DATA.length}, 1fr)`;
+          this.ix = 0;
+          this.moveToSlide(0);
+          this.shell.querySelector("#next").addEventListener("click", () => this.moveToSlide(this.ix + 1));
+          this.shell.querySelector("#prev").addEventListener("click", () => this.moveToSlide(this.ix - 1));
+          setInterval(() => this.moveToSlide(this.ix + 1), 5000);
+        }
+        moveToSlide(newIndex) {
+          this.ix = (newIndex + STATS_DATA.length) % STATS_DATA.length;
+          this.slider.style.transform = `translateX(-${this.ix * (100 / STATS_DATA.length)}%)`;
+          this.shell.querySelectorAll(".trail div").forEach((d, i) => d.classList.toggle("active", i === this.ix));
+          this.shell.querySelectorAll(".box").forEach((box, i) => {
+            box.classList.toggle("active-slide", i === this.ix);
+          });
+          this.counter.textContent = `${this.ix + 1} / ${STATS_DATA.length}`;
+          this.progress.style.transition = 'none';
+          this.progress.style.width = '0';
+          setTimeout(() => {
+            this.progress.style.transition = 'width 5s linear';
+            this.progress.style.width = '100%';
+          }, 50);
+        }
+      }
+      class EnhancedTimeline {
+        constructor(selector) {
+          this.container = document.querySelector(selector);
+          if (!this.container) return;
+          this.steps = this.container.querySelectorAll(".timeline-step");
+          this.panels = this.container.querySelectorAll(".timeline-panel");
+          this.svg = this.container.querySelector(".timeline-svg-connector");
+          this.tracePath = this.container.querySelector("#timeline-trace");
+          this.traceGlowPath = this.container.querySelector("#timeline-trace-glow");
+          this.currentStep = 0;
+          this.chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()";
+          this.init();
+        }
+        init() {
+          window.addEventListener('resize', rafThrottle(() => this.drawLines()));
+          this.steps.forEach((step, index) => {
+            step.addEventListener('click', () => {
+              this.activateStep(index);
+            });
+          });
+          setTimeout(() => {
+            this.drawLines();
+            this.activateStep(0);
+          }, 300);
+        }
+        drawLines() {
+          if (!this.svg) return;
+          this.svg.style.display = 'block';
+          const svgRect = this.svg.getBoundingClientRect();
+          const points = Array.from(this.steps).map(step => {
+            const icon = step.querySelector('.module-icon-wrapper');
+            const rect = icon.getBoundingClientRect();
+            return {
+              x: rect.left - svgRect.left + rect.width / 2,
+              y: rect.top - svgRect.top + rect.height / 2
+            };
+          });
+          if (points.length < 2) return;
+          let d = `M ${points[0].x} ${points[0].y}`;
+          for (let i = 1; i < points.length; i++) d += ` L ${points[i].x} ${points[i].y}`;
+          this.tracePath.setAttribute('d', d);
+          this.traceGlowPath.setAttribute('d', d);
+          this.pathTotalLength = this.traceGlowPath.getTotalLength();
+          this.traceGlowPath.style.strokeDasharray = this.pathTotalLength;
+          this.updateLineProgress(this.currentStep);
+        }
+        updateLineProgress(index) {
+          if (!this.traceGlowPath || !this.pathTotalLength) return;
+          const progress = index / (this.steps.length - 1);
+          this.traceGlowPath.style.strokeDashoffset = this.pathTotalLength * (1 - progress);
+        }
+        scrambleText(element) {
+          const finalText = element.getAttribute('data-final');
+          if (!finalText) return;
+          let iterations = 0;
+          const interval = setInterval(() => {
+            element.innerText = finalText.split("").map((letter, index) => {
+              return index < iterations ? finalText[index] : this.chars[Math.floor(Math.random() * this.chars.length)];
+            }).join("");
+            if (iterations >= finalText.length) clearInterval(interval);
+            iterations += 1 / 2;
+          }, 30);
+        }
+        activateStep(index) {
+          this.steps.forEach((step, i) => step.setAttribute('aria-selected', i === index));
+          this.panels.forEach((panel, i) => {
+            if (i === index) {
+              panel.hidden = false;
+              setTimeout(() => {
+                panel.classList.add('active');
+                const title = panel.querySelector('.panel-title');
+                if (title) this.scrambleText(title);
+              }, 50);
+            } else {
+              panel.classList.remove('active');
+              setTimeout(() => panel.hidden = true, 600);
+            }
+          });
+          this.updateLineProgress(index);
+          this.currentStep = index;
+        }
+      }
+      class AtmosphericGallery {
+        constructor(selector, options = {}) {
+          this.container = document.querySelector(selector);
+          if (!this.container) return;
+          this.columns = this.container.querySelectorAll(".gallery_line");
+          this.activeCard = null;
+          this.tapCooldown = false;
+          this.imagesPerColumn = options.imagesPerColumn || 6;
+          this.loopMultiplier = options.loopMultiplier || 2;
+          this.sharedObserver = 'IntersectionObserver' in window ?
+            new IntersectionObserver(this.onIntersect.bind(this), {
+              rootMargin: '60px'
+            }) :
+            null;
+          this.init();
+        }
+        init() {
+          this.populate();
+          document.addEventListener('click', (e) => {
+            if (this.activeCard && !e.target.closest('.gallery-card-container')) {
+              this.closeActiveCard();
+            }
+          });
+          this.columns.forEach(column => {
+            column.addEventListener('click', (e) => {
+              if (this.tapCooldown) return;
+              this.tapCooldown = true;
+              setTimeout(() => (this.tapCooldown = false), 180);
+              const card = e.target.closest('.gallery-card-container');
+              if (!card) return;
+              if (this.activeCard === card) {
+                this.closeActiveCard();
+                return;
+              }
+              if (this.activeCard) this.closeActiveCard();
+              this.openCard(card, column);
+            });
+          });
+        }
+        openCard(card, column) {
+          card.classList.add('is-active');
+          this.activeCard = card;
+          column.style.animationPlayState = "paused";
+        }
+        closeActiveCard() {
+          if (!this.activeCard) return;
+          const column = this.activeCard.closest('.gallery_line');
+          if (column) column.style.animationPlayState = "running";
+          this.activeCard.classList.remove('is-active');
+          this.activeCard = null;
+        }
+        populate() {
+          const imgs = GALLERY_IMAGES;
+          const len = imgs.length;
+          const colCount = this.columns.length;
+          const total = this.imagesPerColumn * this.loopMultiplier;
+          this.columns.forEach((column, colIndex) => {
+            const fragment = document.createDocumentFragment();
+            for (let i = 0; i < total; i++) {
+              const src = imgs[(colIndex + i * colCount) % len];
+              const card = document.createElement("div");
+              card.className = "gallery-card-container";
+              card.innerHTML = `
+          <div class="holo-b-assembly">
+            <div class="holo-content-b">
+              <img src="${src}" alt="Portfolio showcase" loading="lazy" decoding="async">
+            </div>
+            <div class="info-plate">
+              <div class="plate-title">Project Showcase</div>
+              <div class="plate-meta">AgileTech Design</div>
+            </div>
+          </div>
+        `;
+              const img = card.firstElementChild.firstElementChild.firstElementChild;
+              if (this.sharedObserver) {
+                img.dataset.src = img.src;
+                img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"%3E%3C/svg%3E';
+                this.sharedObserver.observe(img);
+              }
+              fragment.appendChild(card);
+            }
+            column.innerHTML = "";
+            column.appendChild(fragment);
+          });
+        }
+        onIntersect(entries) {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            const img = entry.target;
+            img.src = img.dataset.src;
+            img.removeAttribute('data-src');
+            this.sharedObserver.unobserve(img);
+          }
+        }
+      }
+      class AppleCalculatorModalController {
+        constructor() {
+          this.modal = document.getElementById("calculator-modal");
+          this.formData = {
+            employees: 10,
+            devices: 20,
+            'current-cost': 50000,
+            'support-cost': 10000
+          };
+          if (!this.modal) return;
+          this.setupEventListeners();
+          this.initSliders();
+        }
+        setupEventListeners() {
+          this.modal.addEventListener("click", (e) => {
+            if (e.target.closest(".btn-utility") || e.target.classList.contains("apple-modal-backdrop")) this.close();
+          });
+          document.querySelectorAll(".calculator-trigger").forEach(btn => btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            this.open();
+          }));
+          this.modal.querySelector(".next-btn").addEventListener("click", () => this.nextStep());
+          this.modal.querySelector(".back-btn").addEventListener("click", () => this.prevStep());
+          this.modal.querySelector(".start-over-btn").addEventListener("click", () => this.reset());
+        }
+        initSliders() {
+          this.modal.querySelectorAll(".slider-input").forEach(slider => {
+            const update = () => {
+              const pct = (slider.value - slider.min) / (slider.max - slider.min) * 100;
+              slider.style.setProperty("--progress-percent", `${pct}%`);
+              const valDisplay = document.getElementById(`${slider.id}Value`);
+              if (valDisplay) valDisplay.textContent = slider.id.includes("cost") ? `$${parseInt(slider.value).toLocaleString()}` : slider.value;
+              this.formData[slider.id] = parseInt(slider.value);
+            };
+            slider.addEventListener("input", update);
+            update();
+          });
+        }
+        open() {
+          this.modal.classList.add("active");
+          document.body.style.overflow = "hidden";
+          this.step = 1;
+          this.updateUI();
+        }
+        close() {
+          this.modal.classList.remove("active");
+          document.body.style.overflow = "";
+        }
+        nextStep() {
+          if (this.step < 3) {
+            this.step++;
+            this.updateUI();
+            if (this.step === 3) this.calculate();
+          }
+        }
+        prevStep() {
+          if (this.step > 1) {
+            this.step--;
+            this.updateUI();
+          }
+        }
+        reset() {
+          this.step = 1;
+          this.updateUI();
+        }
+        updateUI() {
+          this.modal.querySelectorAll(".calc-step").forEach((el, i) => el.classList.toggle("active-step", i + 1 === this.step));
+          this.modal.querySelector(".progress-indicators").style.setProperty("--active-step", this.step);
+          this.modal.querySelectorAll(".progress-indicator").forEach((el, i) => el.classList.toggle("active", i + 1 === this.step));
+          this.modal.querySelector(".back-btn").hidden = this.step === 1;
+          this.modal.querySelector(".next-btn").hidden = this.step === 3;
+          this.modal.querySelector(".start-over-btn").hidden = this.step !== 3;
+        }
+        calculate() {
+          const totalCurrent = this.formData['current-cost'] + this.formData['support-cost'];
+          const estimatedCost = (this.formData.employees * 120 * 12) + (this.formData.devices * 25 * 12) + 5000;
+          const savings = Math.max(0, totalCurrent - estimatedCost);
+          const savingsPercent = totalCurrent > 0 ? Math.round((savings / totalCurrent) * 100) : 0;
+          document.getElementById("resultsGrid").innerHTML = `
+                <div class="result-item"><div class="result-label">Current Cost</div><div class="result-value">$${totalCurrent.toLocaleString()}</div></div>
+                <div class="result-item"><div class="result-label">Estimated Cost</div><div class="result-value">$${estimatedCost.toLocaleString()}</div></div>
+                <div class="result-item savings"><div class="result-label">Potential Savings</div><div class="result-value">$${savings.toLocaleString()} <span style="font-size:0.8em">(${savingsPercent}%)</span></div></div>
+            `;
+        }
+      }
+      class FocusManager {
+        constructor() {
+          this.init();
+        }
+        init() {
+          document.querySelectorAll('[role="dialog"]').forEach(modal => {
+            modal.addEventListener("keydown", (e) => {
+              if (e.key === "Tab") this.trapFocus(e, modal);
+            });
+          });
+        }
+        trapFocus(e, container) {
+          const focusables = container.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])');
+          const first = focusables[0];
+          const last = focusables[focusables.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+      class ButtonTouchHandler {
+        constructor() {
+          this.pressTimers = new Map();
+          document.querySelectorAll('.btn-primary, .btn-circuit-relay, .btn-utility, .btn-neon-edge, .btn-neon-glow, .btn-inset, .btn-shiny-border').forEach(btn => this.attachHandlers(btn));
+        }
+        attachHandlers(btn) {
+          btn.addEventListener('pointerdown', (e) => this.onPointerDown(e, btn));
+          ['pointerup', 'pointercancel', 'pointerleave'].forEach(evt => btn.addEventListener(evt, (e) => this.onPointerUp(e, btn)));
+        }
+        onPointerDown(e, btn) {
+          btn.setAttribute('aria-pressed', 'true');
+          btn.setAttribute('data-pressed', 'true');
+          this.spawnSparks(btn);
+        }
+        onPointerUp(e, btn) {
+          setTimeout(() => {
+            btn.setAttribute('aria-pressed', 'false');
+            btn.setAttribute('data-pressed', 'false');
+          }, 120);
+        }
+        spawnSparks(btn) {
+          const container = btn.querySelector('.sparks') || btn;
+          for (let i = 0; i < 5; i++) {
+            const spark = document.createElement('div');
+            spark.className = 'spark';
+            spark.style.cssText = `--dx:${Math.random()*100-50}px; --dy:${Math.random()*100-50}px; left:${Math.random()*100}%; top:${Math.random()*100}%; position:absolute; width:2px; height:2px; background:#0ff; pointer-events:none;`;
+            container.appendChild(spark);
+            if (typeof gsap !== 'undefined') {
+              gsap.to(spark, {
+                x: `random(-50, 50)`,
+                y: `random(-50, 50)`,
+                opacity: 0,
+                duration: 0.5,
+                onComplete: () => spark.remove()
+              });
+            } else {
+              setTimeout(() => spark.remove(), 500);
+            }
+          }
+        }
+      }
+
+      function initializeComponents() {
+        new DashboardServices(".agile-services-tabs-layout");
+        new QuantumTerminalSystem();
+        new StatisticsSliderTransplant(".carousel-shell");
+        new AtmosphericGallery(".gallery");
+        new EnhancedTimeline(".process-timeline");
+        new FocusManager();
+        new ButtonTouchHandler();
+        new AppleCalculatorModalController();
+        const heroObserver = new IntersectionObserver((entries) => {
+          if (entries[0].isIntersecting) {
+            new ExecutiveTechCarousel();
+            heroObserver.disconnect();
+          }
+        });
+        const hero = document.querySelector('.hero');
+        if (hero) heroObserver.observe(hero);
+      }
+      initializeComponents();
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) entry.target.classList.add("in-viewport");
+        });
+      }, {
+        threshold: 0.1
+      });
+      document.querySelectorAll('.quantum-particle-system, .starry-background, .nebula-fog, .gallery_line').forEach(el => observer.observe(el));
+    });
+  </script>
+</body>
+    
+  </body>
+  
+</html>
