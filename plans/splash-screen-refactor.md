@@ -1,5 +1,14 @@
 # 开屏动画重构设计文档
 
+## 实现状态
+
+| 阶段               | 状态     | 说明                                      |
+| ------------------ | -------- | ----------------------------------------- |
+| Phase 1 - 信号锁定 | ✅ 已完成 | 搜索噪声→信号闪现→径向锁定→确认脉冲       |
+| Phase 2 - 能量启动 | ⏳ 未开始 | 需实现长按充能→启动序列→爆炸过渡          |
+| Logo idle 动画     | ✅ 已完成 | PixiJS Graphics 程序化绘制 + 多层独立动画 |
+| HUD 文字渲染       | ❌ 已移除 | 根据反馈简化，不再显示 HUD 状态文字       |
+
 ## 1. 概述
 
 ### 1.1 目标
@@ -7,7 +16,7 @@
 将现有开屏动画（终端打字 → 扫描线揭示署名 → Glitch 切换）彻底替换为两段式沉浸动画：
 
 1. **Phase 1 - 信号锁定**：画面从静态噪声中逐步"捕获"并锁定 Logo 信号
-2. **Phase 2 - 能量启动**：点击 Logo 触发能量吸入→爆炸→进入标题画面
+2. **Phase 2 - 能量启动**：长按 Logo 充能并释放后触发能量吸入→爆炸→进入标题画面
 
 ### 1.2 设计原则
 
@@ -22,7 +31,7 @@
 | 渲染引擎 | PixiJS v7（已有）                                               |
 | 滤镜     | pixi-filters v5（已有）+ 自定义 Filter（参照 AngryNoiseFilter） |
 | 动画     | Framer Motion（UI 层）+ PixiJS ticker（Canvas 层）              |
-| Logo     | `public/tsian.svg`（十字裂隙图标，颜色待更新为主题色）          |
+| Logo     | PixiJS Graphics 程序化绘制（不再依赖 SVG Sprite）               |
 | 状态管理 | React useState + 回调                                           |
 
 ### 1.4 与原 GPU 粒子方案的对比
@@ -40,15 +49,16 @@
 
 ## 2. 已确认的设计决策
 
-| 决策项        | 结论                          | 说明                                               |
-| ------------- | ----------------------------- | -------------------------------------------------- |
-| Logo 揭示方式 | 信号锁定（Signal Lock）       | 从噪声中逐步锁定信号，符合赛博朋克/神经接续主题    |
-| 核心渲染技术  | 自定义 Filter + Graphics 遮罩 | 不需要自定义 Geometry/Mesh/顶点着色器              |
-| 噪声效果      | SignalNoiseFilter（新）       | 参照 AngryNoiseFilter 模式，纯片段着色器           |
-| 滤镜复用      | FilterManager 全部复用        | GlitchFilter + RGBSplitFilter + CRTFilter 直接使用 |
-| Logo 颜色     | 更新为主题色（青色渐变）      | 当前 SVG 是 indigo/pink，需更新                    |
-| 动画完成后    | 直接进入 TitleScreen          | 暂不实现作者署名阶段                               |
-| 鼠标跟随      | 不需要                        | 无交互式粒子                                       |
+| 决策项        | 结论                              | 说明                                               |
+| ------------- | --------------------------------- | -------------------------------------------------- |
+| Logo 揭示方式 | 信号锁定（Signal Lock）           | 从噪声中逐步锁定信号，符合赛博朋克/神经接续主题    |
+| 核心渲染技术  | 自定义 Filter + Graphics 遮罩     | 不需要自定义 Geometry/Mesh/顶点着色器              |
+| 噪声效果      | SignalNoiseFilter（新）           | 参照 AngryNoiseFilter 模式，纯片段着色器           |
+| 滤镜复用      | FilterManager 全部复用            | GlitchFilter + RGBSplitFilter + CRTFilter 直接使用 |
+| Logo 渲染方式 | PixiJS Graphics 程序化绘制        | 多层图元可独立动画，不再依赖 SVG Sprite            |
+| HUD 状态文字  | 已移除                            | 用户反馈认为信息冗余，改为简洁提示文字             |
+| 动画完成后    | Phase 1 结束进入 idle，点击后完成 | 暂不实现作者署名阶段                               |
+| 鼠标跟随      | 不需要                            | 无交互式粒子                                       |
 
 ---
 
@@ -71,14 +81,16 @@ stateDiagram-v2
     s4 --> s5: 爆炸动画完成
 ```
 
+> 当前实现（截至 Phase 1）：`intro -> idle -> complete(点击)`；`charging/sequence` 仍为 Phase 2 预留状态。
+
 ### 3.1 状态定义
 
 ```typescript
 type SplashPhase =
   | "intro"      // 信号锁定阶段（自动播放）
   | "idle"       // Logo 已揭示，等待用户交互
-  | "charging"   // 用户按住 Logo，能量聚集
-  | "sequence"   // 启动序列（吸入→爆炸→冲击波）
+  | "charging"   // 用户按住 Logo，能量聚集（Phase 2 预留）
+  | "sequence"   // 启动序列（吸入→爆炸→冲击波，Phase 2 预留）
   | "complete"   // 动画完成，进入标题画面
 ```
 
@@ -102,15 +114,14 @@ flowchart LR
 #### 4a. 搜索噪声 Search Static（0-800ms）
 
 **视觉效果**：
-- 全屏静态噪声/雪花覆盖（新的 SignalNoiseFilter）
+- 全屏静态噪声/雪花覆盖（`SignalNoiseFilter`）
 - CRT 扫描线 + 轻微曲面变形
-- 屏幕底部或顶部有模拟的 HUD 文字：`SCANNING... 频率 XXX.XX MHz`
 - 噪声强度从 100% 开始，保持高强度
 
 **技术实现**：
 - `SignalNoiseFilter`：全屏覆盖的片段着色器，产生 TV 静态噪声纹理
 - `CRTFilter`：已有，直接使用
-- HUD 文字：PixiJS Text 或 DOM 覆盖层
+- HUD 文字渲染已移除（按反馈简化界面）
 
 #### 4b. 信号闪现 Signal Glimpse（800-2000ms）
 
@@ -119,13 +130,12 @@ flowchart LR
 - 每次闪现伴随强烈的 RGB 色差抖动 + 水平撕裂
 - 闪现间隔逐渐缩短（第一次 400ms 间隔 → 最后 150ms 间隔）
 - 闪现时 Logo 有轻微位置偏移（像信号不稳定）
-- HUD 文字更新：`SIGNAL DETECTED... LOCKING...`
 
 **技术实现**：
-- Logo 作为 `Sprite` 加载到 PixiJS Stage
-- 通过 `logo.visible` 或 `logo.alpha` 控制闪烁
+- Logo 由 `LogoRenderer` 使用 PixiJS `Graphics` 程序化绘制
+- 通过 `logo.alpha` 与 `flash(duration)` 控制闪烁
 - 每次闪现同步触发 `FilterManager.triggerRGBSplit()` + `FilterManager.triggerTear()`
-- Logo 位置用 `logo.position.set(x + jitter, y + jitter)` 做随机偏移
+- Logo 位置用 `setJitter(maxOffset)` 做随机偏移
 
 #### 4c. 径向锁定 Radial Lock（2000-3200ms）
 
@@ -137,23 +147,22 @@ flowchart LR
 - GlitchFilter 效果逐渐减弱
 
 **技术实现**：
-- `SignalNoiseFilter` 新增 `uClearCenter`（vec2）和 `uClearRadius`（float）uniform
+- `SignalNoiseFilter` 使用 `uClearCenter`（vec2）和 `uClearRadius`（float）uniform
 - 片段着色器中：距离中心 < `uClearRadius` 的区域不施加噪声
 - 清除边界用 `smoothstep` 做柔和过渡 + 青色发光环
-- 每帧更新 `uClearRadius` 从 0 → 屏幕对角线长度
+- 每帧更新 `uClearRadius` 从 0 → `maxClearRadius`
 
 #### 4d. 确认脉冲 Confirm Pulse（3200-3800ms）
 
 **视觉效果**：
 - 噪声完全清除，画面变为纯黑背景 + Logo
 - Logo 触发一次能量脉冲：从中心向外扩散的青色光环
-- 脉冲过后 Logo 保持发光效果（呼吸发光）
-- 底部淡入提示文字：`SIGNAL LOCKED · TOUCH TO INITIALIZE`
+- 脉冲过后进入 Logo idle 动画（多层独立运动）
+- 底部淡入提示文字：`SIGNAL LOCKED · CLICK TO INITIALIZE`
 
 **技术实现**：
-- 脉冲环：PixiJS `Graphics` 绘制扩散圆环，配合 alpha 淡出
-- 或者用 DOM + CSS animation 做径向扩散
-- Logo 发光：CSS/SVG filter 的 drop-shadow，或 PixiJS GlowFilter
+- 脉冲环：`PulseRenderer` 使用 PixiJS `Graphics` 绘制扩散圆环并淡出
+- Logo idle：`LogoRenderer.startIdleAnimation()` 驱动分层动画
 - 提示文字：DOM 层 Framer Motion 淡入
 
 ### 4.3 SignalNoiseFilter 设计
@@ -207,38 +216,52 @@ void main() {
 }
 ```
 
-### 4.4 视觉参数
+### 4.4 视觉参数与 Logo 渲染
+
+#### 4.4.1 噪声与滤镜参数
 
 | 参数         | 值                              | 说明                 |
 | ------------ | ------------------------------- | -------------------- |
 | 噪声颜色     | 灰白色（TV 雪花风格）           | 经典静态噪声         |
 | 扫描环颜色   | `vec3(0.0, 0.9, 0.8)` (#00E5CC) | 主题青色             |
 | 扫描环宽度   | 0.015（NDC 单位）               | 窄而明亮的扫描线     |
-| CRT 扫描线   | lineContrast: 0.15              | 比当前略强           |
+| CRT 扫描线   | lineContrast: 0.1               | 常驻弱 CRT 质感      |
 | RGB 色差峰值 | 15-25px                         | 信号闪现时的剧烈抖动 |
 | 撕裂切片     | 8-15                            | 信号闪现时的水平撕裂 |
 
+#### 4.4.2 Logo 程序化绘制（`LogoRenderer`）
+
+- Logo 不再使用 SVG Sprite，改为 PixiJS `Graphics` 程序化绘制。
+- Logo 由 **7 层组成**（设计分组）：外框、内框、辅助线、裂隙辉光、裂隙主体×3 层渐变、中心奇点。
+- 裂隙内线（`riftInnerLine`）作为实现细节层，用于提升裂隙轮廓锐度。
+- 矩形框尺寸统一为 **56×56**，通过不同旋转角度与颜色区分层次。
+- 裂隙主体通过多层叠加模拟渐变：**深青 → 主题青 → 白色核心**。
+- idle 阶段动画包含：
+  - 外框与内框反向旋转
+  - 辅助线透明度闪烁
+  - 裂隙渐变层独立脉动（缩放 + 透明度）
+  - 中心奇点快速旋转与高频闪烁
+
 ### 4.5 时间线
 
-| 时间        | 事件                           | 技术操作                          |
-| ----------- | ------------------------------ | --------------------------------- |
-| 0ms         | 全屏噪声 + CRT 效果            | SignalNoiseFilter intensity=1.0   |
-| 200ms       | HUD 文字显示 SCANNING...       | PixiJS Text 淡入                  |
-| 800ms       | 第一次 Logo 闪现（100ms 可见） | logo.alpha=1 → 0, triggerRGBSplit |
-| 1100ms      | 第二次 Logo 闪现（120ms 可见） | 同上，间隔缩短                    |
-| 1350ms      | 第三次 Logo 闪现（150ms 可见） | 同上，更强的 RGB 色差             |
-| 1550ms      | 第四次闪现（180ms 可见）       | 同上，位置偏移减小                |
-| 1800ms      | 第五次闪现（200ms 可见）       | 信号趋于稳定                      |
-| 2000ms      | Logo 固定显示，径向清除开始    | uClearRadius 从 0 开始递增        |
-| 2000-3200ms | 清除半径扩大，扫描环向外推进   | 每帧更新 uClearRadius             |
-| 3200ms      | 噪声完全清除                   | uIntensity → 0                    |
-| 3400ms      | 确认脉冲（青色光环扩散）       | Graphics 圆环动画                 |
-| 3600ms      | 提示文字淡入                   | DOM Framer Motion                 |
-| 3800ms      | 进入 idle 状态                 | phase = "idle"                    |
+| 时间        | 事件                                                | 技术操作                                |
+| ----------- | --------------------------------------------------- | --------------------------------------- |
+| 0ms         | 全屏噪声 + CRT 效果                                 | SignalNoiseFilter intensity=1.0         |
+| 800ms       | 第一次 Logo 闪现（100ms 可见）                      | logo.flash(100), triggerRGBSplit        |
+| 1100ms      | 第二次 Logo 闪现（120ms 可见）                      | 同上，间隔缩短                          |
+| 1350ms      | 第三次 Logo 闪现（150ms 可见）                      | 同上，更强的 RGB 色差                   |
+| 1550ms      | 第四次闪现（180ms 可见）                            | 同上，位置偏移减小                      |
+| 1800ms      | 第五次闪现（200ms 可见）                            | 信号趋于稳定                            |
+| 2000ms      | Logo 固定显示，径向清除开始                         | uClearRadius 从 0 开始递增              |
+| 2000-3200ms | 清除半径扩大，扫描环向外推进                        | 每帧更新 uClearRadius                   |
+| 3200ms      | 噪声完全清除，启动 Logo idle 分层动画               | uIntensity → 0, logo.startIdleAnimation |
+| 3400ms      | 确认脉冲（青色光环扩散）                            | PulseRenderer.triggerPulse              |
+| 3600ms      | 提示文字淡入（SIGNAL LOCKED · CLICK TO INITIALIZE） | DOM Framer Motion                       |
+| 3800ms      | 进入 idle 状态                                      | phase = "idle"                          |
 
 ---
 
-## 5. Phase 2 - 能量启动（Angel 风格）
+## 5. Phase 2 - 能量启动（Angel 风格，规划中）
 
 ### 5.1 效果描述
 
@@ -305,68 +328,65 @@ stateDiagram-v2
 
 ## 6. 组件架构
 
-### 6.1 文件结构
+### 6.1 文件结构（当前实现）
 
 ```
 src/components/SplashScreen/
-├── index.tsx                        # 主组件（状态管理）
-├── SplashCanvas.tsx                 # PixiJS 统一画布
+├── index.tsx                        # 主组件（phase 切换 + 点击完成）
+├── PixiSplashCanvas.tsx             # PixiJS 画布、RAF 循环、resize
+├── FilterManager.ts                 # 滤镜管理（从旧 PixiSplashCanvas 提取）
 ├── renderers/
 │   ├── SignalLockRenderer.ts        # 信号锁定动画编排器
-│   ├── LogoRenderer.ts             # Logo Sprite 管理（闪现/固定/发光）
-│   ├── HudRenderer.ts              # HUD 文字渲染（SCANNING... / LOCKED）
-│   ├── PulseRenderer.ts            # 确认脉冲 + 冲击波效果
-│   ├── StarfieldRenderer.ts        # 星空背景渲染器
-│   └── ExplosionRenderer.ts        # 爆炸效果渲染器
+│   ├── LogoRenderer.ts              # 程序化 Logo 绘制 + 多层 idle 动画
+│   └── PulseRenderer.ts             # 确认脉冲光环
 ├── filters/
-│   └── SignalNoiseFilter.ts        # 自定义 TV 噪声滤镜（片段着色器）
-├── LogoContainer.tsx                # Logo + 能量环 DOM 组件
+│   └── SignalNoiseFilter.ts         # 自定义 TV 噪声滤镜（片段着色器）
 └── types.ts                         # 类型定义
 ```
 
+> 注：`HudRenderer.ts` 已移除；`StarfieldRenderer.ts` / `ExplosionRenderer.ts` 为 Phase 2 规划能力，当前尚未实现。
+
 ### 6.2 组件职责
 
-| 组件                 | 职责                                           |
-| -------------------- | ---------------------------------------------- |
-| `SplashScreen`       | 状态机管理、Phase 切换、生命周期               |
-| `SplashCanvas`       | PixiJS 画布初始化、渲染器调度、帧循环          |
-| `SignalLockRenderer` | Phase 1 动画编排（噪声→闪现→径向清除→脉冲）    |
-| `LogoRenderer`       | Logo SVG 加载为 Sprite，闪烁/固定显示/发光控制 |
-| `HudRenderer`        | 模拟 HUD 状态文字的打字效果                    |
-| `PulseRenderer`      | 确认脉冲光环 + Phase 2 冲击波                  |
-| `StarfieldRenderer`  | 星空粒子管理（idle/加速/吸入/爆炸）            |
-| `ExplosionRenderer`  | 闪电、碎片效果                                 |
-| `SignalNoiseFilter`  | 自定义片段着色器：TV 静态噪声 + 径向清除遮罩   |
-| `LogoContainer`      | Logo SVG、能量环、交互事件、CSS 动画           |
+| 组件                 | 职责                                                     |
+| -------------------- | -------------------------------------------------------- |
+| `SplashScreen`       | 状态机管理（`intro`→`idle`→`complete`）、退出动画与回调  |
+| `PixiSplashCanvas`   | PixiJS 初始化、分层容器管理、渲染器生命周期、帧循环      |
+| `FilterManager`      | 统一管理 Glitch/RGBSplit/CRT 滤镜并提供触发 API          |
+| `SignalLockRenderer` | Phase 1 编排（搜索噪声→闪现→径向锁定→确认脉冲）          |
+| `LogoRenderer`       | PixiJS Graphics 程序化绘制 Logo，负责闪现/锁定/idle 动画 |
+| `PulseRenderer`      | 确认脉冲光环绘制与生命周期管理                           |
+| `SignalNoiseFilter`  | 自定义片段着色器：TV 静态噪声 + 径向清除遮罩             |
 
 ### 6.3 技术依赖图
 
 ```mermaid
 flowchart TD
-    subgraph 已有能力 - 直接复用
-        FM[FilterManager]
+    subgraph 基础依赖
         GF[GlitchFilter]
         RF[RGBSplitFilter]
         CF[CRTFilter]
         ANF[AngryNoiseFilter - 参照模式]
     end
 
-    subgraph 新增组件
+    subgraph 当前实现
+        PSC[PixiSplashCanvas]
+        FM[FilterManager]
         SNF[SignalNoiseFilter]
         SLR[SignalLockRenderer]
         LR[LogoRenderer]
-        HR[HudRenderer]
         PR[PulseRenderer]
     end
 
+    PSC --> FM
+    PSC --> SLR
     ANF -.->|参照架构| SNF
-    FM -->|复用| SLR
-    GF -->|信号闪现时触发| SLR
-    RF -->|信号闪现时触发| SLR
-    CF -->|全程持续| SLR
+    GF --> FM
+    RF --> FM
+    CF --> FM
+    FM -->|故障滤镜触发| SLR
     SNF -->|噪声+径向清除| SLR
     SLR --> LR
-    SLR --> HR
     SLR --> PR
 ```
 
@@ -377,24 +397,19 @@ flowchart TD
    ↓
 SplashScreen（phase: intro）
    ↓
-SplashCanvas 初始化 PixiJS
+PixiSplashCanvas 初始化 PixiJS + FilterManager + SignalLockRenderer
    ↓
-SignalLockRenderer 开始编排动画
-   ├── SignalNoiseFilter（噪声覆盖）
-   ├── FilterManager（GlitchFilter + RGBSplitFilter + CRTFilter）
-   ├── LogoRenderer（Logo 闪烁/固定/发光）
-   ├── HudRenderer（状态文字）
+SignalLockRenderer 编排 Phase 1
+   ├── SignalNoiseFilter（噪声覆盖 + 径向清除）
+   ├── FilterManager（Glitch/RGBSplit/CRT）
+   ├── LogoRenderer（闪现/锁定/idle 多层动画）
    └── PulseRenderer（确认脉冲）
    ↓
 动画完成 → phase: idle
    ↓
-用户交互（pointer events）
+DOM 层中心点击热区（button）
    ↓
-LogoContainer（DOM 层）
-   ├── CSS class 切换（calibrating/primed）
-   └── Framer Motion 动画
-   ↓
-phase: sequence → phase: complete → onComplete()
+phase: complete → 500ms 淡出 → onComplete()
 ```
 
 ---
@@ -409,23 +424,24 @@ phase: sequence → phase: complete → onComplete()
 
 ## 8. 与现有代码的关系
 
-### 8.1 需要替换的文件
+### 8.1 需要替换/新增的文件
 
-| 文件                                               | 处理方式                     |
-| -------------------------------------------------- | ---------------------------- |
-| `src/components/SplashScreen/index.tsx`            | **重写**                     |
-| `src/components/SplashScreen/PixiSplashCanvas.tsx` | **重写**（拆分为多个渲染器） |
-| `src/config/splash.ts`                             | **大幅修改**（新配置结构）   |
+| 文件                                               | 处理方式                                     |
+| -------------------------------------------------- | -------------------------------------------- |
+| `src/components/SplashScreen/index.tsx`            | **重写**（新状态机 + 点击完成逻辑）          |
+| `src/components/SplashScreen/PixiSplashCanvas.tsx` | **重写**（画布管理 + 渲染器调度）            |
+| `src/components/SplashScreen/FilterManager.ts`     | **新增**（从旧版 PixiSplashCanvas 提取）     |
+| `src/config/splash.ts`                             | **大幅修改**（Signal Lock 时间线与参数配置） |
 
 ### 8.2 保留/复用的能力
 
-| 能力                    | 来源                     | 复用方式                              |
-| ----------------------- | ------------------------ | ------------------------------------- |
-| PixiJS Application 创建 | `PixiSplashCanvas.tsx`   | 沿用初始化模式                        |
-| FilterManager           | `PixiSplashCanvas.tsx`   | **核心复用** - 直接使用其滤镜触发方法 |
-| 自定义 Filter 模式      | `AngryNoiseFilter.ts`    | **参照架构**创建 SignalNoiseFilter    |
-| Framer Motion 退出动画  | `SplashScreen/index.tsx` | 沿用 AnimatePresence                  |
-| pixi-filters            | `pixi-filters`           | CRT/Glitch/RGBSplit 直接使用          |
+| 能力                    | 来源                               | 复用方式                             |
+| ----------------------- | ---------------------------------- | ------------------------------------ |
+| PixiJS Application 创建 | `PixiSplashCanvas.tsx`（旧实现）   | 沿用初始化模式                       |
+| FilterManager 触发 API  | `FilterManager.ts`（由旧画布提取） | **核心复用** - 直接使用滤镜触发方法  |
+| 自定义 Filter 模式      | `AngryNoiseFilter.ts`              | **参照架构**创建 `SignalNoiseFilter` |
+| Framer Motion 退出动画  | `SplashScreen/index.tsx`           | 沿用 `AnimatePresence`               |
+| pixi-filters            | `pixi-filters`                     | CRT/Glitch/RGBSplit 直接使用         |
 
 ### 8.3 不受影响的组件
 
@@ -433,31 +449,39 @@ phase: sequence → phase: complete → onComplete()
 - `App.tsx` - 接口不变（onComplete 回调）
 - `effects/` - 不变
 
+### 8.4 与原设计的差异（截至 Phase 1）
+
+1. `HudRenderer` 已移除：HUD 状态文字在最终实现中被简化掉，不再单独渲染。
+2. Logo 渲染从 SVG Sprite 改为 PixiJS Graphics 程序化绘制，支持多层图元独立动画。
+3. Logo idle 动画从“简单呼吸”升级为“多层独立动画”（外框反向旋转 + 裂隙脉动 + 奇点闪烁）。
+4. `FilterManager` 从 `PixiSplashCanvas.tsx` 提取为独立文件，职责更清晰。
+5. Phase 2 交互暂时简化为“idle 点击后完成”，尚未实现长按充能与启动序列。
+
 ---
 
 ## 9. 技术风险与备选方案
 
-| 风险              | 说明                                          | 备选方案                            |
-| ----------------- | --------------------------------------------- | ----------------------------------- |
-| TV 噪声性能       | 片段着色器逐像素计算噪声                      | 使用预生成噪声纹理 + UV 动画滚动    |
-| Filter 叠加顺序   | SignalNoiseFilter 与 FilterManager 的滤镜共存 | 分层容器，不同容器独立滤镜          |
-| Logo SVG 渲染质量 | PixiJS Sprite 加载 SVG 可能模糊               | 改用高分辨率 PNG 或 DOM 层渲染 Logo |
-| 径向清除边界锯齿  | smoothstep 过渡可能不够平滑                   | 增大过渡区域宽度 + 噪声化边界       |
+| 风险              | 说明                                          | 备选方案                             |
+| ----------------- | --------------------------------------------- | ------------------------------------ |
+| TV 噪声性能       | 片段着色器逐像素计算噪声                      | 使用预生成噪声纹理 + UV 动画滚动     |
+| Filter 叠加顺序   | SignalNoiseFilter 与 FilterManager 的滤镜共存 | 分层容器，不同容器独立滤镜           |
+| Logo 分层动画调参 | 多层 Graphics 在不同分辨率下可能出现节奏失衡  | 固定基准尺寸 + 分层 alpha/scale 约束 |
+| 径向清除边界锯齿  | smoothstep 过渡可能不够平滑                   | 增大过渡区域宽度 + 噪声化边界        |
 
 ---
 
 ## 10. 实现步骤（Todo）
 
-1. 创建 `SignalNoiseFilter`（自定义片段着色器）
-2. 实现 `LogoRenderer`（Logo SVG 加载 + 闪烁控制）
-3. 实现 `SignalLockRenderer`（Phase 1 动画编排）
-4. 实现 `HudRenderer`（HUD 状态文字）
-5. 实现 `PulseRenderer`（确认脉冲光环）
-6. 重写 `SplashCanvas.tsx`（新的画布管理）
-7. 重写 `SplashScreen/index.tsx`（新状态机）
-8. 更新 `config/splash.ts`（新配置参数）
-9. 实现 Phase 2 能量启动效果
-10. 集成测试 + 动画调参
+1. ✅ 创建 `SignalNoiseFilter`（自定义片段着色器）
+2. ✅ 实现 `LogoRenderer`（PixiJS Graphics 程序化绘制 + 多层动画）
+3. ✅ 实现 `SignalLockRenderer`（Phase 1 动画编排）
+4. ❌ ~~实现 `HudRenderer`~~（已移除，用户反馈认为多余）
+5. ✅ 实现 `PulseRenderer`（确认脉冲光环）
+6. ✅ 重写 `SplashCanvas.tsx`（新的画布管理）
+7. ✅ 重写 `SplashScreen/index.tsx`（新状态机）
+8. ✅ 更新 `config/splash.ts`（新配置参数）
+9. ⏳ 实现 Phase 2 能量启动效果（未开始）
+10. ✅ 集成测试 + 动画调参
 
 ---
 
@@ -465,4 +489,4 @@ phase: sequence → phase: complete → onComplete()
 
 以下文档与 GPU 粒子系统方案相关，已不再适用：
 
-- ~~`pixi-mesh-shader-technical-guide.md`~~ - PixiJS Mesh + 自定义 Shader 的 GPU 粒子技术指南（已废弃）
+- ~~`pixi-mesh-shader-technical-guide.md`~~ - PixiJS Mesh + 自定义 Shader 的 GPU 粒子技术指南（已废弃，且文件已从仓库删除）

@@ -28,4 +28,5 @@ export type PointData = { x: number; y: number };
 export { CRTFilter, GlitchFilter, RGBSplitFilter } from "pixi-filters";
 
 // 自定义滤镜
+export { SignalNoiseFilter } from "../../components/SplashScreen/filters/SignalNoiseFilter";
 export { AngryNoiseFilter } from "./AngryNoiseFilter";
