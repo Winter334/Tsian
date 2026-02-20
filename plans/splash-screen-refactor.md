@@ -277,17 +277,17 @@ void main() {
 
 ### 5.2 实现对照
 
-| Angel 原版元素  | 新版实现         | 技术方案               |
-| --------------- | ---------------- | ---------------------- |
-| 星空背景 Canvas | 简单星空粒子     | PixiJS Graphics 小圆点 |
-| tech-ring 旋转  | 能量环 CSS 动画  | Framer Motion / CSS    |
-| 闪电效果        | Canvas 2D 折线   | PixiJS Graphics        |
-| 吸入效果        | 粒子向中心运动   | PixiJS ticker 动画     |
-| 闪白爆炸        | 全屏白色 overlay | DOM + CSS transition   |
-| 冲击波          | Canvas 圆环扩散  | PixiJS Graphics        |
-| 碎片粒子        | 爆炸碎片         | PixiJS Graphics        |
-| Logo 样式层     | 简化为发光效果   | CSS glow + filter      |
-| 3D 按钮效果     | 不需要           | -                      |
+| Angel 原版元素  | 新版实现                       | 技术方案                               |
+| --------------- | ------------------------------ | -------------------------------------- |
+| 星空背景 Canvas | 简单星空粒子                   | PixiJS Graphics 小圆点                 |
+| tech-ring 旋转  | 能量环 CSS 动画                | Framer Motion / CSS                    |
+| 闪电效果        | Canvas 2D 折线                 | PixiJS Graphics                        |
+| 吸入效果        | 粒子向中心运动                 | PixiJS ticker 动画                     |
+| 闪白爆炸        | 全屏白色 overlay               | DOM + CSS transition                   |
+| 冲击波          | Canvas 圆环扩散                | PixiJS Graphics                        |
+| 碎片粒子        | 爆炸碎片                       | PixiJS Graphics                        |
+| Logo 样式层     | 保留现有精细多层设计（不简化） | 继续使用 `LogoRenderer` 程序化分层绘制 |
+| 3D 按钮效果     | 不需要                         | -                                      |
 
 ### 5.3 交互状态机
 

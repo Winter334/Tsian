@@ -328,3 +328,59 @@ export const PERFORMANCE_CONFIG = {
   /** 移动端简化效果 */
   mobileSimplified: true,
 } as const;
+
+/** Phase 2 - 能量启动配置 */
+export const CHARGE_SEQUENCE_CONFIG = {
+  /** 长按充能 */
+  charge: {
+    holdThreshold: 800, // ms，需要按住的最短时间
+    progressEasing: "easeInQuad", // 充能进度曲线（描述性，实际用代码实现）
+  },
+
+  /** 粒子系统 */
+  particles: {
+    count: 60, // 粒子数量
+    burstSpeed: { min: 2, max: 6 }, // 爆发初速度
+    driftSpeed: { min: 0.2, max: 0.8 }, // 飘动速度
+    accelerateMultiplier: 3, // charging 时速度倍增
+    implodeDuration: 800, // 吸入持续时间 (ms)
+    explodeSpeed: { min: 8, max: 15 }, // 爆炸速度
+    size: { min: 1, max: 3 }, // 粒子尺寸范围
+    color: [0, 0.9, 0.8], // 主题青色 RGB (0-1)
+    trailLength: 3, // 拖尾长度（帧数）
+  },
+
+  /** 闪电效果 */
+  lightning: {
+    minInterval: 200, // 最小间隔 (ms)
+    maxInterval: 600, // 最大间隔 (ms)
+    segments: { min: 5, max: 10 }, // 折线段数
+    spread: 30, // 折线偏移幅度 (px)
+    duration: 150, // 单次闪电可见时间 (ms)
+    color: [0.6, 0.9, 1.0], // 浅青白色
+    width: 2, // 线宽
+  },
+
+  /** 启动序列时间线 */
+  sequence: {
+    brakeDuration: 240, // 急刹车持续时间
+    implodeDuration: 800, // 粒子吸入时间
+    logoShrinkDelay: 200, // Logo 内缩延迟（相对吸入结束）
+    logoShrinkDuration: 200, // Logo 内缩时间
+    flashDelay: 0, // 闪白延迟（相对 Logo 内缩结束）
+    flashDuration: 300, // 闪白持续时间
+    shockwaveDuration: 400, // 冲击波持续时间
+    fadeoutDuration: 500, // 最终淡出时间
+    totalDuration: 1900, // 总时长参考值
+  },
+
+  /** 爆炸效果 */
+  explosion: {
+    shockwaveMaxRadius: 600, // 冲击波最大半径 (px)
+    shockwaveWidth: 4, // 冲击波环宽度
+    shockwaveColor: [0, 0.9, 0.8], // 主题青色
+    debrisCount: 30, // 碎片数量
+    debrisSpeed: { min: 5, max: 12 }, // 碎片速度
+    debrisSize: { min: 2, max: 5 }, // 碎片尺寸
+  },
+} as const;

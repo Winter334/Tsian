@@ -7,6 +7,7 @@ import type {
   SplashRenderer,
 } from "../types";
 import { LogoRenderer } from "./LogoRenderer";
+import { ParticleRenderer } from "./ParticleRenderer";
 import { PulseRenderer } from "./PulseRenderer";
 
 const TIMELINE = {
@@ -66,6 +67,7 @@ export class SignalLockRenderer implements SplashRenderer {
   // 外部依赖（init 时注入）
   private _filterManager: FilterManagerInterface | null = null;
   private _ctx: SplashCanvasContext | null = null;
+  private _particle: ParticleRenderer | null = null;
 
   // 状态
   private _subPhase: SignalLockSubPhase = "search";
@@ -109,6 +111,16 @@ export class SignalLockRenderer implements SplashRenderer {
   setFilterManager(fm: FilterManagerInterface): void {
     this._filterManager = fm;
     this._filterManager.setCRTEnabled(true);
+  }
+
+  /** 注入共享粒子渲染器 */
+  setParticleRenderer(particle: ParticleRenderer): void {
+    this._particle = particle;
+  }
+
+  /** 暴露 LogoRenderer，供 Phase 2 导演器复用 */
+  getLogoRenderer(): LogoRenderer {
+    return this._logo;
   }
 
   init(ctx: SplashCanvasContext): void {
@@ -208,6 +220,7 @@ export class SignalLockRenderer implements SplashRenderer {
 
     this._ctx = null;
     this._filterManager = null;
+    this._particle = null;
     this._onComplete = null;
   }
 
@@ -420,6 +433,14 @@ export class SignalLockRenderer implements SplashRenderer {
         CONFIRM_PULSE_OVERSCAN_MULTIPLIER;
 
       this._pulse.triggerPulse(centerX, centerY, maxRadius);
+
+      if (this._particle) {
+        const logoCenter = this._logo.getCenter();
+        this._particle.setCenter(logoCenter.x, logoCenter.y);
+        // 不再从中心迸发，保持星空自然漂移
+        this._particle.setMode("drift");
+      }
+
       this._pulseTriggered = true;
     }
 

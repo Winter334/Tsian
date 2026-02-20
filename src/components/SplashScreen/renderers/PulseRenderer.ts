@@ -27,6 +27,8 @@ interface ActivePulse {
   normalizedCenterY: number;
   elapsedMs: number;
   maxRadius: number;
+  onComplete: (() => void) | null;
+  completionNotified: boolean;
 }
 
 export class PulseRenderer implements SplashRenderer {
@@ -62,7 +64,13 @@ export class PulseRenderer implements SplashRenderer {
       pulse.graphics.lineStyle(lineWidth, PULSE_COLOR, alpha);
       pulse.graphics.drawCircle(pulse.centerX, pulse.centerY, radius);
 
-      if (progress >= 1) {
+      const isCompleted = pulse.elapsedMs >= PULSE_DURATION_MS || progress >= 1;
+      if (isCompleted) {
+        if (!pulse.completionNotified) {
+          pulse.completionNotified = true;
+          pulse.onComplete?.();
+        }
+
         pulse.graphics.removeFromParent();
         pulse.graphics.destroy();
         this.pulses.splice(index, 1);
@@ -94,6 +102,7 @@ export class PulseRenderer implements SplashRenderer {
     centerX: number,
     centerY: number,
     maxRadius: number = this.getTargetRadius(),
+    onComplete?: () => void,
   ): void {
     if (!this.ctx) return;
 
@@ -115,6 +124,8 @@ export class PulseRenderer implements SplashRenderer {
       normalizedCenterY,
       elapsedMs: 0,
       maxRadius: resolvedMaxRadius,
+      onComplete: onComplete ?? null,
+      completionNotified: false,
     };
 
     this.pulses.push(pulse);

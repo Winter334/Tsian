@@ -10,6 +10,7 @@ export type SplashPhase =
   | "idle" // Logo 已揭示，等待用户交互
   | "charging" // 用户按住 Logo，能量聚集（Phase 2 用）
   | "sequence" // 启动序列（Phase 2 用）
+  | "credits" // 署名展示阶段（爆炸后，标题前）
   | "complete"; // 动画完成，进入标题画面
 
 /** 信号锁定子阶段 */
@@ -70,4 +71,34 @@ export interface FilterManagerInterface {
   setCRTEnabled(enabled: boolean): void;
   /** 销毁滤镜 */
   destroy(): void;
+}
+
+/** Phase 2 - 能量启动子阶段 */
+export type ChargeSubPhase =
+  | "holding" // 用户按住，能量聚集
+  | "primed" // 充能完成，可释放
+  | "brake" // 序列开始时急刹车
+  | "implode" // 松手后粒子吸入中心
+  | "flash" // 闪白爆炸
+  | "shockwave" // 冲击波扩散 + 碎片
+  | "fadeout"; // 淡出所有效果
+
+/** Phase 2 - 粒子模式 */
+export type ParticleMode =
+  | "burst" // 从中心爆发飘散（Phase 1 脉冲结束后触发）
+  | "drift" // 自由飘动（idle 状态）
+  | "accelerate" // 加速运动（charging 状态）
+  | "brake" // 急刹车减速（sequence 开始）
+  | "implode" // 向中心吸入（sequence 阶段）
+  | "explode"; // 从中心向外爆炸（flash/shockwave 阶段)
+
+/** Phase 2 - 启动序列回调 */
+export interface ChargeSequenceCallbacks {
+  onSequenceComplete: () => void;
+  /** flash 子阶段开始（Logo 内缩后） */
+  onFlashStart?: () => void;
+  /** flash 峰值（爆炸触发点） */
+  onFlashPeak?: () => void;
+  /** 0-1 充能进度 */
+  onChargeProgress?: (progress: number) => void;
 }

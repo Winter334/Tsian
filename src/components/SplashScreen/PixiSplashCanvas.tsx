@@ -3,6 +3,9 @@ import { Application, Container, Graphics } from "@/lib/pixi";
 import { useEffect, useRef } from "react";
 
 import { FilterManager } from "@/components/SplashScreen/FilterManager";
+import { ChargeSequenceRenderer } from "@/components/SplashScreen/renderers/ChargeSequenceRenderer";
+import { EnergyRingRenderer } from "@/components/SplashScreen/renderers/EnergyRingRenderer";
+import { ParticleRenderer } from "@/components/SplashScreen/renderers/ParticleRenderer";
 import { SignalLockRenderer } from "@/components/SplashScreen/renderers/SignalLockRenderer";
 import type {
   SplashCanvasContext,
@@ -12,6 +15,9 @@ import type {
 interface SplashCanvasProps {
   phase: SplashPhase;
   onIntroComplete?: () => void;
+  onSequenceComplete?: () => void;
+  onFlashStart?: () => void;
+  onFlashPeak?: () => void;
   onReady?: () => void;
 }
 
@@ -27,6 +33,9 @@ function getContainerSize(container: HTMLDivElement): {
 export function SplashCanvas({
   phase,
   onIntroComplete,
+  onSequenceComplete,
+  onFlashStart,
+  onFlashPeak,
   onReady,
 }: SplashCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -35,6 +44,9 @@ export function SplashCanvas({
   const contextRef = useRef<SplashCanvasContext | null>(null);
   const filterManagerRef = useRef<FilterManager | null>(null);
   const signalLockRendererRef = useRef<SignalLockRenderer | null>(null);
+  const chargeRendererRef = useRef<ChargeSequenceRenderer | null>(null);
+  const energyRingRendererRef = useRef<EnergyRingRenderer | null>(null);
+  const particleRendererRef = useRef<ParticleRenderer | null>(null);
   const backgroundRef = useRef<Graphics | null>(null);
   const noiseSurfaceRef = useRef<Graphics | null>(null);
   const animationRef = useRef<number>(0);
@@ -45,12 +57,18 @@ export function SplashCanvas({
   const lastFrameTimeRef = useRef(0);
 
   const onIntroCompleteRef = useRef(onIntroComplete);
+  const onSequenceCompleteRef = useRef(onSequenceComplete);
+  const onFlashStartRef = useRef(onFlashStart);
+  const onFlashPeakRef = useRef(onFlashPeak);
   const onReadyRef = useRef(onReady);
 
   useEffect(() => {
     onIntroCompleteRef.current = onIntroComplete;
+    onSequenceCompleteRef.current = onSequenceComplete;
+    onFlashStartRef.current = onFlashStart;
+    onFlashPeakRef.current = onFlashPeak;
     onReadyRef.current = onReady;
-  }, [onIntroComplete, onReady]);
+  }, [onFlashPeak, onFlashStart, onIntroComplete, onReady, onSequenceComplete]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -121,28 +139,110 @@ export function SplashCanvas({
     });
     signalLockRendererRef.current = signalLockRenderer;
 
+    const particleRenderer = new ParticleRenderer();
+    particleRenderer.init(context);
+    particleRendererRef.current = particleRenderer;
+    signalLockRenderer.setParticleRenderer(particleRenderer);
+
+    const energyRingRenderer = new EnergyRingRenderer(
+      contentLayer,
+      width * 0.5,
+      height * 0.5,
+      width,
+      height,
+    );
+    energyRingRendererRef.current = energyRingRenderer;
+
+    const chargeRenderer = new ChargeSequenceRenderer();
+    chargeRenderer.setLogoRenderer(signalLockRenderer.getLogoRenderer());
+    chargeRenderer.setFilterManager(filterManager);
+    chargeRenderer.setParticleRenderer(particleRenderer);
+    chargeRenderer.setEnergyRingRenderer(energyRingRenderer);
+    chargeRenderer.setCallbacks({
+      onSequenceComplete: () => {
+        onSequenceCompleteRef.current?.();
+      },
+      onFlashStart: () => {
+        onFlashStartRef.current?.();
+      },
+      onFlashPeak: () => {
+        onFlashPeakRef.current?.();
+      },
+    });
+    chargeRenderer.init(context);
+    chargeRendererRef.current = chargeRenderer;
+
     const now = performance.now();
     introStartTimeRef.current = now;
     lastFrameTimeRef.current = now;
 
     const animate = () => {
-      const renderer = signalLockRendererRef.current;
+      const signalRenderer = signalLockRendererRef.current;
+      const chargeRenderer = chargeRendererRef.current;
+      const energyRingRenderer = energyRingRendererRef.current;
+      const particleRenderer = particleRendererRef.current;
       const fm = filterManagerRef.current;
       const activeApp = appRef.current;
 
-      if (!renderer || !fm || !activeApp) return;
+      if (
+        !signalRenderer ||
+        !chargeRenderer ||
+        !energyRingRenderer ||
+        !particleRenderer ||
+        !fm ||
+        !activeApp
+      ) {
+        return;
+      }
 
       const frameNow = performance.now();
       const delta = frameNow - lastFrameTimeRef.current;
       lastFrameTimeRef.current = frameNow;
 
+      const currentPhase = phaseRef.current;
       const shouldUpdateRenderer =
-        (phaseRef.current === "intro" && isIntroActiveRef.current) ||
-        phaseRef.current === "idle";
+        (currentPhase === "intro" && isIntroActiveRef.current) ||
+        currentPhase === "idle" ||
+        currentPhase === "charging" ||
+        currentPhase === "sequence";
+      const shouldUpdateParticles =
+        currentPhase === "idle" ||
+        currentPhase === "charging" ||
+        currentPhase === "sequence" ||
+        (currentPhase === "intro" && particleRenderer.isActive());
 
-      if (shouldUpdateRenderer) {
+      if (shouldUpdateRenderer || shouldUpdateParticles) {
         const elapsed = frameNow - introStartTimeRef.current;
-        renderer.update(elapsed, delta);
+
+        if (shouldUpdateRenderer) {
+          signalRenderer.update(elapsed, delta);
+
+          if (currentPhase === "charging" || currentPhase === "sequence") {
+            chargeRenderer.update(elapsed, delta);
+
+            if (currentPhase === "charging" && chargeRenderer.isPrimed()) {
+              // 预留：可在此通知上层显示“可释放”提示。
+            }
+          }
+
+          energyRingRenderer.update(delta, elapsed);
+        }
+
+        if (shouldUpdateParticles) {
+          particleRenderer.update(elapsed, delta);
+        }
+      }
+
+      const shakeIntensity = chargeRenderer.getStageShakeIntensity();
+      if (shakeIntensity > 0) {
+        const maxShake = 3;
+        const shake = shakeIntensity * maxShake;
+        activeApp.stage.position.set(
+          (Math.random() * 2 - 1) * shake,
+          (Math.random() * 2 - 1) * shake,
+        );
+      } else {
+        activeApp.stage.position.set(0, 0);
       }
 
       fm.updateCRT(delta);
@@ -161,6 +261,9 @@ export function SplashCanvas({
       const currentBackground = backgroundRef.current;
       const currentNoiseSurface = noiseSurfaceRef.current;
       const currentRenderer = signalLockRendererRef.current;
+      const currentChargeRenderer = chargeRendererRef.current;
+      const currentEnergyRingRenderer = energyRingRendererRef.current;
+      const currentParticleRenderer = particleRendererRef.current;
 
       if (
         !currentContainer ||
@@ -168,7 +271,10 @@ export function SplashCanvas({
         !currentContext ||
         !currentBackground ||
         !currentNoiseSurface ||
-        !currentRenderer
+        !currentRenderer ||
+        !currentChargeRenderer ||
+        !currentEnergyRingRenderer ||
+        !currentParticleRenderer
       ) {
         return;
       }
@@ -193,7 +299,18 @@ export function SplashCanvas({
       currentNoiseSurface.drawRect(0, 0, nextSize.width, nextSize.height);
       currentNoiseSurface.endFill();
 
+      const centerX = nextSize.width * 0.5;
+      const centerY = nextSize.height * 0.5;
+
       currentRenderer.resize(nextSize.width, nextSize.height);
+      currentChargeRenderer.resize(nextSize.width, nextSize.height);
+      currentEnergyRingRenderer.resize(
+        centerX,
+        centerY,
+        nextSize.width,
+        nextSize.height,
+      );
+      currentParticleRenderer.resize(nextSize.width, nextSize.height);
     };
 
     window.addEventListener("resize", handleResize);
@@ -206,10 +323,20 @@ export function SplashCanvas({
         animationRef.current = 0;
       }
 
+      if (appRef.current) {
+        appRef.current.stage.position.set(0, 0);
+      }
+
       signalLockRendererRef.current?.destroy();
+      chargeRendererRef.current?.destroy();
+      energyRingRendererRef.current?.destroy();
+      particleRendererRef.current?.destroy();
       filterManagerRef.current?.destroy();
 
       signalLockRendererRef.current = null;
+      chargeRendererRef.current = null;
+      energyRingRendererRef.current = null;
+      particleRendererRef.current = null;
       filterManagerRef.current = null;
       contextRef.current = null;
       backgroundRef.current = null;
@@ -224,24 +351,81 @@ export function SplashCanvas({
   }, []);
 
   useEffect(() => {
+    const previousPhase = phaseRef.current;
     phaseRef.current = phase;
 
-    const renderer = signalLockRendererRef.current;
+    const signalRenderer = signalLockRendererRef.current;
+    const chargeRenderer = chargeRendererRef.current;
+    const energyRingRenderer = energyRingRendererRef.current;
+    const particleRenderer = particleRendererRef.current;
     const context = contextRef.current;
 
-    if (!renderer || !context) return;
-
-    if (phase === "intro") {
-      renderer.init(context);
-      const now = performance.now();
-      introStartTimeRef.current = now;
-      lastFrameTimeRef.current = now;
-      isIntroActiveRef.current = true;
+    if (
+      !signalRenderer ||
+      !chargeRenderer ||
+      !energyRingRenderer ||
+      !particleRenderer ||
+      !context
+    ) {
       return;
     }
 
-    if (phase === "idle") {
-      isIntroActiveRef.current = false;
+    switch (phase) {
+      case "intro": {
+        signalRenderer.init(context);
+        chargeRenderer.cancelCharging();
+        particleRenderer.deactivateAll();
+
+        const now = performance.now();
+        introStartTimeRef.current = now;
+        lastFrameTimeRef.current = now;
+        isIntroActiveRef.current = true;
+        return;
+      }
+      case "idle":
+        isIntroActiveRef.current = false;
+
+        if (previousPhase === "charging" || previousPhase === "sequence") {
+          chargeRenderer.cancelCharging();
+          particleRenderer.setMode("drift");
+          return;
+        }
+
+        if (previousPhase !== "intro" && !particleRenderer.isActive()) {
+          particleRenderer.setMode("drift");
+        }
+        return;
+      case "charging":
+        isIntroActiveRef.current = false;
+        chargeRenderer.enterCharging();
+        return;
+      case "sequence":
+        isIntroActiveRef.current = false;
+        chargeRenderer.enterSequence();
+        return;
+      case "credits":
+      case "complete":
+        isIntroActiveRef.current = false;
+
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+          animationRef.current = 0;
+        }
+
+        if (appRef.current) {
+          appRef.current.stage.position.set(0, 0);
+        }
+
+        signalRenderer.destroy();
+        chargeRenderer.destroy();
+        energyRingRenderer.destroy();
+        particleRenderer.destroy();
+
+        signalLockRendererRef.current = null;
+        chargeRendererRef.current = null;
+        energyRingRendererRef.current = null;
+        particleRendererRef.current = null;
+        return;
     }
   }, [phase]);
 
