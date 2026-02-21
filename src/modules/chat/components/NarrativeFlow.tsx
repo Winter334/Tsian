@@ -4,6 +4,7 @@
  */
 
 import type { Message } from "@/domain/entities/message";
+import { usePresetStore } from "@/lib/prompt/store";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useRef } from "react";
 import {
@@ -34,6 +35,7 @@ export function NarrativeFlow({
   className,
 }: NarrativeFlowProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const presetRules = usePresetStore((s) => s.activePreset?.postProcessRules);
 
   // 自动滚动到底部
   useEffect(() => {
@@ -46,9 +48,9 @@ export function NarrativeFlow({
   const parsedMessages = useMemo<ParsedMessage[]>(() => {
     return messages.map((message) => ({
       ...message,
-      parsed: parseGameContent(message.content),
+      parsed: parseGameContent(message.content, presetRules),
     }));
-  }, [messages]);
+  }, [messages, presetRules]);
 
   // 解析最后一条消息的选项
   const lastAssistantMessage = useMemo(() => {

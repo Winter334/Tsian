@@ -34,7 +34,7 @@ import * as Y from "yjs";
  */
 const createSaveHandler: CommandHandler<CreateSavePayload, string> = async (
   command: Command<CreateSavePayload>,
-  context: CommandContext
+  context: CommandContext,
 ): Promise<CommandResult<string>> => {
   const { name, initialCharacter } = command.payload;
 
@@ -61,6 +61,8 @@ const createSaveHandler: CommandHandler<CreateSavePayload, string> = async (
           description: initialCharacter.description,
           personality: initialCharacter.personality,
           appearance: initialCharacter.appearance,
+          age: initialCharacter.age,
+          gender: initialCharacter.gender,
           creatorUniqueTag: uniqueTag,
           operatorUserId: userId,
           operatorUniqueTag: uniqueTag,
@@ -88,7 +90,7 @@ const createSaveHandler: CommandHandler<CreateSavePayload, string> = async (
     // 5. 发布 SAVE_CREATED 事件（Chat 模块监听此事件进行初始化）
     eventBus.emit(
       eventBus.createEvent(SaveEvents.SAVE_CREATED, { saveId, name }),
-      { correlationId: context.commandId }
+      { correlationId: context.commandId },
     );
 
     // 6. 发布 SAVE_LOADED 事件（Room 模块监听此事件重置房间状态）
@@ -99,7 +101,7 @@ const createSaveHandler: CommandHandler<CreateSavePayload, string> = async (
         previousSaveId,
         saveType: "solo",
       }),
-      { correlationId: context.commandId }
+      { correlationId: context.commandId },
     );
 
     return { success: true, data: saveId };
@@ -119,7 +121,7 @@ const createSaveHandler: CommandHandler<CreateSavePayload, string> = async (
  */
 const loadSaveHandler: CommandHandler<LoadSavePayload, void> = async (
   command: Command<LoadSavePayload>,
-  context: CommandContext
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
   const { saveId } = command.payload;
 
@@ -140,7 +142,7 @@ const loadSaveHandler: CommandHandler<LoadSavePayload, void> = async (
         previousSaveId,
         saveType,
       }),
-      { correlationId: context.commandId }
+      { correlationId: context.commandId },
     );
 
     return { success: true };
@@ -160,7 +162,7 @@ const loadSaveHandler: CommandHandler<LoadSavePayload, void> = async (
  */
 const deleteSaveHandler: CommandHandler<DeleteSavePayload, void> = async (
   command: Command<DeleteSavePayload>,
-  context: CommandContext
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
   const { saveId } = command.payload;
 
@@ -182,7 +184,7 @@ const deleteSaveHandler: CommandHandler<DeleteSavePayload, void> = async (
         saveName,
         isCurrentSave,
       }),
-      { correlationId: context.commandId }
+      { correlationId: context.commandId },
     );
 
     return { success: true };
@@ -199,7 +201,7 @@ const deleteSaveHandler: CommandHandler<DeleteSavePayload, void> = async (
  */
 const renameSaveHandler: CommandHandler<RenameSavePayload, void> = async (
   command: Command<RenameSavePayload>,
-  context: CommandContext
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
   const { saveId, name } = command.payload;
 
@@ -219,7 +221,7 @@ const renameSaveHandler: CommandHandler<RenameSavePayload, void> = async (
         oldName,
         newName: name,
       }),
-      { correlationId: context.commandId }
+      { correlationId: context.commandId },
     );
 
     return { success: true };

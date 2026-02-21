@@ -26,7 +26,7 @@ import type {
 } from "@/domain/types";
 import { createAiExecutor, type AiExecutor } from "@/lib/ai/executor";
 import type { AIConfig } from "@/lib/ai/types";
-import { processNarrativeOutput } from "@/lib/memory/post-processor";
+import { postProcessForPersist } from "@/lib/post-process";
 import type { Preset, VariableContext } from "@/lib/prompt/types";
 import {
   executeTurnStartTriggers,
@@ -503,10 +503,15 @@ async function executePipeline(input: {
 
     // ── Phase 4.5: Narrative 后处理（提取小总结） ──────────
     try {
-      const postProcessed = processNarrativeOutput(narrativeText);
-      narrativeText = postProcessed.narrative;
+      const postProcessResult = postProcessForPersist(
+        narrativeText,
+        input.narrativePreset.postProcessRules,
+      );
+      narrativeText = postProcessResult.text;
 
-      if (postProcessed.miniSummary) {
+      const miniSummaryParts = postProcessResult.extracted["miniSummary"];
+      if (miniSummaryParts && miniSummaryParts.length > 0) {
+        const miniSummary = miniSummaryParts.join("\n");
         const { conversationId, messageId, messageIndex } = input;
 
         if (
@@ -521,7 +526,7 @@ async function executePipeline(input: {
               conversationId,
               messageId,
               messageIndex,
-              content: postProcessed.miniSummary,
+              content: miniSummary,
             },
           });
 
@@ -537,6 +542,10 @@ async function executePipeline(input: {
             "[IRNR Pipeline] 检测到 memory_summary，但缺少会话上下文，跳过写入。",
           );
         }
+      }
+
+      if (postProcessResult.warnings.length > 0) {
+        console.warn("[IRNR Pipeline] 后处理警告:", postProcessResult.warnings);
       }
     } catch (error) {
       console.warn(

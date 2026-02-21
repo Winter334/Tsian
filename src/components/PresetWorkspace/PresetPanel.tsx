@@ -8,11 +8,16 @@
  * - 添加块按钮
  */
 
-import { motion } from "framer-motion";
-import { Plus } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ChevronDown, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ScrollArea, Select } from "@/components/ui";
+import {
+  BUILTIN_RULES,
+  mergeRules,
+  type PostProcessRule,
+} from "@/lib/post-process";
 import type { PresetPurpose, PromptBlock } from "@/lib/prompt";
 import { cn } from "@/lib/utils";
 import { useSettingsStore } from "@/stores/settings";
@@ -21,6 +26,7 @@ import { animation, borders, color, colorAlpha } from "@/styles/tokens";
 import { BlockList } from "./BlockList";
 import { useWorkspace } from "./context";
 import type { PanelState } from "./hooks/useWorkspaceState";
+import { PostProcessPanel } from "./PostProcessPanel";
 import { PresetPanelHeader } from "./PresetPanelHeader";
 
 // ===== 类型 =====
@@ -63,6 +69,7 @@ export function PresetPanel({
   const [editedDescription, setEditedDescription] = useState(
     panel.preset.description || "",
   );
+  const [isPostProcessExpanded, setIsPostProcessExpanded] = useState(false);
 
   // 处理描述编辑
   const handleStartEditDescription = useCallback(() => {
@@ -78,6 +85,7 @@ export function PresetPanel({
   }, [editedDescription, panel.id, panel.preset.description, workspace]);
 
   const purpose: PresetPurpose = panel.preset.purpose ?? "narrative";
+  const showPostProcess = purpose === "narrative";
 
   const handlePurposeChange = useCallback(
     (value: string) => {
@@ -120,6 +128,22 @@ export function PresetPanel({
       workspace.updatePanelPreset(panel.id, {
         aiProfileId: value || undefined,
       });
+    },
+    [workspace, panel.id],
+  );
+
+  const postProcessRules = useMemo(
+    () => panel.preset.postProcessRules ?? [],
+    [panel.preset.postProcessRules],
+  );
+  const mergedPostProcessRules = useMemo(
+    () => mergeRules(BUILTIN_RULES, postProcessRules),
+    [postProcessRules],
+  );
+
+  const handlePostProcessRulesChange = useCallback(
+    (rules: PostProcessRule[]) => {
+      workspace.updatePanelPreset(panel.id, { postProcessRules: rules });
     },
     [workspace, panel.id],
   );
@@ -255,16 +279,89 @@ export function PresetPanel({
         )}
       </div>
 
-      {/* 提示词块列表 */}
+      {/* 提示词块列表 + 后处理规则 */}
       <ScrollArea className="flex-1 p-2">
-        <BlockList
-          panelId={panel.id}
-          blocks={orderedBlocks}
-          isDraggingOver={isCurrentPanelDropTarget}
-          activeDragBlockId={activeDragBlockId}
-          dragSourcePanelId={dragSourcePanelId}
-          dropIndicatorIndex={currentPanelDropIndicatorIndex}
-        />
+        <div className="flex flex-col gap-2">
+          <BlockList
+            panelId={panel.id}
+            blocks={orderedBlocks}
+            isDraggingOver={isCurrentPanelDropTarget}
+            activeDragBlockId={activeDragBlockId}
+            dragSourcePanelId={dragSourcePanelId}
+            dropIndicatorIndex={currentPanelDropIndicatorIndex}
+          />
+
+          {showPostProcess && (
+            <div
+              className="rounded-md border"
+              style={{
+                borderColor: colorAlpha("primary", 0.2),
+                background: colorAlpha("bgElevated", 0.2),
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setIsPostProcessExpanded((prev) => !prev)}
+                aria-expanded={isPostProcessExpanded}
+                className={cn(
+                  "w-full",
+                  "flex items-center justify-between gap-2",
+                  "px-3 py-2",
+                  "text-left",
+                )}
+              >
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    className="text-sm"
+                    style={{ color: color("textSecondary") }}
+                  >
+                    后处理规则
+                  </span>
+                  <span
+                    className="text-xs"
+                    style={{ color: color("textMuted") }}
+                  >
+                    {mergedPostProcessRules.length} 条
+                  </span>
+                </span>
+
+                <ChevronDown
+                  size={16}
+                  className={cn(
+                    "transition-transform",
+                    isPostProcessExpanded && "rotate-180",
+                  )}
+                  style={{
+                    color: color("textMuted"),
+                    transitionDuration: `${animation.duration.fast * 1000}ms`,
+                  }}
+                />
+              </button>
+
+              <AnimatePresence initial={false}>
+                {isPostProcessExpanded && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: animation.duration.normal }}
+                    className="overflow-hidden"
+                  >
+                    <div
+                      className="border-t p-2"
+                      style={{ borderColor: colorAlpha("primary", 0.15) }}
+                    >
+                      <PostProcessPanel
+                        rules={postProcessRules}
+                        onChange={handlePostProcessRulesChange}
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
       </ScrollArea>
 
       {/* 添加块按钮 */}

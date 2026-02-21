@@ -10,11 +10,13 @@
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BookOpen,
+  Calendar,
   ChevronDown,
   ChevronUp,
   Dices,
   Sparkles,
   User,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -39,6 +41,22 @@ interface DetailAccordionItem {
   placeholder: string;
   value: string;
   onChange: (value: string) => void;
+}
+
+const GENDER_OPTIONS = ["男", "女", "其他"] as const;
+
+function parseOptionalAge(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return undefined;
+  }
+
+  return parsed;
 }
 
 /**
@@ -69,6 +87,12 @@ export function SoloCharNameStep({
   const [characterAppearance, setCharacterAppearance] = useState(
     context.characterAppearance || "",
   );
+  const [characterAgeInput, setCharacterAgeInput] = useState(
+    context.characterAge !== undefined ? String(context.characterAge) : "",
+  );
+  const [characterGender, setCharacterGender] = useState<string | undefined>(
+    context.characterGender,
+  );
   const [error, setError] = useState<string | null>(null);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [expandedDetailField, setExpandedDetailField] =
@@ -81,12 +105,16 @@ export function SoloCharNameStep({
       characterDescription: characterDescription.trim() || undefined,
       characterPersonality: characterPersonality.trim() || undefined,
       characterAppearance: characterAppearance.trim() || undefined,
+      characterAge: parseOptionalAge(characterAgeInput),
+      characterGender: characterGender || undefined,
     });
   }, [
     characterName,
     characterDescription,
     characterPersonality,
     characterAppearance,
+    characterAgeInput,
+    characterGender,
     onUpdateContext,
   ]);
 
@@ -125,12 +153,16 @@ export function SoloCharNameStep({
       characterDescription: characterDescription.trim() || undefined,
       characterPersonality: characterPersonality.trim() || undefined,
       characterAppearance: characterAppearance.trim() || undefined,
+      characterAge: parseOptionalAge(characterAgeInput),
+      characterGender: characterGender || undefined,
     });
   }, [
     characterName,
     characterDescription,
     characterPersonality,
     characterAppearance,
+    characterAgeInput,
+    characterGender,
     onNext,
   ]);
 
@@ -160,7 +192,7 @@ export function SoloCharNameStep({
     {
       key: "appearance",
       icon: User,
-      label: "👤 外貌描述",
+      label: "外貌描述",
       hint: "种族选择可能会提供默认值",
       placeholder: "描述角色的外貌、穿着、装备…",
       value: characterAppearance,
@@ -169,7 +201,7 @@ export function SoloCharNameStep({
     {
       key: "personality",
       icon: Sparkles,
-      label: "✨ 性格特征",
+      label: "性格特征",
       hint: "背景选择可能会提供默认值",
       placeholder: "勇敢、谨慎、幽默、冷静…",
       value: characterPersonality,
@@ -178,7 +210,7 @@ export function SoloCharNameStep({
     {
       key: "story",
       icon: BookOpen,
-      label: "📖 背景故事",
+      label: "背景故事",
       hint: "背景选择可能会提供默认值",
       placeholder: "描述角色的背景故事、经历、身份…",
       value: characterDescription,
@@ -255,6 +287,80 @@ export function SoloCharNameStep({
           </p>
         </motion.div>
 
+        <motion.div
+          className="space-y-2"
+          variants={itemVariants}
+          initial="hidden"
+          animate="visible"
+          custom={1}
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <label
+                className="text-sm font-medium flex items-center gap-2"
+                style={{ color: color("textSecondary") }}
+              >
+                <Users className="w-4 h-4" />
+                性别
+              </label>
+              <div className="flex gap-2">
+                {GENDER_OPTIONS.map((option) => {
+                  const isSelected = characterGender === option;
+
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() =>
+                        setCharacterGender((prev) =>
+                          prev === option ? undefined : option,
+                        )
+                      }
+                      className="flex-1 rounded-md border px-2 py-2 text-sm transition-all cursor-pointer"
+                      style={{
+                        borderColor: isSelected
+                          ? color("primary")
+                          : colorAlpha("primary", 0.2),
+                        background: isSelected
+                          ? colorAlpha("primary", 0.14)
+                          : colorAlpha("bgCard", 0.2),
+                        color: isSelected
+                          ? color("textPrimary")
+                          : color("textMuted"),
+                        boxShadow: isSelected
+                          ? glow("primary", "sm", 0.2)
+                          : "none",
+                      }}
+                      aria-pressed={isSelected}
+                    >
+                      {option}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label
+                className="text-sm font-medium flex items-center gap-2"
+                style={{ color: color("textSecondary") }}
+              >
+                <Calendar className="w-4 h-4" />
+                年龄
+              </label>
+              <Input
+                type="number"
+                min={0}
+                max={999}
+                inputMode="numeric"
+                value={characterAgeInput}
+                onChange={(e) => setCharacterAgeInput(e.target.value)}
+                placeholder="可选"
+              />
+            </div>
+          </div>
+        </motion.div>
+
         {/* 错误提示 */}
         <AnimatePresence>
           {error && (
@@ -275,7 +381,7 @@ export function SoloCharNameStep({
           variants={itemVariants}
           initial="hidden"
           animate="visible"
-          custom={1}
+          custom={2}
         >
           <button
             type="button"

@@ -5,6 +5,7 @@
  */
 
 export {
+  applyCharacterUpdates,
   characterToEntityData,
   characterToYMap,
   entityFieldsToAttributes,

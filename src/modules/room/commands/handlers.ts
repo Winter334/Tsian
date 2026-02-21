@@ -55,9 +55,14 @@ import {
   type TurnCompletedEvent,
 } from "@/domain/events/room";
 import { SaveEvents } from "@/domain/events/save";
-import { processNarrativeOutput } from "@/lib/memory/post-processor";
+import { postProcessForPersist } from "@/lib/post-process";
+import { usePresetStore } from "@/lib/prompt";
 import { getUniqueTag } from "@/lib/user-identity";
-import { characterToYMap, yMapToCharacter } from "@/modules/game/repository";
+import {
+  applyCharacterUpdates,
+  characterToYMap,
+  yMapToCharacter,
+} from "@/modules/game/repository";
 import * as Y from "yjs";
 import { useRoomStore } from "../store";
 import type { HostTransferMeta, MemberActionMeta } from "../sync/types";
@@ -2153,26 +2158,7 @@ export async function completeTurnHandler(
     const characters: Character[] = [];
     charactersMap.forEach((charMap) => {
       try {
-        const character: Character = {
-          id: charMap.get("id") as string,
-          name: charMap.get("name") as string,
-          controlType:
-            (charMap.get("controlType") as Character["controlType"]) ??
-            "player",
-          description: charMap.get("description") as string | undefined,
-          personality: charMap.get("personality") as string | undefined,
-          appearance: charMap.get("appearance") as string | undefined,
-          creatorUniqueTag: charMap.get("creatorUniqueTag") as string,
-          operatorUserId: charMap.get("operatorUserId") as string,
-          operatorUniqueTag: charMap.get("operatorUniqueTag") as string,
-          status: charMap.get("status") as Character["status"],
-          createdAt: charMap.get("createdAt") as number,
-          updatedAt: charMap.get("updatedAt") as number,
-          attributes: charMap.get("attributes") as
-            | Record<string, unknown>
-            | undefined,
-          tags: charMap.get("tags") as Record<string, unknown> | undefined,
-        };
+        const character = yMapToCharacter(charMap);
         characters.push(character);
       } catch (err) {
         console.warn("[completeTurnHandler] Failed to extract character:", err);
@@ -2211,13 +2197,47 @@ export async function completeTurnHandler(
     // 获取会话 ID（使用默认的房间主会话）
     const conversationId = `room:${roomId}:main`;
 
+    // 在写入消息前先执行持久化后处理，避免结构标签泄漏到消息正文
+    let cleanedAiResponse = resolvedAiResponse;
+    let miniSummaryParts: string[] | undefined;
+    try {
+      const activePreset = await usePresetStore
+        .getState()
+        .getPresetForPurpose("narrative");
+      const postProcessResult = postProcessForPersist(
+        resolvedAiResponse,
+        activePreset?.postProcessRules,
+      );
+      cleanedAiResponse = postProcessResult.text;
+      miniSummaryParts = postProcessResult.extracted["miniSummary"];
+
+      if (postProcessResult.warnings.length > 0) {
+        console.warn(
+          "[Room:completeTurn] 后处理警告:",
+          postProcessResult.warnings,
+        );
+      }
+    } catch (postProcessError) {
+      console.warn(
+        "[Room:completeTurn] 后处理失败，回退到原始 AI 响应:",
+        postProcessError instanceof Error
+          ? postProcessError.message
+          : postProcessError,
+      );
+    }
+
+    if (aiResponseText.toString() !== cleanedAiResponse) {
+      aiResponseText.delete(0, aiResponseText.length);
+      aiResponseText.insert(0, cleanedAiResponse);
+    }
+
     // 转换回合数据为消息格式（传入角色信息以显示角色名称）
     const conversionResult = convertTurnToMessages({
       turnNumber,
       actions,
       members,
       characters,
-      aiResponse: resolvedAiResponse,
+      aiResponse: cleanedAiResponse,
       completedAt: now,
       conversationId,
     });
@@ -2246,44 +2266,35 @@ export async function completeTurnHandler(
       messagesArray.push([msg]);
     }
 
-    // ── Memory 后处理：提取小总结 ──
-    try {
-      // aiResponseText 是 Y.Text 类型，需要 toString()
-      const rawAiResponse = aiResponseText.toString();
-      const postProcessed = processNarrativeOutput(rawAiResponse);
+    // ── Memory 后处理：写入提取的小总结 ──
+    if (miniSummaryParts && miniSummaryParts.length > 0) {
+      const miniSummary = miniSummaryParts.join("\n");
 
-      if (postProcessed.miniSummary) {
-        // 方案 C（房主统一分配索引）：从 HistoryDoc 消息数组长度计算
-        const assistantMessageIndex = messagesArray.length - 1;
+      // 方案 C（房主统一分配索引）：从 HistoryDoc 消息数组长度计算
+      const assistantMessageIndex = messagesArray.length - 1;
 
-        // 找到本回合最后一条 assistant 消息 ID
-        let assistantMessageId = `turn-${turnNumber}-assistant`;
-        for (let i = messageEntities.length - 1; i >= 0; i--) {
-          const message = messageEntities[i];
-          if (message.role === "assistant") {
-            assistantMessageId = message.id;
-            break;
-          }
+      // 找到本回合最后一条 assistant 消息 ID
+      let assistantMessageId = `turn-${turnNumber}-assistant`;
+      for (let i = messageEntities.length - 1; i >= 0; i--) {
+        const message = messageEntities[i];
+        if (message.role === "assistant") {
+          assistantMessageId = message.id;
+          break;
         }
-
-        const miniSummaryPayload: AddMiniSummaryPayload = {
-          conversationId,
-          messageId: assistantMessageId,
-          messageIndex: assistantMessageIndex,
-          content: postProcessed.miniSummary,
-          roomId,
-        };
-
-        void commandBus.dispatch({
-          type: MemoryCommands.ADD_MINI_SUMMARY,
-          payload: miniSummaryPayload,
-        });
       }
-    } catch (memoryError) {
-      console.warn(
-        "[Room:completeTurn] Memory post-processing failed, skipping:",
-        memoryError instanceof Error ? memoryError.message : memoryError,
-      );
+
+      const miniSummaryPayload: AddMiniSummaryPayload = {
+        conversationId,
+        messageId: assistantMessageId,
+        messageIndex: assistantMessageIndex,
+        content: miniSummary,
+        roomId,
+      };
+
+      void commandBus.dispatch({
+        type: MemoryCommands.ADD_MINI_SUMMARY,
+        payload: miniSummaryPayload,
+      });
     }
 
     // 归档回合数据到 HistoryDoc
@@ -2292,7 +2303,7 @@ export async function completeTurnHandler(
       turnNumber,
       completedAt: now,
       actions: Object.fromEntries(actions),
-      aiResponseLength: resolvedAiResponse.length,
+      aiResponseLength: cleanedAiResponse.length,
     };
 
     // 压缩并存储（简化版：直接存储 JSON）
@@ -2367,7 +2378,7 @@ export async function completeTurnHandler(
             turnNumber,
             completedAt: now,
             actions: actionsWithDisplayName,
-            aiResponseLength: resolvedAiResponse.length,
+            aiResponseLength: cleanedAiResponse.length,
           },
         ]);
 
@@ -2380,7 +2391,7 @@ export async function completeTurnHandler(
     const event: TurnCompletedEvent = {
       roomId,
       turnNumber,
-      aiResponse: resolvedAiResponse,
+      aiResponse: cleanedAiResponse,
       completedAt: now,
     };
     eventBus.emit(eventBus.createEvent(RoomEvents.TURN_COMPLETED, event));
@@ -2425,17 +2436,7 @@ export async function createCharacterHandler(
   _context: CommandContext,
 ): Promise<CommandResult<{ characterId: string }>> {
   try {
-    const {
-      roomId,
-      name,
-      userId,
-      uniqueTag,
-      attributes,
-      controlType,
-      description,
-      personality,
-      appearance,
-    } = payload;
+    const { roomId, userId, uniqueTag, characterData } = payload;
 
     const mainDoc = subdocManager.getMainDoc(roomId);
     if (!mainDoc) {
@@ -2464,70 +2465,23 @@ export async function createCharacterHandler(
 
     // 创建角色实体
     const character = createCharacter({
-      name,
+      ...characterData,
       creatorUniqueTag: uniqueTag,
       operatorUserId: userId,
       operatorUniqueTag: uniqueTag,
       status: "active",
-      attributes,
-      controlType,
-      description,
-      personality,
-      appearance,
-      dimensionSelections: payload.dimensionSelections,
-      talentIds: payload.talentIds,
     });
 
     // 写入 MainDoc.characters（使用嵌套 Y.Map 支持增量同步）
     mainDoc.transact(() => {
-      const charMap = new Y.Map<unknown>();
-      charMap.set("id", character.id);
-      charMap.set("name", character.name);
-      charMap.set("controlType", character.controlType);
-      charMap.set("creatorUniqueTag", character.creatorUniqueTag);
-      charMap.set("operatorUserId", character.operatorUserId);
-      charMap.set("operatorUniqueTag", character.operatorUniqueTag);
-      charMap.set("status", character.status);
-      charMap.set("createdAt", character.createdAt);
-      charMap.set("updatedAt", character.updatedAt);
-      if (character.attributes) {
-        charMap.set("attributes", character.attributes);
-      }
-      if (character.description !== undefined) {
-        charMap.set("description", character.description);
-      }
-      if (character.personality !== undefined) {
-        charMap.set("personality", character.personality);
-      }
-      if (character.appearance !== undefined) {
-        charMap.set("appearance", character.appearance);
-      }
-      if (character.dimensionSelections !== undefined) {
-        charMap.set(
-          "dimensionSelections",
-          JSON.stringify(character.dimensionSelections),
-        );
-      }
-      if (character.talentIds !== undefined) {
-        charMap.set("talentIds", character.talentIds);
-      }
+      const charMap = characterToYMap(character);
       charactersMap.set(character.id, charMap);
     });
 
     // 发布 CHARACTER_CREATED 事件
     const event: CharacterCreatedEvent = {
       roomId,
-      characterId: character.id,
-      name: character.name,
-      creatorUniqueTag: character.creatorUniqueTag,
-      operatorUserId: character.operatorUserId,
-      operatorUniqueTag: character.operatorUniqueTag,
-      status: character.status,
-      createdAt: character.createdAt,
-      controlType: character.controlType,
-      description: character.description,
-      personality: character.personality,
-      appearance: character.appearance,
+      character,
     };
     eventBus.emit(eventBus.createEvent(RoomEvents.CHARACTER_CREATED, event));
 
@@ -2555,7 +2509,7 @@ export async function updateCharacterHandler(
 ): Promise<CommandResult<void>> {
   try {
     const { roomId, characterId, userId, uniqueTag, updates } = payload;
-    const now = Date.now();
+    let updatedAt = Date.now();
 
     const mainDoc = subdocManager.getMainDoc(roomId);
     if (!mainDoc) {
@@ -2572,37 +2526,7 @@ export async function updateCharacterHandler(
     }
 
     // 构建角色对象用于权限检查
-    const character: Character = {
-      id: charMap.get("id") as string,
-      name: charMap.get("name") as string,
-      controlType:
-        (charMap.get("controlType") as Character["controlType"]) ?? "player",
-      description: charMap.get("description") as string | undefined,
-      personality: charMap.get("personality") as string | undefined,
-      appearance: charMap.get("appearance") as string | undefined,
-      creatorUniqueTag: charMap.get("creatorUniqueTag") as string,
-      operatorUserId: charMap.get("operatorUserId") as string,
-      operatorUniqueTag: charMap.get("operatorUniqueTag") as string,
-      status: charMap.get("status") as Character["status"],
-      createdAt: charMap.get("createdAt") as number,
-      updatedAt: charMap.get("updatedAt") as number,
-      attributes: charMap.get("attributes") as
-        | Record<string, unknown>
-        | undefined,
-      tags: charMap.get("tags") as Record<string, unknown> | undefined,
-      dimensionSelections: (() => {
-        const raw = charMap.get("dimensionSelections");
-        if (typeof raw === "string") {
-          try {
-            return JSON.parse(raw) as Record<string, string>;
-          } catch {
-            return undefined;
-          }
-        }
-        return raw as Record<string, string> | undefined;
-      })(),
-      talentIds: charMap.get("talentIds") as string[] | undefined,
-    };
+    const character = yMapToCharacter(charMap);
 
     // 验证操作权限
     if (!canOperateCharacter(character, userId, uniqueTag)) {
@@ -2611,37 +2535,11 @@ export async function updateCharacterHandler(
 
     // 更新角色属性（使用 transact 确保原子性）
     mainDoc.transact(() => {
-      if (updates.name !== undefined) {
-        charMap.set("name", updates.name);
+      applyCharacterUpdates(charMap, updates);
+      const nextUpdatedAt = charMap.get("updatedAt");
+      if (typeof nextUpdatedAt === "number") {
+        updatedAt = nextUpdatedAt;
       }
-      if (updates.status !== undefined) {
-        charMap.set("status", updates.status);
-      }
-      if (updates.attributes !== undefined) {
-        // 合并属性而非替换
-        const existingAttrs =
-          (charMap.get("attributes") as Record<string, unknown>) || {};
-        charMap.set("attributes", { ...existingAttrs, ...updates.attributes });
-      }
-      if (updates.description !== undefined) {
-        charMap.set("description", updates.description);
-      }
-      if (updates.personality !== undefined) {
-        charMap.set("personality", updates.personality);
-      }
-      if (updates.appearance !== undefined) {
-        charMap.set("appearance", updates.appearance);
-      }
-      if (updates.dimensionSelections !== undefined) {
-        charMap.set(
-          "dimensionSelections",
-          JSON.stringify(updates.dimensionSelections),
-        );
-      }
-      if (updates.talentIds !== undefined) {
-        charMap.set("talentIds", updates.talentIds);
-      }
-      charMap.set("updatedAt", now);
     });
 
     // 发布 CHARACTER_UPDATED 事件
@@ -2651,7 +2549,7 @@ export async function updateCharacterHandler(
       operatorUserId: userId,
       operatorUniqueTag: uniqueTag,
       updates,
-      updatedAt: now,
+      updatedAt,
     };
     eventBus.emit(eventBus.createEvent(RoomEvents.CHARACTER_UPDATED, event));
 

@@ -34,7 +34,7 @@ import { ChatEvents } from "@/domain/events/chat";
 import type { IrnrPipelineResult } from "@/domain/types";
 import { createAiExecutor } from "@/lib/ai/executor";
 import { resolveAIConfig } from "@/lib/ai/resolve-config";
-import { processNarrativeOutput } from "@/lib/memory/post-processor";
+import { postProcessForPersist } from "@/lib/post-process";
 import { buildVariableContext, usePresetStore } from "@/lib/prompt";
 import { getLastDisplayName } from "@/lib/user-identity";
 import {
@@ -382,17 +382,25 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
         let narrative = finalContent;
 
         try {
-          const postProcessed = processNarrativeOutput(finalContent);
-          narrative = postProcessed.narrative;
+          const activePreset = await usePresetStore
+            .getState()
+            .getPresetForPurpose("narrative");
+          const postProcessResult = postProcessForPersist(
+            finalContent,
+            activePreset?.postProcessRules,
+          );
+          narrative = postProcessResult.text;
 
-          if (postProcessed.miniSummary) {
+          const miniSummaryParts = postProcessResult.extracted["miniSummary"];
+          if (miniSummaryParts && miniSummaryParts.length > 0) {
+            const miniSummary = miniSummaryParts.join("\n");
             const dispatchResult = await commandBus.dispatch({
               type: MemoryCommands.ADD_MINI_SUMMARY,
               payload: {
                 conversationId,
                 messageId: assistantMessage.id,
                 messageIndex: assistantMessageIndex,
-                content: postProcessed.miniSummary,
+                content: miniSummary,
               },
             });
 
@@ -401,6 +409,10 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
                 `[Chat] 写入小总结失败: ${dispatchResult.error ?? "未知错误"}`,
               );
             }
+          }
+
+          if (postProcessResult.warnings.length > 0) {
+            console.warn("[Chat] 后处理警告:", postProcessResult.warnings);
           }
         } catch (error) {
           console.warn(

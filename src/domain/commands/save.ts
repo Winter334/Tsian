@@ -4,6 +4,8 @@
  * 存档槽位管理命令，与 Chat 模块的会话管理分离
  */
 
+import type { CharacterCreationData } from "@/domain/entities/character";
+
 /**
  * Save 命令类型常量
  */
@@ -28,16 +30,7 @@ export type SaveCommandType = (typeof SaveCommands)[keyof typeof SaveCommands];
 export interface CreateSavePayload {
   name: string;
   /** 单机模式：初始角色数据（存档创建时一并写入） */
-  initialCharacter?: {
-    name: string;
-    description?: string;
-    personality?: string;
-    appearance?: string;
-    // Phase 2 角色创建字段
-    dimensionSelections?: Record<string, string>;
-    talentIds?: string[];
-    attributes?: Record<string, number>;
-  };
+  initialCharacter?: CharacterCreationData;
 }
 
 /**

@@ -43,6 +43,10 @@ export interface Character extends Entity {
   personality?: string;
   /** 外貌描述 */
   appearance?: string;
+  /** 年龄 */
+  age?: number;
+  /** 性别（'male' | 'female' | 'other' | 自定义字符串） */
+  gender?: string;
 
   /**
    * 创建者的 uniqueTag
@@ -87,6 +91,15 @@ export interface Character extends Entity {
 }
 
 /**
+ * 角色创建时的数据字段（不含身份/时间戳等系统字段）
+ * 用于命令载荷引用，避免手动重复列字段
+ */
+export type CharacterCreationData = Omit<
+  CreateCharacterParams,
+  "creatorUniqueTag" | "operatorUserId" | "operatorUniqueTag"
+>;
+
+/**
  * 创建角色的参数
  */
 export interface CreateCharacterParams {
@@ -100,6 +113,10 @@ export interface CreateCharacterParams {
   personality?: string;
   /** 外貌描述 */
   appearance?: string;
+  /** 年龄 */
+  age?: number;
+  /** 性别（'male' | 'female' | 'other' | 自定义字符串） */
+  gender?: string;
   /** 创建者的 uniqueTag */
   creatorUniqueTag: string;
   /** 操作者的 userId */
@@ -128,6 +145,10 @@ export interface UpdateCharacterParams {
   personality?: string;
   /** 外貌描述 */
   appearance?: string;
+  /** 年龄 */
+  age?: number;
+  /** 性别（'male' | 'female' | 'other' | 自定义字符串） */
+  gender?: string;
   /** 角色状态 */
   status?: CharacterStatus;
   /** 操作者的 userId（转移控制权时使用） */
@@ -150,6 +171,8 @@ export function createCharacter(params: CreateCharacterParams): Character {
     description: params.description,
     personality: params.personality,
     appearance: params.appearance,
+    age: params.age,
+    gender: params.gender,
     creatorUniqueTag: params.creatorUniqueTag,
     operatorUserId: params.operatorUserId,
     operatorUniqueTag: params.operatorUniqueTag,
@@ -176,7 +199,7 @@ export function createCharacter(params: CreateCharacterParams): Character {
 export function canOperateCharacter(
   character: Character,
   userId: string,
-  uniqueTag: string
+  uniqueTag: string,
 ): boolean {
   // 优先按 userId 匹配
   if (character.operatorUserId === userId) {
@@ -194,7 +217,7 @@ export function canOperateCharacter(
  */
 export function isCharacterCreator(
   character: Character,
-  uniqueTag: string
+  uniqueTag: string,
 ): boolean {
   return character.creatorUniqueTag === uniqueTag;
 }

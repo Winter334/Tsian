@@ -11,6 +11,7 @@
  */
 
 import type { Message } from "@/domain/entities/message";
+import { usePresetStore } from "@/lib/prompt/store";
 import { cn } from "@/lib/utils";
 import { ChoicesPanel, NarrativeBlock, parseGameContent } from "@/modules/chat";
 import { useEffect, useMemo, useRef } from "react";
@@ -92,6 +93,7 @@ export function TurnNarrativeFlow({
 
   // 获取 AI 状态
   const aiStatusInfo = useAiStatus(roomId ?? null, currentTurn ?? 0);
+  const presetRules = usePresetStore((s) => s.activePreset?.postProcessRules);
 
   // 自动滚动到底部
   useEffect(() => {
@@ -118,9 +120,9 @@ export function TurnNarrativeFlow({
     if (!lastAssistantMessage || isStreaming) {
       return [];
     }
-    const parsed = parseGameContent(lastAssistantMessage.content);
+    const parsed = parseGameContent(lastAssistantMessage.content, presetRules);
     return parsed.choices;
-  }, [lastAssistantMessage, isStreaming]);
+  }, [lastAssistantMessage, isStreaming, presetRules]);
 
   /**
    * 渲染单条消息
@@ -148,7 +150,7 @@ export function TurnNarrativeFlow({
     // AI 叙事消息
     if (message.role === "assistant") {
       const isCurrentStreaming = isStreaming && message.status === "streaming";
-      const parsed = parseGameContent(message.content);
+      const parsed = parseGameContent(message.content, presetRules);
 
       return (
         <NarrativeBlock

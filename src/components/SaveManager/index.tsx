@@ -29,7 +29,6 @@ import { useCurrentSaveId, useSaveSlots } from "@/modules/save";
 import {
   color,
   colorAlpha,
-  fadeVariants,
   glow,
   gradients,
   listItemVariants,
@@ -41,7 +40,6 @@ import {
   FolderOpen,
   Gamepad2,
   Play,
-  Plus,
   Trash2,
   Users,
 } from "lucide-react";
@@ -150,7 +148,7 @@ function SaveCard({
                 style={{
                   background: colorAlpha(
                     save.type === "multiplayer" ? "primary" : "primary",
-                    0.15
+                    0.15,
                   ),
                   color: color("primaryLight"),
                 }}
@@ -237,33 +235,9 @@ function SaveCard({
 }
 
 /**
- * 新建存档按钮
- */
-interface NewSaveButtonProps {
-  onClick: () => void;
-}
-
-function NewSaveButton({ onClick }: NewSaveButtonProps) {
-  return (
-    <motion.div variants={fadeVariants} initial="hidden" animate="visible">
-      <Card
-        variant="outlined"
-        hover={true}
-        glowOnHover={true}
-        onClick={onClick}
-        className="w-full p-4 flex items-center justify-center gap-2 border-dashed"
-      >
-        <Plus className="w-5 h-5" style={{ color: color("primary") }} />
-        <span style={{ color: color("primary") }}>新建存档</span>
-      </Card>
-    </motion.div>
-  );
-}
-
-/**
  * 空状态
  */
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function EmptyState() {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -288,13 +262,9 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       >
         暂无存档
       </h3>
-      <p className="text-sm mb-6" style={{ color: color("textMuted") }}>
-        开始你的冒险之旅吧
+      <p className="text-sm" style={{ color: color("textMuted") }}>
+        请通过开始向导创建你的第一个存档
       </p>
-      <Button onClick={onCreate} className="gap-2">
-        <Plus className="w-4 h-4" />
-        新建存档
-      </Button>
     </motion.div>
   );
 }
@@ -320,19 +290,6 @@ export function SaveManagerDialog({
   // 通过 CommandBus 发送命令（符合架构规范）
   const dispatch = useCommand();
 
-  // 新建存档 - 通过 CommandBus
-  const handleCreate = useCallback(async () => {
-    const result = await dispatch({
-      type: SaveCommands.CREATE_SAVE,
-      payload: { name: `存档 ${saves.length + 1}` },
-    });
-
-    if (result.success && result.data) {
-      onOpenChange(false);
-      onLoadSave?.(result.data as string);
-    }
-  }, [dispatch, onOpenChange, onLoadSave, saves.length]);
-
   // 加载存档 - 通过 CommandBus
   const handleLoad = useCallback(
     async (save: SaveSlotInfo) => {
@@ -354,7 +311,7 @@ export function SaveManagerDialog({
         onLoadSave?.(save.id);
       }
     },
-    [dispatch, onOpenChange, onLoadSave, onMultiplayerSave]
+    [dispatch, onOpenChange, onLoadSave, onMultiplayerSave],
   );
 
   // 确认删除存档 - 通过 CommandBus
@@ -389,7 +346,7 @@ export function SaveManagerDialog({
         toast("error", "导出失败", "请稍后重试");
       }
     },
-    [dispatch, toast]
+    [dispatch, toast],
   );
 
   return (
@@ -404,7 +361,7 @@ export function SaveManagerDialog({
       >
         <div className="space-y-3">
           {saves.length === 0 ? (
-            <EmptyState onCreate={handleCreate} />
+            <EmptyState />
           ) : (
             <div className="space-y-3">
               <AnimatePresence mode="popLayout">
@@ -420,7 +377,6 @@ export function SaveManagerDialog({
                   />
                 ))}
               </AnimatePresence>
-              <NewSaveButton onClick={handleCreate} />
             </div>
           )}
         </div>

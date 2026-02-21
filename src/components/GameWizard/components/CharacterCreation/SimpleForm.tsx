@@ -7,6 +7,7 @@
 
 import { Button, Input, Textarea } from "@/components/ui";
 import { RoomCommands } from "@/domain/commands/room";
+import type { CharacterCreationData } from "@/domain/entities/character";
 import { useCommand } from "@/hooks";
 import {
   generateDefaultDisplayName,
@@ -19,12 +20,14 @@ import { borders, color, colorAlpha, glow } from "@/styles/tokens";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BookOpen,
+  Calendar,
   Check,
   Loader2,
   RefreshCw,
   Sparkles,
   User,
   UserPlus,
+  Users,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -43,6 +46,22 @@ interface SimpleFormProps {
   disabled?: boolean;
 }
 
+const GENDER_OPTIONS = ["男", "女", "其他"] as const;
+
+function parseOptionalAge(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
 export function SimpleForm({
   roomId,
   hasCharacter,
@@ -56,6 +75,10 @@ export function SimpleForm({
   const [characterDescription, setCharacterDescription] = useState("");
   const [characterPersonality, setCharacterPersonality] = useState("");
   const [characterAppearance, setCharacterAppearance] = useState("");
+  const [characterAgeInput, setCharacterAgeInput] = useState("");
+  const [characterGender, setCharacterGender] = useState<string | undefined>(
+    undefined,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -98,27 +121,31 @@ export function SimpleForm({
     setError(null);
 
     try {
+      const normalizedAge = parseOptionalAge(characterAgeInput);
+      const normalizedGender = characterGender || undefined;
+
       const result = await dispatch<
         {
           roomId: string;
-          name: string;
           userId: string;
           uniqueTag: string;
-          description?: string;
-          personality?: string;
-          appearance?: string;
+          characterData: CharacterCreationData;
         },
         { characterId: string }
       >({
         type: RoomCommands.CREATE_CHARACTER,
         payload: {
           roomId,
-          name: characterName.trim(),
           userId,
           uniqueTag,
-          description: characterDescription.trim() || undefined,
-          personality: characterPersonality.trim() || undefined,
-          appearance: characterAppearance.trim() || undefined,
+          characterData: {
+            name: characterName.trim(),
+            description: characterDescription.trim() || undefined,
+            personality: characterPersonality.trim() || undefined,
+            appearance: characterAppearance.trim() || undefined,
+            age: normalizedAge,
+            gender: normalizedGender,
+          },
         },
       });
 
@@ -137,6 +164,8 @@ export function SimpleForm({
     characterDescription,
     characterPersonality,
     characterAppearance,
+    characterAgeInput,
+    characterGender,
     roomId,
     userId,
     uniqueTag,
@@ -160,6 +189,9 @@ export function SimpleForm({
     setError(null);
 
     try {
+      const normalizedAge = parseOptionalAge(characterAgeInput);
+      const normalizedGender = characterGender || undefined;
+
       const result = await dispatch({
         type: RoomCommands.UPDATE_CHARACTER,
         payload: {
@@ -172,6 +204,8 @@ export function SimpleForm({
             description: characterDescription.trim() || undefined,
             personality: characterPersonality.trim() || undefined,
             appearance: characterAppearance.trim() || undefined,
+            age: normalizedAge,
+            gender: normalizedGender,
           },
         },
       });
@@ -191,6 +225,8 @@ export function SimpleForm({
     characterDescription,
     characterPersonality,
     characterAppearance,
+    characterAgeInput,
+    characterGender,
     roomId,
     currentCharacterId,
     userId,
@@ -307,6 +343,74 @@ export function SimpleForm({
         </div>
       </div>
 
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <label
+            className="text-xs flex items-center gap-1"
+            style={{ color: color("textMuted") }}
+          >
+            <Users className="w-3 h-3" />
+            性别
+            <span className="opacity-60">(可选)</span>
+          </label>
+          <div className="flex gap-2">
+            {GENDER_OPTIONS.map((option) => {
+              const isSelected = characterGender === option;
+
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() =>
+                    setCharacterGender((prev) =>
+                      prev === option ? undefined : option,
+                    )
+                  }
+                  disabled={isSubmitting || disabled}
+                  className="flex-1 rounded-md border px-2 py-1.5 text-xs transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{
+                    borderColor: isSelected
+                      ? color("primary")
+                      : colorAlpha("primary", 0.2),
+                    background: isSelected
+                      ? colorAlpha("primary", 0.14)
+                      : colorAlpha("bgCard", 0.2),
+                    color: isSelected
+                      ? color("textPrimary")
+                      : color("textMuted"),
+                    boxShadow: isSelected ? glow("primary", "sm", 0.2) : "none",
+                  }}
+                  aria-pressed={isSelected}
+                >
+                  {option}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label
+            className="text-xs flex items-center gap-1"
+            style={{ color: color("textMuted") }}
+          >
+            <Calendar className="w-3 h-3" />
+            年龄
+            <span className="opacity-60">(可选)</span>
+          </label>
+          <Input
+            type="number"
+            min={0}
+            max={999}
+            inputMode="numeric"
+            value={characterAgeInput}
+            onChange={(e) => setCharacterAgeInput(e.target.value)}
+            placeholder="可选"
+            disabled={isSubmitting || disabled}
+          />
+        </div>
+      </div>
+
       {/* 角色描述 */}
       <div className="space-y-1">
         <label
@@ -391,6 +495,8 @@ export function SimpleForm({
             onClick={() => {
               setIsEditing(false);
               setCharacterName(currentCharacterName || "");
+              setCharacterAgeInput("");
+              setCharacterGender(undefined);
               setError(null);
             }}
             disabled={isSubmitting}

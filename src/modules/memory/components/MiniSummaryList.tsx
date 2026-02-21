@@ -18,6 +18,8 @@ const contentPreviewStyle: CSSProperties = {
   overflow: "hidden",
 };
 
+const EMPTY_MINI_SUMMARIES: MiniSummary[] = [];
+
 function formatDateTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString("zh-CN", { hour12: false });
 }
@@ -31,7 +33,9 @@ export function MiniSummaryList() {
   const [editTarget, setEditTarget] = useState<MiniSummary | null>(null);
 
   const miniSummaries = useMemoryStore((state) =>
-    conversationId ? (state.miniSummaries[conversationId] ?? []) : [],
+    conversationId
+      ? (state.miniSummaries[conversationId] ?? EMPTY_MINI_SUMMARIES)
+      : EMPTY_MINI_SUMMARIES,
   );
 
   const sortedSummaries = useMemo(

@@ -1,3 +1,6 @@
+import { postProcessForRender } from "@/lib/post-process";
+import type { PostProcessRule } from "@/lib/post-process/types";
+
 /**
  * 游戏内容解析器
  * 解析 AI 输出中的结构化内容（如 <choices> 标签）
@@ -14,26 +17,25 @@ export interface ParsedContent {
  * 解析游戏内容
  * 从 AI 输出中提取叙事文本和结构化内容
  */
-export function parseGameContent(content: string): ParsedContent {
-  let narrative = content;
-  let choices: string[] = [];
+export function parseGameContent(
+  content: string,
+  presetRules?: PostProcessRule[],
+): ParsedContent {
+  const result = postProcessForRender(content, presetRules);
 
-  // 匹配 <choices>...</choices> 块
-  const choicesRegex = /<choices>([\s\S]*?)<\/choices>/g;
-
-  let match;
-  while ((match = choicesRegex.exec(content)) !== null) {
-    const [fullMatch, body] = match;
-    choices = body
-      .trim()
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-    narrative = narrative.replace(fullMatch, "");
-  }
+  // 从 extracted 中获取 choices
+  const choicesRaw = result.extracted["choices"];
+  const choices = choicesRaw
+    ? choicesRaw.flatMap((block) =>
+        block
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean),
+      )
+    : [];
 
   return {
-    narrative: narrative.trim(),
+    narrative: result.text,
     choices,
   };
 }

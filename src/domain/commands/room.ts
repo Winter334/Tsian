@@ -6,8 +6,9 @@
 
 import type {
   Character,
+  CharacterCreationData,
   CharacterStatus,
-  ControlType,
+  UpdateCharacterParams,
 } from "@/domain/entities/character";
 
 /**
@@ -373,26 +374,12 @@ export interface UpdateNpcInfoPayload {
 export interface CreateCharacterPayload {
   /** 房间 ID */
   roomId: string;
-  /** 角色名称 */
-  name: string;
   /** 创建者的 userId */
   userId: string;
   /** 创建者的 uniqueTag */
   uniqueTag: string;
-  /** 初始属性（可选） */
-  attributes?: Record<string, unknown>;
-  /** 角色控制类型（默认 'player'） */
-  controlType?: ControlType;
-  /** 角色背景故事 */
-  description?: string;
-  /** 性格特征 */
-  personality?: string;
-  /** 外貌描述 */
-  appearance?: string;
-  /** 维度选择（key: 维度 ID, value: 选项 ID） */
-  dimensionSelections?: Record<string, string>;
-  /** 已选天赋 ID 列表 */
-  talentIds?: string[];
+  /** 角色创建数据（引用实体类型，不再手动列字段） */
+  characterData: CharacterCreationData;
 }
 
 /**
@@ -408,22 +395,5 @@ export interface UpdateCharacterPayload {
   /** 操作者的 uniqueTag */
   uniqueTag: string;
   /** 更新的字段 */
-  updates: {
-    /** 角色名称 */
-    name?: string;
-    /** 角色状态 */
-    status?: "active" | "off_scene" | "archived" | "dead";
-    /** 角色属性 */
-    attributes?: Record<string, unknown>;
-    /** 角色背景故事 */
-    description?: string;
-    /** 性格特征 */
-    personality?: string;
-    /** 外貌描述 */
-    appearance?: string;
-    /** 维度选择（key: 维度 ID, value: 选项 ID） */
-    dimensionSelections?: Record<string, string>;
-    /** 已选天赋 ID 列表 */
-    talentIds?: string[];
-  };
+  updates: UpdateCharacterParams;
 }

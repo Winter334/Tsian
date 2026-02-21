@@ -74,7 +74,10 @@ export interface WorkspaceActions {
   updatePanelPreset: (
     panelId: string,
     updates: Partial<
-      Pick<Preset, "name" | "description" | "purpose" | "aiProfileId">
+      Pick<
+        Preset,
+        "name" | "description" | "purpose" | "aiProfileId" | "postProcessRules"
+      >
     >,
   ) => void;
   setActivePreset: (presetId: string) => Promise<void>;
@@ -225,7 +228,14 @@ export function useWorkspaceState(): WorkspaceState & WorkspaceActions {
     (
       panelId: string,
       updates: Partial<
-        Pick<Preset, "name" | "description" | "purpose" | "aiProfileId">
+        Pick<
+          Preset,
+          | "name"
+          | "description"
+          | "purpose"
+          | "aiProfileId"
+          | "postProcessRules"
+        >
       >,
     ) => {
       setPanels((prev) =>
@@ -236,6 +246,7 @@ export function useWorkspaceState(): WorkspaceState & WorkspaceActions {
           const hasDescriptionUpdate = "description" in updates;
           const hasPurposeUpdate = "purpose" in updates;
           const hasAiProfileIdUpdate = "aiProfileId" in updates;
+          const hasPostProcessRulesUpdate = "postProcessRules" in updates;
 
           const hasPresetChanges =
             (hasNameUpdate && updates.name !== panel.preset.name) ||
@@ -243,7 +254,9 @@ export function useWorkspaceState(): WorkspaceState & WorkspaceActions {
               updates.description !== panel.preset.description) ||
             (hasPurposeUpdate && updates.purpose !== panel.preset.purpose) ||
             (hasAiProfileIdUpdate &&
-              updates.aiProfileId !== panel.preset.aiProfileId);
+              updates.aiProfileId !== panel.preset.aiProfileId) ||
+            (hasPostProcessRulesUpdate &&
+              updates.postProcessRules !== panel.preset.postProcessRules);
 
           if (!hasPresetChanges) return panel;
 

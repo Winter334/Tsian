@@ -30,6 +30,7 @@ import { StorageWarningBanner, yjsManager } from "./core/yjs";
 import type { SaveMemberInfo, SaveSlotInfo } from "./core/yjs/types";
 import { RoomCommands } from "./domain/commands/room";
 import { SaveCommands } from "./domain/commands/save";
+import type { CharacterCreationData } from "./domain/entities/character";
 import { MemoryEvents } from "./domain/events";
 import type {
   CompressionFailedPayload,
@@ -213,23 +214,28 @@ function AppContent() {
     if (result.mode === "solo") {
       // 单人模式：创建新存档
       // 注意：房间状态会在 SAVE_CREATED 事件触发后由 Room 模块自动重置
+      const initialCharacter: CharacterCreationData | undefined =
+        result.characterName
+          ? {
+              name: result.characterName,
+              description: result.characterDescription,
+              personality: result.characterPersonality,
+              appearance: result.characterAppearance,
+              age: result.characterAge,
+              gender: result.characterGender,
+              // Phase 2 角色创建字段
+              dimensionSelections: result.dimensionSelections,
+              talentIds: result.talentIds,
+              attributes: result.attributes,
+            }
+          : undefined;
+
       const saveResult = await dispatch({
         type: SaveCommands.CREATE_SAVE,
         payload: {
           name: `存档 ${saves.length + 1}`,
           // 传入角色数据，存入 Yjs 存档的 characters 数组
-          initialCharacter: result.characterName
-            ? {
-                name: result.characterName,
-                description: result.characterDescription,
-                personality: result.characterPersonality,
-                appearance: result.characterAppearance,
-                // Phase 2 角色创建字段
-                dimensionSelections: result.dimensionSelections,
-                talentIds: result.talentIds,
-                attributes: result.attributes,
-              }
-            : undefined,
+          initialCharacter,
         },
       });
 

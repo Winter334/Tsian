@@ -9,46 +9,10 @@ import { subdocManager } from "@/core/yjs";
 import type { Character } from "@/domain/entities/character";
 import { canOperateCharacter } from "@/domain/entities/character";
 import { getOrCreateUserId, getUniqueTag } from "@/lib/user-identity";
+import { yMapToCharacter } from "@/modules/game/repository";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as Y from "yjs";
 import { useRoomStore } from "../store";
-
-/**
- * 从 Y.Map 提取 Character 对象
- */
-function extractCharacterFromYMap(charMap: Y.Map<unknown>): Character {
-  return {
-    id: charMap.get("id") as string,
-    name: charMap.get("name") as string,
-    controlType:
-      (charMap.get("controlType") as Character["controlType"]) ?? "player",
-    description: charMap.get("description") as string | undefined,
-    personality: charMap.get("personality") as string | undefined,
-    appearance: charMap.get("appearance") as string | undefined,
-    creatorUniqueTag: charMap.get("creatorUniqueTag") as string,
-    operatorUserId: charMap.get("operatorUserId") as string,
-    operatorUniqueTag: charMap.get("operatorUniqueTag") as string,
-    status: charMap.get("status") as Character["status"],
-    createdAt: charMap.get("createdAt") as number,
-    updatedAt: charMap.get("updatedAt") as number,
-    attributes: charMap.get("attributes") as
-      | Record<string, unknown>
-      | undefined,
-    tags: charMap.get("tags") as Record<string, unknown> | undefined,
-    dimensionSelections: (() => {
-      const raw = charMap.get("dimensionSelections");
-      if (typeof raw === "string") {
-        try {
-          return JSON.parse(raw) as Record<string, string>;
-        } catch {
-          return undefined;
-        }
-      }
-      return raw as Record<string, string> | undefined;
-    })(),
-    talentIds: charMap.get("talentIds") as string[] | undefined,
-  };
-}
 
 /**
  * 角色列表 Hook 返回值
@@ -109,7 +73,7 @@ export function useRoomCharacters(): UseRoomCharactersResult {
 
     charactersMap.forEach((charMap) => {
       try {
-        const character = extractCharacterFromYMap(charMap);
+        const character = yMapToCharacter(charMap);
         charList.push(character);
       } catch {
         // 角色提取失败，跳过

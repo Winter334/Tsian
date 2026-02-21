@@ -6,6 +6,7 @@ import type { ManualMemory } from "@/domain/entities/memory";
 import type { ResultFrame, TagMetadata } from "@/domain/types";
 import type { AdvancedSettings } from "@/lib/ai";
 import type { Message as AIMessage } from "@/lib/ai/types";
+import type { PostProcessRule } from "@/lib/post-process/types";
 import type { WorldConfig } from "@/lib/world/types";
 import type { MARKER_IDS } from "./marker-registry";
 
@@ -99,6 +100,9 @@ export interface Preset {
 
   /** AI 参数覆盖（可选） */
   aiSettings?: Partial<AdvancedSettings>;
+
+  /** 后处理规则列表（可选，未定义时使用内置规则） */
+  postProcessRules?: PostProcessRule[];
 
   /** 元数据 */
   metadata: {

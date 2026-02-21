@@ -436,6 +436,22 @@ function OverviewTabContent({
     }
   }, [character.status]);
 
+  const genderDisplay = useMemo(() => {
+    const rawGender = character.gender?.trim();
+    if (!rawGender) return undefined;
+
+    switch (rawGender.toLowerCase()) {
+      case "male":
+        return "男";
+      case "female":
+        return "女";
+      case "other":
+        return "其他";
+      default:
+        return rawGender;
+    }
+  }, [character.gender]);
+
   return (
     <div className="space-y-5">
       {/* ── 顶部两列区域：左列大头像 + 右列资源/基本信息 ── */}
@@ -490,6 +506,10 @@ function OverviewTabContent({
                   value={d.option?.name ?? "未选择"}
                 />
               ))}
+              {genderDisplay && <InfoRow label="性别" value={genderDisplay} />}
+              {character.age != null && (
+                <InfoRow label="年龄" value={String(character.age)} />
+              )}
               {/* 等级 */}
               {character.attributes?.level != null && (
                 <InfoRow

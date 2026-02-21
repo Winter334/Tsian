@@ -149,6 +149,10 @@ export interface WizardContext {
   characterPersonality?: string;
   /** 角色外貌 */
   characterAppearance?: string;
+  /** 角色年龄 */
+  characterAge?: number;
+  /** 角色性别 */
+  characterGender?: string;
   /** 角色头像 URL（本地预览或远程地址） */
   avatarUrl?: string;
   /** 角色头像文件（仅用于完成向导后保存到 OPFS，不写入存档） */
@@ -249,6 +253,10 @@ export interface WizardResult {
   characterPersonality?: string;
   /** 角色外貌 */
   characterAppearance?: string;
+  /** 角色年龄 */
+  characterAge?: number;
+  /** 角色性别 */
+  characterGender?: string;
   /** 角色头像 URL（本地预览或远程地址） */
   avatarUrl?: string;
   /** 角色头像文件（仅用于完成向导后保存到 OPFS，不写入存档） */

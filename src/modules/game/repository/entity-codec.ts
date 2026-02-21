@@ -11,6 +11,7 @@ import type {
   Character,
   CharacterStatus,
   ControlType,
+  UpdateCharacterParams,
 } from "@/domain/entities/character";
 import type { EntityType } from "@/domain/types";
 import { deserializeTagsFromYjs, serializeTagsForYjs } from "@/domain/types";
@@ -61,12 +62,18 @@ export function characterToYMap(character: Character): Y.Map<unknown> {
   if (character.appearance !== undefined) {
     charMap.set("appearance", character.appearance);
   }
+  if (character.age !== undefined) {
+    charMap.set("age", character.age);
+  }
+  if (character.gender !== undefined) {
+    charMap.set("gender", character.gender);
+  }
 
   // 可选配置字段
   if (character.dimensionSelections !== undefined) {
     charMap.set(
       "dimensionSelections",
-      JSON.stringify(character.dimensionSelections)
+      JSON.stringify(character.dimensionSelections),
     );
   }
   if (character.talentIds !== undefined) {
@@ -105,6 +112,8 @@ export function yMapToCharacter(charMap: Y.Map<unknown>): Character {
   const description = charMap.get("description");
   const personality = charMap.get("personality");
   const appearance = charMap.get("appearance");
+  const age = charMap.get("age");
+  const gender = charMap.get("gender");
   const dimensionSelectionsRaw = charMap.get("dimensionSelections");
   const talentIds = charMap.get("talentIds");
   const attributes = charMap.get("attributes");
@@ -136,6 +145,12 @@ export function yMapToCharacter(charMap: Y.Map<unknown>): Character {
   if (typeof appearance === "string") {
     character.appearance = appearance;
   }
+  if (typeof age === "number") {
+    character.age = age ?? undefined;
+  }
+  if (typeof gender === "string") {
+    character.gender = gender || undefined;
+  }
   if (typeof dimensionSelectionsRaw === "string") {
     try {
       const parsed = JSON.parse(dimensionSelectionsRaw);
@@ -158,7 +173,7 @@ export function yMapToCharacter(charMap: Y.Map<unknown>): Character {
   }
   if (Array.isArray(talentIds)) {
     character.talentIds = talentIds.filter(
-      (t): t is string => typeof t === "string"
+      (t): t is string => typeof t === "string",
     );
   }
   if (
@@ -210,7 +225,7 @@ export function characterToEntityData(character: Character): EntityData {
 
   // 3. 反序列化 tags
   const tags = deserializeTagsFromYjs(
-    character.tags as Record<string, unknown> | undefined
+    character.tags as Record<string, unknown> | undefined,
   );
 
   // 4. 确定 EntityType
@@ -233,7 +248,7 @@ export function characterToEntityData(character: Character): EntityData {
  * 保留实际的角色属性字段。
  */
 export function entityFieldsToAttributes(
-  fields: Record<string, number | string | boolean>
+  fields: Record<string, number | string | boolean>,
 ): Record<string, unknown> {
   const attributes: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(fields)) {
@@ -257,6 +272,81 @@ function isCharacterStatus(value: unknown): value is CharacterStatus {
     value === "archived" ||
     value === "dead"
   );
+}
+
+/**
+ * 将更新参数增量应用到角色 Y.Map（逐字段 set，保证 Yjs 增量同步）
+ */
+export function applyCharacterUpdates(
+  charMap: Y.Map<unknown>,
+  updates: UpdateCharacterParams,
+): void {
+  if (updates.name !== undefined) {
+    charMap.set("name", updates.name);
+  }
+  if (updates.status !== undefined) {
+    charMap.set("status", updates.status);
+  }
+  if (updates.description !== undefined) {
+    charMap.set("description", updates.description);
+  }
+  if (updates.personality !== undefined) {
+    charMap.set("personality", updates.personality);
+  }
+  if (updates.appearance !== undefined) {
+    charMap.set("appearance", updates.appearance);
+  }
+  if (updates.age !== undefined) {
+    charMap.set("age", updates.age);
+  }
+  if (updates.gender !== undefined) {
+    charMap.set("gender", updates.gender);
+  }
+
+  if (updates.attributes !== undefined) {
+    const existingAttrs = charMap.get("attributes");
+    charMap.set("attributes", {
+      ...(existingAttrs &&
+      typeof existingAttrs === "object" &&
+      !Array.isArray(existingAttrs)
+        ? (existingAttrs as Record<string, unknown>)
+        : {}),
+      ...updates.attributes,
+    });
+  }
+
+  const extraUpdates = updates as UpdateCharacterParams &
+    Partial<
+      Pick<
+        Character,
+        "dimensionSelections" | "talentIds" | "controlType" | "tags"
+      >
+    >;
+
+  if (extraUpdates.dimensionSelections !== undefined) {
+    charMap.set(
+      "dimensionSelections",
+      JSON.stringify(extraUpdates.dimensionSelections),
+    );
+  }
+  if (extraUpdates.talentIds !== undefined) {
+    charMap.set("talentIds", extraUpdates.talentIds);
+  }
+  if (extraUpdates.controlType !== undefined) {
+    charMap.set("controlType", extraUpdates.controlType);
+  }
+  if (extraUpdates.tags !== undefined) {
+    charMap.set("tags", extraUpdates.tags);
+  }
+
+  if (updates.operatorUserId !== undefined) {
+    charMap.set("operatorUserId", updates.operatorUserId);
+  }
+  if (updates.operatorUniqueTag !== undefined) {
+    charMap.set("operatorUniqueTag", updates.operatorUniqueTag);
+  }
+
+  charMap.set("updatedAt", Date.now());
 }
 
 // 导出类型守卫供 repository 使用

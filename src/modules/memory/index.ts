@@ -99,7 +99,6 @@ export async function unregisterMemoryModule(): Promise<void> {
 // 导出供外部使用的公共 API
 export * from "./components";
 export * from "./memory-injector";
-export * from "./post-processor";
 export * from "./repository";
 export * from "./store";
 export { MemoryCommands, MemoryEvents };

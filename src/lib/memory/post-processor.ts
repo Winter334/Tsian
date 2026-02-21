@@ -1,12 +1,12 @@
 /**
- * Narrative 后处理器
- *
- * 从正文 AI 输出中提取结构化记忆摘要，并返回清理后的叙事文本。
+ * @deprecated 请改用 postProcessForPersist()（src/lib/post-process/index.ts）。
+ * 该文件保留为兼容层，后续会删除。
  */
+import { postProcessForPersist } from "@/lib/post-process";
 
-const MEMORY_SUMMARY_REGEX_GLOBAL =
-  /<memory_summary>([\s\S]*?)<\/memory_summary>/g;
-
+/**
+ * @deprecated 请改用 PostProcessResult（src/lib/post-process/types.ts）。
+ */
 export interface PostProcessResult {
   /** 清理后的叙事文本（移除 memory_summary 标记） */
   narrative: string;
@@ -15,41 +15,21 @@ export interface PostProcessResult {
 }
 
 /**
- * 从正文 AI 的原始输出中提取结构化内容。
- * 返回清理后的叙事文本和提取的小总结。
+ * @deprecated 请改用 postProcessForPersist()。
+ * 兼容旧调用签名，内部委托到新的后处理管道。
  */
 export function processNarrativeOutput(rawOutput: string): PostProcessResult {
-  let narrative = rawOutput;
-  const summaryParts: string[] = [];
-
-  const extractRegex = new RegExp(
-    MEMORY_SUMMARY_REGEX_GLOBAL.source,
-    MEMORY_SUMMARY_REGEX_GLOBAL.flags,
-  );
-
-  let match: RegExpExecArray | null;
-  while ((match = extractRegex.exec(narrative)) !== null) {
-    const content = match[1].trim();
-    if (content) {
-      summaryParts.push(content);
-    }
-  }
-
-  const cleanupRegex = new RegExp(
-    MEMORY_SUMMARY_REGEX_GLOBAL.source,
-    MEMORY_SUMMARY_REGEX_GLOBAL.flags,
-  );
-  narrative = narrative.replace(cleanupRegex, "").trim();
-
+  const result = postProcessForPersist(rawOutput);
+  const miniSummaryParts = result.extracted["miniSummary"] ?? [];
   const miniSummary =
-    summaryParts.length > 0 ? summaryParts.join("\n") : undefined;
+    miniSummaryParts.length > 0 ? miniSummaryParts.join("\n") : undefined;
 
   return miniSummary
     ? {
-        narrative,
+        narrative: result.text.trim(),
         miniSummary,
       }
     : {
-        narrative,
+        narrative: result.text.trim(),
       };
 }

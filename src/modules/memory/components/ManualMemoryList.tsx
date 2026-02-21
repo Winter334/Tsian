@@ -25,6 +25,8 @@ const sourcePreviewStyle: CSSProperties = {
   overflow: "hidden",
 };
 
+const EMPTY_MANUAL_MEMORIES: ManualMemory[] = [];
+
 function formatDateTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString("zh-CN", { hour12: false });
 }
@@ -55,7 +57,9 @@ export function ManualMemoryList() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const manualMemories = useMemoryStore((state) =>
-    conversationId ? (state.manualMemories[conversationId] ?? []) : [],
+    conversationId
+      ? (state.manualMemories[conversationId] ?? EMPTY_MANUAL_MEMORIES)
+      : EMPTY_MANUAL_MEMORIES,
   );
 
   const sortedMemories = useMemo(

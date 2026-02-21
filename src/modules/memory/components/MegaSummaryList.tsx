@@ -18,6 +18,8 @@ const contentPreviewStyle: CSSProperties = {
   overflow: "hidden",
 };
 
+const EMPTY_MEGA_SUMMARIES: MegaSummary[] = [];
+
 function formatDateTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString("zh-CN", { hour12: false });
 }
@@ -31,7 +33,9 @@ export function MegaSummaryList() {
   const [editTarget, setEditTarget] = useState<MegaSummary | null>(null);
 
   const megaSummaries = useMemoryStore((state) =>
-    conversationId ? (state.megaSummaries[conversationId] ?? []) : [],
+    conversationId
+      ? (state.megaSummaries[conversationId] ?? EMPTY_MEGA_SUMMARIES)
+      : EMPTY_MEGA_SUMMARIES,
   );
 
   const sortedSummaries = useMemo(

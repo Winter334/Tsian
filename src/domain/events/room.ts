@@ -432,7 +432,11 @@ export interface NpcInfoUpdatedEvent {
 
 // ===== 角色事件 Payload =====
 
-import type { CharacterStatus, ControlType } from "@/domain/entities/character";
+import type {
+  Character,
+  CharacterStatus,
+  UpdateCharacterParams,
+} from "@/domain/entities/character";
 
 /**
  * 角色创建事件
@@ -440,32 +444,8 @@ import type { CharacterStatus, ControlType } from "@/domain/entities/character";
 export interface CharacterCreatedEvent {
   /** 房间 ID */
   roomId: string;
-  /** 角色 ID */
-  characterId: string;
-  /** 角色名称 */
-  name: string;
-  /** 创建者的 uniqueTag */
-  creatorUniqueTag: string;
-  /** 操作者的 userId */
-  operatorUserId: string;
-  /** 操作者的 uniqueTag */
-  operatorUniqueTag: string;
-  /** 角色状态 */
-  status: CharacterStatus;
-  /** 创建时间 */
-  createdAt: number;
-  /** 角色控制类型 */
-  controlType: ControlType;
-  /** 角色描述 */
-  description?: string;
-  /** 性格特征 */
-  personality?: string;
-  /** 外貌描述 */
-  appearance?: string;
-  /** 维度选择（key: 维度 ID, value: 选项 ID） */
-  dimensionSelections?: Record<string, string>;
-  /** 已选天赋 ID 列表 */
-  talentIds?: string[];
+  /** 完整的角色数据快照 */
+  character: Character;
 }
 
 /**
@@ -481,24 +461,7 @@ export interface CharacterUpdatedEvent {
   /** 操作者的 uniqueTag */
   operatorUniqueTag: string;
   /** 更新的字段 */
-  updates: {
-    /** 角色名称 */
-    name?: string;
-    /** 角色状态 */
-    status?: CharacterStatus;
-    /** 角色属性 */
-    attributes?: Record<string, unknown>;
-    /** 角色背景故事 */
-    description?: string;
-    /** 性格特征 */
-    personality?: string;
-    /** 外貌描述 */
-    appearance?: string;
-    /** 维度选择（key: 维度 ID, value: 选项 ID） */
-    dimensionSelections?: Record<string, string>;
-    /** 已选天赋 ID 列表 */
-    talentIds?: string[];
-  };
+  updates: UpdateCharacterParams;
   /** 更新时间 */
   updatedAt: number;
 }
