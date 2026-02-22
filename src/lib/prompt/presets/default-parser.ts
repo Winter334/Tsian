@@ -185,6 +185,16 @@ export const defaultParserPreset: Preset = {
       injectionDepth: 0,
       order: 5,
     },
+    {
+      id: "user-input",
+      name: "用户输入",
+      content: "{{user_input}}",
+      role: "user",
+      marker: false,
+      injectionDepth: 0,
+      order: 99,
+      enabled: true,
+    },
   ],
   blockOrder: [
     "parser-system-role",
@@ -193,6 +203,7 @@ export const defaultParserPreset: Preset = {
     "character-sheet",
     "anti-repeat-output-rules",
     "memory-summary",
+    "user-input",
   ],
   metadata: {
     version: "1.4.0",

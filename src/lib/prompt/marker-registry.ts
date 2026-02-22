@@ -1170,43 +1170,37 @@ function renderTurnInfo(context: VariableContext): string {
 /**
  * 渲染分段记忆（三级：大总结 + 小总结 + 完整正文）
  *
- * multiMessage 模式：返回多条 AIMessage，
+ * 单消息模式：将所有记忆内容合并为一段文本，
  * 从 VariableContext.memoryData 读取预计算的记忆数据。
+ * 角色由块配置的 role 决定。
  */
-function renderMemorySummaryMessages(
-  context: VariableContext,
-  _block: PromptBlock,
-): AIMessage[] {
+function renderMemorySummary(context: VariableContext): string {
   const memoryData = context.memoryData;
-  if (!memoryData) return [];
+  if (!memoryData) return "";
 
-  const messages: AIMessage[] = [];
   const { megaSummaries, miniSummaries, recentNarratives } = memoryData;
+  const parts: string[] = [];
 
-  // 1. 大总结（最早的历史，system 消息）
+  // 1. 大总结（最早的历史）
   if (megaSummaries.length > 0) {
-    const megaContent = [
-      "【剧情回顾】",
-      ...megaSummaries.map((s) => s.content),
-    ].join("\n\n");
-    messages.push({ role: "system", content: megaContent });
+    parts.push(
+      ["【剧情回顾】", ...megaSummaries.map((s) => s.content)].join("\n\n"),
+    );
   }
 
-  // 2. 小总结（中等时间跨度，system 消息）
+  // 2. 小总结（中等时间跨度）
   if (miniSummaries.length > 0) {
-    const miniContent = [
-      "【近期事件摘要】",
-      ...miniSummaries.map((s) => s.content),
-    ].join("\n\n");
-    messages.push({ role: "system", content: miniContent });
+    parts.push(
+      ["【近期事件摘要】", ...miniSummaries.map((s) => s.content)].join("\n\n"),
+    );
   }
 
-  // 3. 最近回合完整正文（最新的，assistant 消息）
-  for (const narrative of recentNarratives) {
-    messages.push({ role: "assistant", content: narrative.content });
+  // 3. 最近回合完整正文（最新的，不加标记直接拼接）
+  if (recentNarratives.length > 0) {
+    parts.push(recentNarratives.map((n) => n.content).join("\n\n"));
   }
 
-  return messages;
+  return parts.join("\n\n");
 }
 
 // ─── 注册表 ───────────────────────────────────────────────
@@ -1284,9 +1278,7 @@ const MARKER_REGISTRY = [
     id: "memorySummary",
     displayName: "分段记忆",
     description: "注入三级记忆：完整正文 + 小总结 + 大总结",
-    render: () => "",
-    multiMessage: true,
-    renderMessages: renderMemorySummaryMessages,
+    render: renderMemorySummary,
     defaultRole: "system" as const,
     hasConfig: true,
   },

@@ -163,7 +163,7 @@ describe("VariableResolver", () => {
       expect(result.content).toBe("{{chatHistory}}");
     });
 
-    it("{{memorySummary}} 是多消息 Marker，变量模式下不渲染", () => {
+    it("{{memorySummary}} 为单消息 Marker，变量模式下可渲染", () => {
       const resolver = createVariableResolver();
       const ctx = createMinimalContext({
         memoryData: {
@@ -175,7 +175,11 @@ describe("VariableResolver", () => {
         },
       });
       const result = resolver.resolve("{{memorySummary}}", ctx);
-      expect(result.content).toBe("{{memorySummary}}");
+      expect(result.content).toContain("【剧情回顾】");
+      expect(result.content).toContain("远古封印崩解");
+      expect(result.content).toContain("【近期事件摘要】");
+      expect(result.content).toContain("队伍抵达祭坛外围");
+      expect(result.content).toContain("你看见地面浮现银色纹路。");
     });
   });
 

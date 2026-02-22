@@ -20,8 +20,8 @@ describe("默认叙事预设（defaultPreset）", () => {
     expect(defaultPreset.purpose).toBe("narrative");
   });
 
-  it("包含 8 个块", () => {
-    expect(defaultPreset.blocks).toHaveLength(8);
+  it("包含 9 个块", () => {
+    expect(defaultPreset.blocks).toHaveLength(9);
   });
 
   it("blockOrder 与 blocks 数量一致", () => {
@@ -105,6 +105,7 @@ describe("默认叙事预设（defaultPreset）", () => {
       "narrative-thinking",
       "narrative-state",
       "resultFrame",
+      "user-input",
     ]);
   });
 });
@@ -118,8 +119,8 @@ describe("默认解析预设（defaultParserPreset）", () => {
     expect(defaultParserPreset.purpose).toBe("parser");
   });
 
-  it("包含 6 个块", () => {
-    expect(defaultParserPreset.blocks).toHaveLength(6);
+  it("包含 7 个块", () => {
+    expect(defaultParserPreset.blocks).toHaveLength(7);
   });
 
   it("blockOrder 与 blocks 数量一致", () => {
@@ -203,6 +204,7 @@ describe("默认解析预设（defaultParserPreset）", () => {
       "character-sheet",
       "anti-repeat-output-rules",
       "memory-summary",
+      "user-input",
     ]);
   });
 });

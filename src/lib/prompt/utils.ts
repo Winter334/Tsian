@@ -97,6 +97,7 @@ export function buildVariableContext(
     inventoryData?: VariableContext["inventoryData"];
     memoryData?: VariableContext["memoryData"];
     manualMemories?: VariableContext["manualMemories"];
+    userInput?: string;
   },
 ): VariableContext {
   return {
@@ -104,6 +105,7 @@ export function buildVariableContext(
     user: data.user,
     players: data.players,
     chatHistory: data.chatHistory,
+    userInput: data.userInput,
     scenario: data.scenario,
     worldInfo: data.worldInfo,
     turn: data.turn,

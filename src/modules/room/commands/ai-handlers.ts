@@ -325,6 +325,16 @@ export async function processAiTurnHandler(
       timestamp: a.submittedAt,
     }));
 
+    // 构建合并的用户输入文本（联机模式：包含角色名的行动列表）
+    const mergedUserInput = Array.from(actions.entries())
+      .sort(([, a], [, b]) => a.submittedAt - b.submittedAt)
+      .map(([userId, action]) => {
+        const member = members.get(userId);
+        const displayName = member?.displayName || "未知玩家";
+        return `【${displayName}】${action.content}`;
+      })
+      .join("\n");
+
     // 9.1 收集在场 NPC 角色（controlType === 'npc' 且 status === 'active'）
     const charactersMap = mainDoc.getMap("characters") as Y.Map<Y.Map<unknown>>;
     const repo = createGameStateRepository(charactersMap, mainDoc);
@@ -364,6 +374,7 @@ export async function processAiTurnHandler(
       chatHistory: [],
       memoryData,
       activeNpcs: activeNpcs.length > 0 ? activeNpcs : undefined,
+      userInput: mergedUserInput,
     });
 
     // 10. 更新状态为 processing

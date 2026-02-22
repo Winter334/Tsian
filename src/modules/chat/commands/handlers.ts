@@ -24,10 +24,16 @@ import type {
   CreateConversationPayload,
   DeleteConversationPayload,
   DeleteMessagePayload,
+  EditMessagePayload,
+  RegenerateFromCheckpointPayload,
   SelectConversationPayload,
   SendMessagePayload,
 } from "@/domain/commands/chat";
 import { ChatCommands } from "@/domain/commands/chat";
+import {
+  CheckpointCommands,
+  type RestoreCheckpointPayload,
+} from "@/domain/commands/checkpoint";
 import { createConversation } from "@/domain/entities/conversation";
 import { createMessage } from "@/domain/entities/message";
 import { ChatEvents } from "@/domain/events/chat";
@@ -241,6 +247,7 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
         },
         chatHistory,
         memoryData,
+        userInput: content,
       });
 
       // 6. 检查是否有 parser 预设（决定是否走 IRNR 流程）
@@ -357,7 +364,7 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
         const result = await executor.execute({
           preset: narrativePreset,
           variableContext,
-          appendMessages: [{ role: "user", content }],
+          // appendMessages 不再使用，用户输入通过 {{user_input}} 变量注入
           onChunk: (chunk) => {
             session!.appendChunk(chunk);
           },
@@ -460,6 +467,86 @@ const deleteMessageHandler: CommandHandler<DeleteMessagePayload, void> = async (
       success: false,
       error:
         error instanceof Error ? error.message : "Failed to delete message",
+    };
+  }
+};
+
+/**
+ * 编辑消息处理器
+ *
+ * ✅ 通过 Repository 更新（自动发布事件）
+ */
+const editMessageHandler: CommandHandler<EditMessagePayload, void> = async (
+  command: Command<EditMessagePayload>,
+  _context: CommandContext,
+): Promise<CommandResult<void>> => {
+  const { messageId, conversationId, content } = command.payload;
+
+  try {
+    const repository = getChatRepository();
+    repository.updateMessage(conversationId, messageId, { content });
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to edit message",
+    };
+  }
+};
+
+/**
+ * 从检查点重新生成处理器
+ *
+ * 组合操作：先回溯检查点，再发送用户消息触发重新生成
+ */
+const regenerateFromCheckpointHandler: CommandHandler<
+  RegenerateFromCheckpointPayload,
+  void
+> = async (
+  command: Command<RegenerateFromCheckpointPayload>,
+  context: CommandContext,
+): Promise<CommandResult<void>> => {
+  const { checkpointId, userMessage, conversationId } = command.payload;
+
+  try {
+    const restoreResult = await commandBus.dispatch<
+      RestoreCheckpointPayload,
+      void
+    >(
+      {
+        type: CheckpointCommands.RESTORE_CHECKPOINT,
+        payload: { checkpointId },
+      },
+      { correlationId: context.commandId },
+    );
+
+    if (!restoreResult.success) {
+      return {
+        success: false,
+        error: restoreResult.error ?? "Failed to restore checkpoint",
+      };
+    }
+
+    const sendResult = await commandBus.dispatch<SendMessagePayload, void>(
+      {
+        type: ChatCommands.SEND_MESSAGE,
+        payload: {
+          content: userMessage,
+          conversationId,
+          role: "user",
+        },
+      },
+      { correlationId: context.commandId },
+    );
+
+    return sendResult;
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to regenerate from checkpoint",
     };
   }
 };
@@ -604,6 +691,12 @@ export function createChatCommandHandlers(): Record<
       unknown,
       unknown
     >,
+    [ChatCommands.EDIT_MESSAGE]: editMessageHandler as CommandHandler<
+      unknown,
+      unknown
+    >,
+    [ChatCommands.REGENERATE_FROM_CHECKPOINT]:
+      regenerateFromCheckpointHandler as CommandHandler<unknown, unknown>,
     [ChatCommands.CREATE_CONVERSATION]:
       createConversationHandler as CommandHandler<unknown, unknown>,
     [ChatCommands.SELECT_CONVERSATION]:

@@ -629,40 +629,21 @@ describe("chatHistory marker 属性", () => {
 describe("memorySummary marker 属性", () => {
   const marker = getMarkerById("memorySummary")!;
 
-  const block = {
-    id: "memory",
-    name: "memory",
-    content: "",
-    role: "system" as const,
-    marker: true,
-    markerType: "memorySummary" as const,
-    markerConfig: {
-      recentNarrativeCount: 4,
-      miniSummaryCount: 10,
-      megaSummaryMode: "all" as const,
-      megaSummaryLimit: 5,
-      compressionThreshold: 8,
-    },
-    injectionDepth: 0,
-    order: 0,
-    enabled: true,
-  };
-
-  it("multiMessage 为 true", () => {
-    expect(marker.multiMessage).toBe(true);
+  it("multiMessage 为非多消息模式", () => {
+    expect(marker.multiMessage).toBeFalsy();
   });
 
-  it("renderMessages 已定义", () => {
-    expect(marker.renderMessages).toBeDefined();
+  it("render 已定义", () => {
+    expect(marker.render).toBeDefined();
   });
 
-  it("memoryData 缺失时返回空数组", () => {
+  it("memoryData 缺失时返回空字符串", () => {
     const ctx = createMinimalContext();
-    const messages = marker.renderMessages!(ctx, block);
-    expect(messages).toEqual([]);
+    const result = marker.render(ctx);
+    expect(result).toBe("");
   });
 
-  it("renderMessages 返回三级消息结构（大总结 + 小总结 + 完整正文）", () => {
+  it("render 返回三级合并文本（大总结 + 小总结 + 完整正文）", () => {
     const ctx = createMinimalContext({
       memoryData: {
         megaSummaries: [
@@ -680,28 +661,19 @@ describe("memorySummary marker 属性", () => {
       },
     });
 
-    const messages = marker.renderMessages!(ctx, block);
+    const result = marker.render(ctx);
 
-    expect(messages).toHaveLength(4);
-    expect(messages[0]).toEqual({
-      role: "system",
-      content: "【剧情回顾】\n\n远古战争已经结束\n\n王都完成重建",
-    });
-    expect(messages[1]).toEqual({
-      role: "system",
-      content: "【近期事件摘要】\n\n队伍进入了北境哨站\n\n守卫长交付了调查委托",
-    });
-    expect(messages[2]).toEqual({
-      role: "assistant",
-      content: "你推开哨站木门，冷风灌入大厅。",
-    });
-    expect(messages[3]).toEqual({
-      role: "assistant",
-      content: "守卫长将地图摊开，指出了遗迹入口。",
-    });
+    expect(result).toContain("【剧情回顾】");
+    expect(result).toContain("远古战争已经结束");
+    expect(result).toContain("王都完成重建");
+    expect(result).toContain("【近期事件摘要】");
+    expect(result).toContain("队伍进入了北境哨站");
+    expect(result).toContain("守卫长交付了调查委托");
+    expect(result).toContain("你推开哨站木门，冷风灌入大厅。");
+    expect(result).toContain("守卫长将地图摊开，指出了遗迹入口。");
   });
 
-  it("只有大总结时仅输出剧情回顾 system 消息", () => {
+  it("只有大总结时仅输出剧情回顾内容", () => {
     const ctx = createMinimalContext({
       memoryData: {
         megaSummaries: [{ id: "mega-1", content: "旧王朝覆灭" }],
@@ -710,17 +682,14 @@ describe("memorySummary marker 属性", () => {
       },
     });
 
-    const messages = marker.renderMessages!(ctx, block);
+    const result = marker.render(ctx);
 
-    expect(messages).toEqual([
-      {
-        role: "system",
-        content: "【剧情回顾】\n\n旧王朝覆灭",
-      },
-    ]);
+    expect(result).toContain("【剧情回顾】");
+    expect(result).toContain("旧王朝覆灭");
+    expect(result).not.toContain("【近期事件摘要】");
   });
 
-  it("只有小总结时仅输出近期事件摘要 system 消息", () => {
+  it("只有小总结时仅输出近期事件摘要内容", () => {
     const ctx = createMinimalContext({
       memoryData: {
         megaSummaries: [],
@@ -729,17 +698,14 @@ describe("memorySummary marker 属性", () => {
       },
     });
 
-    const messages = marker.renderMessages!(ctx, block);
+    const result = marker.render(ctx);
 
-    expect(messages).toEqual([
-      {
-        role: "system",
-        content: "【近期事件摘要】\n\n队伍在港口完成补给",
-      },
-    ]);
+    expect(result).toContain("【近期事件摘要】");
+    expect(result).toContain("队伍在港口完成补给");
+    expect(result).not.toContain("【剧情回顾】");
   });
 
-  it("只有完整正文时仅输出 assistant 消息", () => {
+  it("只有完整正文时仅输出正文内容", () => {
     const ctx = createMinimalContext({
       memoryData: {
         megaSummaries: [],
@@ -751,17 +717,11 @@ describe("memorySummary marker 属性", () => {
       },
     });
 
-    const messages = marker.renderMessages!(ctx, block);
+    const result = marker.render(ctx);
 
-    expect(messages).toEqual([
-      {
-        role: "assistant",
-        content: "夜色下，篝火映亮了每个人的侧脸。",
-      },
-      {
-        role: "assistant",
-        content: "你听见远处林间传来短促的狼嚎。",
-      },
-    ]);
+    expect(result).toContain("夜色下，篝火映亮了每个人的侧脸。");
+    expect(result).toContain("你听见远处林间传来短促的狼嚎。");
+    expect(result).not.toContain("【剧情回顾】");
+    expect(result).not.toContain("【近期事件摘要】");
   });
 });

@@ -7,11 +7,7 @@
 
 import { macroParser } from "./macros";
 import { findMarkerByIdOrAlias } from "./marker-registry";
-import type {
-  ResolveResult,
-  VariableContext,
-  VariableResolver,
-} from "./types";
+import type { ResolveResult, VariableContext, VariableResolver } from "./types";
 
 /**
  * 变量解析器实现
@@ -115,7 +111,7 @@ class DefaultVariableResolver implements VariableResolver {
   private resolveBuiltinVariable(
     name: string,
     context: VariableContext,
-    _warnings: ResolveResult["warnings"]
+    _warnings: ResolveResult["warnings"],
   ): string | undefined {
     // 优先查 Marker 注册表（按 id 或别名匹配）
     const entry = findMarkerByIdOrAlias(name);
@@ -146,6 +142,9 @@ class DefaultVariableResolver implements VariableResolver {
       case "personality":
         return "";
 
+      case "user_input":
+        return context.userInput ?? "";
+
       case "group":
         if (context.mode === "multiplayer" && context.players) {
           return context.players.map((p) => p.name).join("、");
@@ -173,7 +172,7 @@ class DefaultVariableResolver implements VariableResolver {
    */
   registerVariable(
     name: string,
-    resolver: (ctx: VariableContext) => string
+    resolver: (ctx: VariableContext) => string,
   ): void {
     this.customVariables.set(name, resolver);
   }
@@ -183,7 +182,7 @@ class DefaultVariableResolver implements VariableResolver {
    */
   registerFunction(
     name: string,
-    handler: (args: string[], ctx: VariableContext) => string
+    handler: (args: string[], ctx: VariableContext) => string,
   ): void {
     this.customFunctions.set(name, handler);
   }

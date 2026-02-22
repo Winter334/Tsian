@@ -184,7 +184,7 @@ describe("MessageAssembler", () => {
       expect(messages[1].content).toBe("你好！");
     });
 
-    it("memorySummary Marker 块产生三级多消息", () => {
+    it("memorySummary Marker 块产生单条合并消息", () => {
       const assembler = createMessageAssembler();
       const block = createBlock({
         id: "ms",
@@ -206,18 +206,11 @@ describe("MessageAssembler", () => {
 
       const messages = assembler.assemble(preset, ctx);
 
-      expect(messages).toHaveLength(3);
+      expect(messages).toHaveLength(1);
       expect(messages[0]).toEqual({
         role: "system",
-        content: "【剧情回顾】\n\n王都收复战已经结束",
-      });
-      expect(messages[1]).toEqual({
-        role: "system",
-        content: "【近期事件摘要】\n\n队伍在城门口重整补给",
-      });
-      expect(messages[2]).toEqual({
-        role: "assistant",
-        content: "你抬头看见晨光穿过残垣。",
+        content:
+          "【剧情回顾】\n\n王都收复战已经结束\n\n【近期事件摘要】\n\n队伍在城门口重整补给\n\n你抬头看见晨光穿过残垣。",
       });
     });
 

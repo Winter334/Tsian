@@ -203,6 +203,16 @@ NPC：涉及的 NPC 及行为
       order: 7,
       enabled: true,
     },
+    {
+      id: "user-input",
+      name: "用户输入",
+      content: "{{user_input}}",
+      role: "user",
+      marker: false,
+      injectionDepth: 0,
+      order: 99,
+      enabled: true,
+    },
   ],
   blockOrder: [
     "system-role",
@@ -213,6 +223,7 @@ NPC：涉及的 NPC 及行为
     "narrative-thinking",
     "narrative-state",
     "resultFrame",
+    "user-input",
   ],
   metadata: {
     version: "1.4.0",

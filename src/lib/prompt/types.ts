@@ -187,6 +187,9 @@ export interface VariableContext {
   /** 对话历史 */
   chatHistory: AIMessage[];
 
+  /** 用户当前回合的输入内容（单人模式为聊天框内容，联机模式为所有玩家行动合并） */
+  userInput?: string;
+
   /** 世界信息 */
   worldInfo?: string;
 
