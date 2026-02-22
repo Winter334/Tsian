@@ -72,9 +72,10 @@ export function extractSaveData(saveId: string): ExportedSave | null {
           ...msg,
           metadata: msg.metadata || {},
         })),
-      ])
+      ]),
     ),
     gameState: exportData.gameState,
+    worldConfig: exportData.worldConfig,
     // 角色数据（Phase 2 新增）
     characters: exportData.characters,
   };

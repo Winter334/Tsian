@@ -41,7 +41,7 @@ import {
   type EntityAliasMap,
 } from "@/lib/rules/schema";
 import type { WorldConfig } from "@/lib/world";
-import { DEFAULT_WORLD_CONFIG } from "@/lib/world";
+import { getRuntimeWorldConfig } from "@/lib/world/resolve-config";
 import { useInventoryStore } from "@/modules/inventory/store";
 import {
   createDelayedCommitManager,
@@ -115,7 +115,7 @@ async function executePipeline(input: {
   messageId?: string;
   messageIndex?: number;
 }): Promise<IrnrPipelineResult> {
-  const worldConfig = input.worldConfig ?? DEFAULT_WORLD_CONFIG;
+  const worldConfig = input.worldConfig ?? getRuntimeWorldConfig();
   const commitManager: DelayedCommitManager = createDelayedCommitManager();
 
   // ── Phase 0: 构建 EntityAccessor ────────────────────────

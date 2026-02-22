@@ -1650,6 +1650,88 @@ function executeGrantItem(
     }
   }
 
+  // 装备槽位校验（运行时 WorldConfig 驱动）
+  if (typeof action.equipSlot === "string") {
+    const slotDefinitions =
+      context.worldConfig.inventoryRules?.equipSlotDefinitions;
+
+    if (!slotDefinitions || slotDefinitions.length === 0) {
+      console.warn(
+        `[RulesEngine] grantItem: 当前世界没有装备系统，无法设置装备槽位 "${action.equipSlot}"`,
+      );
+      state.structuralChanges.push({
+        type: "item_added",
+        entityId: `failed_${crypto.randomUUID()}`,
+        targetId,
+        templateId: action.templateId,
+        details: {
+          name: action.name,
+          category: action.category,
+          quantity: action.quantity ?? 1,
+          failed: true,
+          failReason: "当前世界没有装备系统",
+        },
+        reason:
+          action.reason ??
+          `获得物品「${action.name}」（失败：当前世界没有装备系统）`,
+      });
+      return;
+    }
+
+    const slotDefinition = slotDefinitions.find(
+      (slot) => slot.id === action.equipSlot,
+    );
+    if (!slotDefinition) {
+      console.warn(
+        `[RulesEngine] grantItem: 无效装备槽位 "${action.equipSlot}"，跳过物品 "${action.name}"`,
+      );
+      state.structuralChanges.push({
+        type: "item_added",
+        entityId: `failed_${crypto.randomUUID()}`,
+        targetId,
+        templateId: action.templateId,
+        details: {
+          name: action.name,
+          category: action.category,
+          quantity: action.quantity ?? 1,
+          failed: true,
+          failReason: `无效装备槽位: ${action.equipSlot}`,
+        },
+        reason:
+          action.reason ?? `获得物品「${action.name}」（失败：无效装备槽位）`,
+      });
+      return;
+    }
+
+    if (
+      slotDefinition.allowedCategories &&
+      !slotDefinition.allowedCategories.some(
+        (allowedCategory) => allowedCategory === action.category,
+      )
+    ) {
+      console.warn(
+        `[RulesEngine] grantItem: 槽位 "${slotDefinition.id}" 不允许类别 "${action.category}"，跳过物品 "${action.name}"`,
+      );
+      state.structuralChanges.push({
+        type: "item_added",
+        entityId: `failed_${crypto.randomUUID()}`,
+        targetId,
+        templateId: action.templateId,
+        details: {
+          name: action.name,
+          category: action.category,
+          quantity: action.quantity ?? 1,
+          failed: true,
+          failReason: `${slotDefinition.label} 不允许类别 ${action.category}`,
+        },
+        reason:
+          action.reason ??
+          `获得物品「${action.name}」（失败：装备槽位类别不匹配）`,
+      });
+      return;
+    }
+  }
+
   // 生成新的物品实例 ID
   const instanceId = crypto.randomUUID();
 
@@ -1663,6 +1745,9 @@ function executeGrantItem(
       description: action.description,
       category: action.category,
       quantity: action.quantity ?? 1,
+      ...(typeof action.equipSlot === "string"
+        ? { equipSlot: action.equipSlot }
+        : {}),
     },
     reason: action.reason ?? `获得物品「${action.name}」`,
   });

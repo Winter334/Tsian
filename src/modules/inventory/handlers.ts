@@ -31,6 +31,7 @@ import type {
   SkillRemovedPayload,
 } from "@/domain/events/inventory";
 import { InventoryEvents } from "@/domain/events/inventory";
+import { getRuntimeWorldConfig } from "@/lib/world";
 import { getInventoryRepository } from "./repository";
 import { useInventoryStore } from "./store";
 
@@ -60,7 +61,37 @@ const handleGrantItem: CommandHandler<
     return { success: false, error: "No active save slot" };
   }
 
-  // 2. 创建物品实例
+  // 2. 校验装备槽位（数据驱动）
+  const worldConfig = getRuntimeWorldConfig();
+  const slotDefinitions = worldConfig.inventoryRules?.equipSlotDefinitions;
+
+  if (equipSlot !== undefined) {
+    if (!slotDefinitions || slotDefinitions.length === 0) {
+      return { success: false, error: "Current world has no equipment system" };
+    }
+
+    const slotDefinition = slotDefinitions.find(
+      (slot) => slot.id === equipSlot,
+    );
+    if (!slotDefinition) {
+      return {
+        success: false,
+        error: `Invalid equip slot: ${equipSlot}`,
+      };
+    }
+
+    if (
+      slotDefinition.allowedCategories &&
+      !slotDefinition.allowedCategories.includes(category)
+    ) {
+      return {
+        success: false,
+        error: `${slotDefinition.label} does not allow category: ${category}`,
+      };
+    }
+  }
+
+  // 3. 创建物品实例
   const item = createItemInstance({
     templateId: templateId ?? `ai-${crypto.randomUUID()}`,
     name,
@@ -71,13 +102,13 @@ const handleGrantItem: CommandHandler<
     source: templateId ? "predefined" : "ai-generated",
   });
 
-  // 3. 写入 Yjs
+  // 4. 写入 Yjs
   repo.addItem(characterId, item);
 
-  // 4. 更新 Store
+  // 5. 更新 Store
   useInventoryStore.getState()._addItem(characterId, item);
 
-  // 5. 发射事件
+  // 6. 发射事件
   eventBus.emit(
     eventBus.createEvent<ItemGrantedPayload>(
       InventoryEvents.ITEM_GRANTED,

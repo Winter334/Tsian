@@ -191,6 +191,12 @@ export interface GrantItemAction extends RuleActionBase {
   category: string;
   /** 数量，默认 1 */
   quantity?: number;
+  /**
+   * 目标装备槽位 ID（可选）
+   *
+   * 运行时将根据 WorldConfig.inventoryRules.equipSlotDefinitions 校验合法性。
+   */
+  equipSlot?: string;
   reason?: string;
 }
 

@@ -13,6 +13,8 @@ export const ChatCommands = {
   SEND_MESSAGE: "chat.send_message",
   DELETE_MESSAGE: "chat.delete_message",
   REGENERATE_MESSAGE: "chat.regenerate_message",
+  EDIT_MESSAGE: "chat.edit_message",
+  REGENERATE_FROM_CHECKPOINT: "chat.regenerate_from_checkpoint",
   STOP_GENERATION: "chat.stop_generation",
 
   // 会话命令
@@ -52,6 +54,24 @@ export interface DeleteMessagePayload {
  */
 export interface RegenerateMessagePayload {
   messageId: string;
+  conversationId: string;
+}
+
+/**
+ * 编辑消息命令 Payload
+ */
+export interface EditMessagePayload {
+  messageId: string;
+  conversationId: string;
+  content: string;
+}
+
+/**
+ * 从检查点重新生成命令 Payload
+ */
+export interface RegenerateFromCheckpointPayload {
+  checkpointId: string;
+  userMessage: string;
   conversationId: string;
 }
 
@@ -112,6 +132,8 @@ export interface ChatCommandPayloads {
   [ChatCommands.SEND_MESSAGE]: SendMessagePayload;
   [ChatCommands.DELETE_MESSAGE]: DeleteMessagePayload;
   [ChatCommands.REGENERATE_MESSAGE]: RegenerateMessagePayload;
+  [ChatCommands.EDIT_MESSAGE]: EditMessagePayload;
+  [ChatCommands.REGENERATE_FROM_CHECKPOINT]: RegenerateFromCheckpointPayload;
   [ChatCommands.STOP_GENERATION]: StopGenerationPayload;
   [ChatCommands.CREATE_CONVERSATION]: CreateConversationPayload;
   [ChatCommands.UPDATE_CONVERSATION]: UpdateConversationPayload;

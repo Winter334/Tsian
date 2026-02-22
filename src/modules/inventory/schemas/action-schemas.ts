@@ -64,6 +64,13 @@ const grantItemSchema: ActionSchema = {
       defaultValue: 1,
     },
     {
+      name: "equipSlot",
+      type: "string",
+      required: false,
+      description:
+        "装备槽位 ID（动态值）。合法取值来自 WorldConfig.inventoryRules.equipSlotDefinitions[*].id",
+    },
+    {
       name: "reason",
       type: "string",
       required: false,
@@ -75,6 +82,7 @@ const grantItemSchema: ActionSchema = {
     "如果提供了 templateId，引擎会优先使用模板中的数据，name/description/category 仍需填写作为回退",
     "没有 templateId 时，AI 动态创造的物品会被标记为 ai-generated",
     "category 必须是枚举值之一，不能自定义",
+    "equipSlot（若提供）必须来自 WorldConfig.inventoryRules.equipSlotDefinitions 且与 category 约束匹配",
   ],
   examples: [
     {

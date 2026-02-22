@@ -58,6 +58,8 @@ import { SaveEvents } from "@/domain/events/save";
 import { postProcessForPersist } from "@/lib/post-process";
 import { usePresetStore } from "@/lib/prompt";
 import { getUniqueTag } from "@/lib/user-identity";
+import { resolveWorldConfig } from "@/lib/world/resolve-config";
+import { worldConfigToYMap } from "@/lib/world/world-config-codec";
 import {
   applyCharacterUpdates,
   characterToYMap,
@@ -168,6 +170,10 @@ export async function createRoomHandler(
   const now = Date.now();
   let code: string = "";
   let retryCount = 0;
+
+  // 联机建档的 WorldConfig 快照来源：当前活动 Preset
+  const activePreset = usePresetStore.getState().activePreset;
+  const worldConfig = resolveWorldConfig(activePreset);
 
   // 确保 API 客户端已配置
   const config = getMultiplayerConfig();
@@ -422,6 +428,14 @@ export async function createRoomHandler(
         members: [hostMemberInfo],
       });
 
+      // 写入 WorldConfig 快照（联机建档与单机建档保持一致）
+      const createdSave = yjsManager.getSaveSlots().get(saveId) as
+        | Y.Map<unknown>
+        | undefined;
+      if (createdSave) {
+        createdSave.set("worldConfig", worldConfigToYMap(worldConfig));
+      }
+
       // 将 saveId 写入 MainDoc（新建场景）
       const configMap = mainDoc.getMap("config");
       configMap.set("saveId", saveId);
@@ -434,6 +448,7 @@ export async function createRoomHandler(
       });
 
       // 加载新创建的存档
+      const previousSaveId = yjsManager.getCurrentSaveId();
       yjsManager.loadSave(saveId);
 
       // 发布 SAVE_CREATED 事件（通知 Chat 模块初始化会话）
@@ -442,6 +457,15 @@ export async function createRoomHandler(
         eventBus.createEvent(SaveEvents.SAVE_CREATED, {
           saveId,
           name: saveName,
+        }),
+      );
+
+      // 对齐 Save 模块行为：联机建档后也发布 SAVE_LOADED
+      eventBus.emit(
+        eventBus.createEvent(SaveEvents.SAVE_LOADED, {
+          saveId,
+          previousSaveId,
+          saveType: "multiplayer",
         }),
       );
     }
@@ -499,6 +523,10 @@ export async function joinRoomHandler(
 ): Promise<CommandResult<{ roomId: string; isHost: boolean }>> {
   const { code, userId, displayName } = payload;
   const now = Date.now();
+
+  // 联机建档的 WorldConfig 快照来源：当前活动 Preset
+  const activePreset = usePresetStore.getState().activePreset;
+  const worldConfig = resolveWorldConfig(activePreset);
 
   // 确保 API 客户端已配置
   const config = getMultiplayerConfig();
@@ -731,8 +759,18 @@ export async function joinRoomHandler(
     if (!isCurrentMatching) {
       if (matchedSave) {
         // 找到匹配的存档，加载它
+        const previousSaveId = yjsManager.getCurrentSaveId();
         yjsManager.loadSave(matchedSave.id);
         guestSaveId = matchedSave.id;
+
+        // 对齐 Save 模块行为：联机入房加载存档后发布 SAVE_LOADED
+        eventBus.emit(
+          eventBus.createEvent(SaveEvents.SAVE_LOADED, {
+            saveId: matchedSave.id,
+            previousSaveId,
+            saveType: "multiplayer",
+          }),
+        );
       } else if (hostSaveId) {
         // 没有找到匹配的存档，使用 createSaveWithId 创建相同 saveId 的存档
         const guestMemberInfo: SaveMemberInfo = {
@@ -748,7 +786,25 @@ export async function joinRoomHandler(
           members: [guestMemberInfo],
         });
 
+        // 写入 WorldConfig 快照（联机建档与单机建档保持一致）
+        const createdGuestSave = yjsManager.getSaveSlots().get(guestSaveId) as
+          | Y.Map<unknown>
+          | undefined;
+        if (createdGuestSave) {
+          createdGuestSave.set("worldConfig", worldConfigToYMap(worldConfig));
+        }
+
+        const previousSaveId = yjsManager.getCurrentSaveId();
         yjsManager.loadSave(guestSaveId);
+
+        // 对齐 Save 模块行为：联机入房创建并加载存档后发布 SAVE_LOADED
+        eventBus.emit(
+          eventBus.createEvent(SaveEvents.SAVE_LOADED, {
+            saveId: guestSaveId,
+            previousSaveId,
+            saveType: "multiplayer",
+          }),
+        );
       } else {
         // 兼容旧逻辑：如果 MainDoc 没有 saveId，回退到创建新存档
         const guestMemberInfo: SaveMemberInfo = {
@@ -763,7 +819,25 @@ export async function joinRoomHandler(
           members: [guestMemberInfo],
         });
 
+        // 写入 WorldConfig 快照（兼容旧房间缺失 saveId 的回退建档路径）
+        const fallbackGuestSave = yjsManager.getSaveSlots().get(guestSaveId) as
+          | Y.Map<unknown>
+          | undefined;
+        if (fallbackGuestSave) {
+          fallbackGuestSave.set("worldConfig", worldConfigToYMap(worldConfig));
+        }
+
+        const previousSaveId = yjsManager.getCurrentSaveId();
         yjsManager.loadSave(guestSaveId);
+
+        // 对齐 Save 模块行为：联机入房创建并加载存档后发布 SAVE_LOADED
+        eventBus.emit(
+          eventBus.createEvent(SaveEvents.SAVE_LOADED, {
+            saveId: guestSaveId,
+            previousSaveId,
+            saveType: "multiplayer",
+          }),
+        );
       }
     }
 

@@ -20,15 +20,7 @@ export type ItemCategory =
 
 // ─── 装备槽位 ──────────────────────────────────────
 
-export type EquipSlot =
-  | "main_hand"
-  | "off_hand"
-  | "head"
-  | "body"
-  | "legs"
-  | "feet"
-  | "accessory_1"
-  | "accessory_2";
+export type EquipSlot = string;
 
 // ─── 物品效果（V1 仅做叙事标注，V1.5 再激活 modifier 逻辑）──
 

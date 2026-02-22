@@ -111,6 +111,8 @@ async function dispatchGrantItem(
     typeof details.description === "string" ? details.description : "";
   const category = isItemCategory(details.category) ? details.category : "misc";
   const quantity = typeof details.quantity === "number" ? details.quantity : 1;
+  const equipSlot =
+    typeof details.equipSlot === "string" ? details.equipSlot : undefined;
 
   await commandBus.dispatch({
     type: InventoryCommands.GRANT_ITEM,
@@ -121,6 +123,7 @@ async function dispatchGrantItem(
       description,
       category,
       quantity,
+      equipSlot,
       reason: change.reason,
     },
   });

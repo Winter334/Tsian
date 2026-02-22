@@ -7,11 +7,7 @@
  * @module inventory/repository/inventory-codec
  */
 
-import type {
-  EquipSlot,
-  ItemCategory,
-  ItemInstance,
-} from "@/domain/entities/item";
+import type { ItemCategory, ItemInstance } from "@/domain/entities/item";
 import type {
   ResourceCost,
   SkillCategory,
@@ -29,17 +25,6 @@ const VALID_ITEM_CATEGORIES: ReadonlySet<string> = new Set<ItemCategory>([
   "material",
   "quest",
   "misc",
-]);
-
-const VALID_EQUIP_SLOTS: ReadonlySet<string> = new Set<EquipSlot>([
-  "main_hand",
-  "off_hand",
-  "head",
-  "body",
-  "legs",
-  "feet",
-  "accessory_1",
-  "accessory_2",
 ]);
 
 const VALID_SKILL_CATEGORIES: ReadonlySet<string> = new Set<SkillCategory>([
@@ -60,8 +45,8 @@ function isItemCategory(value: unknown): value is ItemCategory {
   return typeof value === "string" && VALID_ITEM_CATEGORIES.has(value);
 }
 
-function isEquipSlot(value: unknown): value is EquipSlot {
-  return typeof value === "string" && VALID_EQUIP_SLOTS.has(value);
+function isEquipSlot(value: unknown): value is string {
+  return typeof value === "string";
 }
 
 function isSkillCategory(value: unknown): value is SkillCategory {

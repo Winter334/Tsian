@@ -1,23 +1,47 @@
 /**
  * 世界配置解析工具
  *
- * 合并预设中的 worldConfig 覆盖与默认配置
+ * - resolveWorldConfig：创作阶段（GameWizard / 预设预览）
+ * - getRuntimeWorldConfig：运行阶段（从存档快照读取）
  */
 
+import * as Y from "yjs";
+
+import { yjsManager } from "@/core/yjs";
 import type { Preset } from "@/lib/prompt/types";
 
 import type { WorldConfig } from "./types";
 import { DEFAULT_WORLD_CONFIG } from "./types";
+import { worldConfigFromYMap } from "./world-config-codec";
+
+export { worldConfigFromYMap, worldConfigToYMap } from "./world-config-codec";
 
 /**
- * 合并预设中的世界配置与默认配置
+ * 获取运行时 WorldConfig。
  *
- * 策略：预设值浅覆盖默认值
- * - 如果预设未设置 worldConfig，返回 DEFAULT_WORLD_CONFIG
- * - 如果预设设置了部分字段，浅覆盖对应字段
+ * 优先级：
+ * 1. 当前存档中的 worldConfig 快照
+ * 2. DEFAULT_WORLD_CONFIG（兜底）
+ */
+export function getRuntimeWorldConfig(): WorldConfig {
+  const save = yjsManager.getCurrentSave();
+  if (!save) return DEFAULT_WORLD_CONFIG;
+
+  const worldConfigValue = save.get("worldConfig");
+  if (!(worldConfigValue instanceof Y.Map)) return DEFAULT_WORLD_CONFIG;
+
+  const decoded = worldConfigFromYMap(worldConfigValue);
+  return decoded ?? DEFAULT_WORLD_CONFIG;
+}
+
+/**
+ * 从预设解析 WorldConfig（仅限创作阶段）。
  *
- * @param preset 活动预设（可选）
- * @returns 合并后的完整 WorldConfig
+ * 仅用于：
+ * - GameWizard 创建新游戏时（存档尚未创建）
+ * - 预设编辑器预览
+ *
+ * 运行时业务逻辑应使用 getRuntimeWorldConfig()，避免受 activePreset 切换影响。
  */
 export function resolveWorldConfig(preset?: Preset | null): WorldConfig {
   if (!preset?.worldConfig) return DEFAULT_WORLD_CONFIG;

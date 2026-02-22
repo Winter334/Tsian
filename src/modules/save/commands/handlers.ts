@@ -5,6 +5,8 @@
  * 负责创建、加载、删除、重命名存档槽位
  */
 
+import * as Y from "yjs";
+
 import { eventBus } from "@/core";
 import type {
   Command,
@@ -22,9 +24,11 @@ import type {
 import { SaveCommands } from "@/domain/commands/save";
 import { createCharacter } from "@/domain/entities/character";
 import { SaveEvents } from "@/domain/events/save";
+import { usePresetStore } from "@/lib/prompt";
 import { getOrCreateUserId, getUniqueTag } from "@/lib/user-identity";
+import { resolveWorldConfig } from "@/lib/world/resolve-config";
+import { worldConfigToYMap } from "@/lib/world/world-config-codec";
 import { characterToYMap } from "@/modules/game/repository";
-import * as Y from "yjs";
 
 /**
  * 创建存档处理器
@@ -42,16 +46,22 @@ const createSaveHandler: CommandHandler<CreateSavePayload, string> = async (
     // 1. 获取之前的存档 ID
     const previousSaveId = yjsManager.getCurrentSaveId();
 
-    // 2. 创建存档槽位（默认为 solo 类型）
+    // 2. 从当前激活预设解析 WorldConfig（用于写入快照）
+    const activePreset = usePresetStore.getState().activePreset;
+    const worldConfig = resolveWorldConfig(activePreset);
+
+    // 3. 创建存档槽位（默认为 solo 类型）
     const saveId = yjsManager.createSave({ name });
 
-    // 3. 加载新创建的存档
+    // 4. 加载新创建的存档
     yjsManager.loadSave(saveId);
 
-    // 4. 写入初始角色数据（单机模式）
-    if (initialCharacter) {
-      const save = yjsManager.getCurrentSave();
-      if (save) {
+    // 5. 写入 WorldConfig 快照与初始角色数据（单机模式）
+    const save = yjsManager.getCurrentSave();
+    if (save) {
+      save.set("worldConfig", worldConfigToYMap(worldConfig));
+
+      if (initialCharacter) {
         const userId = getOrCreateUserId();
         const uniqueTag = getUniqueTag() || "solo-player";
 

@@ -7,17 +7,19 @@
  * 注意：模块间通过 EventBus/CommandBus 通信，不应直接 import 其他模块代码。
  */
 
+import { registry } from "@/core";
+
 import { registerChatModule, unregisterChatModule } from "./chat";
 import { registerCheckpointModule } from "./checkpoint";
+import { setupConditionalModules } from "./conditional";
 import { registerDataModule, unregisterDataModule } from "./data";
 import { registerGameModule, unregisterGameModule } from "./game";
-import {
-  registerInventoryModule,
-  unregisterInventoryModule,
-} from "./inventory";
+import { unregisterInventoryModule } from "./inventory";
 import { registerMemoryModule, unregisterMemoryModule } from "./memory";
 import { registerRoomModule } from "./room";
 import { registerSaveModule, unregisterSaveModule } from "./save";
+
+let cleanupConditionalModules: (() => void) | null = null;
 
 /**
  * 注册所有模块
@@ -35,8 +37,8 @@ export async function registerAllModules(): Promise<void> {
   // Phase 2: IRNR 模块
   await registerGameModule();
 
-  // Phase 2.5: Inventory 模块（物品/技能系统）
-  await registerInventoryModule();
+  // Phase 2.5: 条件模块（事件驱动，不在此处直接注册）
+  cleanupConditionalModules = setupConditionalModules();
 
   // Phase 2.6: Checkpoint 模块（检查点系统）
   await registerCheckpointModule();
@@ -51,9 +53,17 @@ export async function registerAllModules(): Promise<void> {
  * 在应用卸载时调用（如热更新时）
  */
 export async function unregisterAllModules(): Promise<void> {
+  // 清理条件模块监听
+  if (cleanupConditionalModules) {
+    cleanupConditionalModules();
+    cleanupConditionalModules = null;
+  }
+
   // 按注册的逆序卸载
   // Room 模块暂无 unregister（命令处理器会被覆盖）
-  await unregisterInventoryModule();
+  if (registry.hasModule("lyra.inventory")) {
+    await unregisterInventoryModule();
+  }
   await unregisterDataModule();
   await unregisterMemoryModule();
   await unregisterChatModule();

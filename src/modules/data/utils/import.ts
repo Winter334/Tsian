@@ -38,7 +38,7 @@ export async function readJsonFile(file: File): Promise<unknown> {
  * 解析并验证导入文件
  */
 export async function parseImportFile(
-  file: File
+  file: File,
 ): Promise<{ data: ExportData } | { error: string }> {
   try {
     const rawData = await readJsonFile(file);
@@ -93,6 +93,7 @@ function convertToImportSaveData(save: ExportedSave) {
     conversations: save.conversations,
     messages: save.messages,
     gameState: save.gameState,
+    worldConfig: save.worldConfig,
     // 角色数据（Phase 2 新增）
     characters: save.characters,
   };

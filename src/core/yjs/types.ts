@@ -3,6 +3,7 @@
  */
 
 import type { CharacterStatus } from "@/domain/entities/character";
+import type { WorldConfig } from "@/lib/world/types";
 import type * as Y from "yjs";
 
 /**
@@ -234,6 +235,8 @@ export interface ImportSaveData {
   messages: Record<string, ImportMessageData[]>;
   /** 游戏状态 */
   gameState: Record<string, unknown>;
+  /** 世界配置快照 */
+  worldConfig?: WorldConfig;
   /** 角色列表（Phase 2 新增） */
   characters?: ImportCharacterData[];
 }
@@ -308,6 +311,8 @@ export interface ExportSaveData {
   messages: Record<string, ExportMessageData[]>;
   /** 游戏状态 */
   gameState: Record<string, unknown>;
+  /** 世界配置快照 */
+  worldConfig?: WorldConfig;
   /** 角色列表（Phase 2 新增） */
   characters?: ExportCharacterData[];
 }

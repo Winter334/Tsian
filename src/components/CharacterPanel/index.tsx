@@ -29,9 +29,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui";
 import { yjsManager } from "@/core/yjs";
 import type { Character } from "@/domain/entities/character";
-import { usePresetStore } from "@/lib/prompt/store";
 import { computeDerivedStats } from "@/lib/rules/derived-stats";
-import { resolveWorldConfig } from "@/lib/world/resolve-config";
+import { getRuntimeWorldConfig } from "@/lib/world/resolve-config";
 import type { TalentConfig, WorldConfig } from "@/lib/world/types";
 import { resolveDimensionSelections } from "@/lib/world/types";
 import { useCurrentSaveId } from "@/modules";
@@ -113,11 +112,15 @@ function getTalent(
   return worldConfig.talents?.find((t) => t.id === talentId);
 }
 
-// ── Hook: 从 activePreset 解析运行时 WorldConfig ──
+// ── Hook: 读取运行时 WorldConfig（来自当前存档快照） ──
 
 function useRuntimeWorldConfig(): WorldConfig {
-  const activePreset = usePresetStore((s) => s.activePreset);
-  return useMemo(() => resolveWorldConfig(activePreset), [activePreset]);
+  const currentSaveId = useCurrentSaveId();
+  return useMemo(() => {
+    // 显式依赖 currentSaveId，确保切换存档时重新读取快照
+    void currentSaveId;
+    return getRuntimeWorldConfig();
+  }, [currentSaveId]);
 }
 
 function getCategoryIcon(category?: TalentConfig["category"]) {
@@ -708,7 +711,13 @@ function renderActiveTabContent(
     case "skills":
       return <SkillSection characterId={character.id} animationIndex={0} />;
     case "inventory":
-      return <InventorySection characterId={character.id} animationIndex={0} />;
+      return (
+        <InventorySection
+          characterId={character.id}
+          worldConfig={worldConfig}
+          animationIndex={0}
+        />
+      );
     case "npcs":
       return <NpcList />;
   }

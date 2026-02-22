@@ -2,7 +2,7 @@
  * 世界配置（WorldConfig）类型定义
  */
 
-import type { EquipSlot, ItemTemplate } from "@/domain/entities/item";
+import type { ItemCategory, ItemTemplate } from "@/domain/entities/item";
 import type { SkillTemplate } from "@/domain/entities/skill";
 import type {
   ConditionTrigger,
@@ -178,11 +178,28 @@ export interface PointBuyRules {
 
 // ─── 背包规则配置 ──────────────────────────────────
 
+export interface EquipSlotDefinition {
+  /** 槽位 ID，如 "main_hand"、"dantian"、"chip_slot" */
+  id: string;
+  /** 显示名称，如 "主手"、"丹田"、"芯片槽" */
+  label: string;
+  /** 限制该槽位可装备的物品类别（不设置 = 不限制） */
+  allowedCategories?: ItemCategory[];
+  /** 该槽位可装备的物品数量（默认 1） */
+  maxCount?: number;
+}
+
 export interface InventoryRulesConfig {
   /** 默认背包容量，默认 20 */
   defaultCapacity?: number;
-  /** 启用的装备槽位 */
-  equipSlots?: EquipSlot[];
+  /**
+   * 装备槽位定义列表
+   *
+   * 替代原有的 equipSlots: EquipSlot[] 字段。
+   * 每个槽位有独立的 id、label、约束条件。
+   * 不设置则表示该世界没有装备系统。
+   */
+  equipSlotDefinitions?: EquipSlotDefinition[];
 }
 
 export interface WorldConfig {
@@ -708,15 +725,27 @@ export const DEFAULT_WORLD_CONFIG: WorldConfig = {
   ],
   inventoryRules: {
     defaultCapacity: 20,
-    equipSlots: [
-      "main_hand",
-      "off_hand",
-      "head",
-      "body",
-      "legs",
-      "feet",
-      "accessory_1",
-      "accessory_2",
+    equipSlotDefinitions: [
+      { id: "main_hand", label: "主手", allowedCategories: ["weapon"] },
+      {
+        id: "off_hand",
+        label: "副手",
+        allowedCategories: ["weapon", "armor"],
+      },
+      { id: "head", label: "头部", allowedCategories: ["armor"] },
+      { id: "body", label: "身体", allowedCategories: ["armor"] },
+      { id: "legs", label: "腿部", allowedCategories: ["armor"] },
+      { id: "feet", label: "脚部", allowedCategories: ["armor"] },
+      {
+        id: "accessory_1",
+        label: "饰品1",
+        allowedCategories: ["accessory"],
+      },
+      {
+        id: "accessory_2",
+        label: "饰品2",
+        allowedCategories: ["accessory"],
+      },
     ],
   },
   dimensions: [

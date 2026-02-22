@@ -4,6 +4,8 @@
  * 这些类型定义属于领域层，用于数据导出/导入功能
  */
 
+import type { WorldConfig } from "@/lib/world/types";
+
 import type { CharacterStatus } from "./character";
 
 /**
@@ -87,6 +89,8 @@ export interface ExportedSave {
   messages: Record<string, ExportedMessage[]>;
   /** 游戏状态（预留扩展） */
   gameState: Record<string, unknown>;
+  /** 世界配置快照 */
+  worldConfig?: WorldConfig;
   /** 角色列表（Phase 2 新增） */
   characters?: ExportedCharacter[];
 }

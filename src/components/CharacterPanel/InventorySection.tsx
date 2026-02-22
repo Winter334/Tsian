@@ -17,11 +17,8 @@ import {
   Sword,
 } from "lucide-react";
 
-import type {
-  EquipSlot,
-  ItemCategory,
-  ItemInstance,
-} from "@/domain/entities/item";
+import type { ItemCategory, ItemInstance } from "@/domain/entities/item";
+import type { WorldConfig } from "@/lib/world";
 import { useInventoryStore } from "@/modules/inventory/store";
 import { color, colorAlpha, glow } from "@/styles/tokens";
 
@@ -38,19 +35,6 @@ const CATEGORY_LABELS: Record<ItemCategory, string> = {
   material: "素材",
   quest: "任务物品",
   misc: "杂物",
-};
-
-// ── 装备槽位中文映射 ──
-
-const EQUIP_SLOT_LABELS: Record<EquipSlot, string> = {
-  main_hand: "主手",
-  off_hand: "副手",
-  head: "头部",
-  body: "身体",
-  legs: "腿部",
-  feet: "足部",
-  accessory_1: "饰品栏 1",
-  accessory_2: "饰品栏 2",
 };
 
 function getCategoryIcon(category: ItemCategory) {
@@ -94,15 +78,25 @@ const sectionVariants = {
 
 interface InventorySectionProps {
   characterId: string;
+  worldConfig: WorldConfig;
   /** 动画序号，与 CharacterPanel 中其他 Section 的 custom 值衔接 */
   animationIndex?: number;
 }
 
 export function InventorySection({
   characterId,
+  worldConfig,
   animationIndex = 4,
 }: InventorySectionProps) {
   const items = useInventoryStore((s) => s.items[characterId] ?? EMPTY_ITEMS);
+  const equipSlotDefinitions =
+    worldConfig.inventoryRules?.equipSlotDefinitions ?? [];
+  const equipSlotLabelMap = new Map(
+    equipSlotDefinitions.map((slotDefinition) => [
+      slotDefinition.id,
+      slotDefinition.label,
+    ]),
+  );
 
   return (
     <motion.div
@@ -247,7 +241,8 @@ export function InventorySection({
                             color: color("primary"),
                           }}
                         >
-                          {EQUIP_SLOT_LABELS[item.equipSlot] ?? item.equipSlot}
+                          {equipSlotLabelMap.get(item.equipSlot) ??
+                            item.equipSlot}
                         </span>
                       </div>
                     )}

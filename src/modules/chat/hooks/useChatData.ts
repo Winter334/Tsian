@@ -19,29 +19,42 @@ import type * as Y from "yjs";
  * 订阅当前存档 ID 变化
  * 使用 EventBus 监听存档切换事件，实现即时响应
  */
-function useCurrentSaveIdInternal(): string | null {
-  const [saveId, setSaveId] = useState<string | null>(() =>
-    yjsManager.getCurrentSaveId()
-  );
+interface CurrentSaveStateInternal {
+  saveId: string | null;
+  revision: number;
+}
+
+function useCurrentSaveIdInternal(): CurrentSaveStateInternal {
+  const [currentSaveState, setCurrentSaveState] =
+    useState<CurrentSaveStateInternal>(() => ({
+      saveId: yjsManager.getCurrentSaveId(),
+      revision: 0,
+    }));
 
   useEffect(() => {
     // 统一的存档变化处理器
-    const syncSaveId = () => setSaveId(yjsManager.getCurrentSaveId());
+    const syncSaveState = () => {
+      const nextSaveId = yjsManager.getCurrentSaveId();
+      setCurrentSaveState((prev) => ({
+        saveId: nextSaveId,
+        revision: prev.revision + 1,
+      }));
+    };
 
     // 订阅所有存档相关事件
     const unsubscribes = [
-      eventBus.on(SaveEvents.SAVE_LOADED, syncSaveId),
-      eventBus.on(SaveEvents.SAVE_CREATED, syncSaveId),
-      eventBus.on(SaveEvents.SAVE_DELETED, syncSaveId),
+      eventBus.on(SaveEvents.SAVE_LOADED, syncSaveState),
+      eventBus.on(SaveEvents.SAVE_CREATED, syncSaveState),
+      eventBus.on(SaveEvents.SAVE_DELETED, syncSaveState),
     ];
 
     // 初始同步
-    syncSaveId();
+    syncSaveState();
 
     return () => unsubscribes.forEach((unsub) => unsub());
   }, []);
 
-  return saveId;
+  return currentSaveState;
 }
 
 /**
@@ -53,7 +66,8 @@ export function useConversations(): Conversation[] {
   const [conversations, setConversations] = useState<Conversation[]>([]);
 
   // 监听存档切换
-  const currentSaveId = useCurrentSaveIdInternal();
+  const { saveId: currentSaveId, revision: currentSaveRevision } =
+    useCurrentSaveIdInternal();
 
   useEffect(() => {
     const saveDoc = yjsManager.getCurrentSave();
@@ -63,7 +77,7 @@ export function useConversations(): Conversation[] {
     }
 
     const conversationsMap = saveDoc.get(
-      "conversations"
+      "conversations",
     ) as Y.Map<Conversation>;
     if (!conversationsMap) {
       setConversations([]);
@@ -88,7 +102,7 @@ export function useConversations(): Conversation[] {
     return () => {
       conversationsMap.unobserve(updateConversations);
     };
-  }, [currentSaveId]); // 当存档切换时重新订阅
+  }, [currentSaveId, currentSaveRevision]); // 当存档切换/回溯时重新订阅
 
   return conversations;
 }
@@ -103,7 +117,8 @@ export function useMessages(conversationId: string | null): Message[] {
   const [messages, setMessages] = useState<Message[]>([]);
 
   // 监听存档切换
-  const currentSaveId = useCurrentSaveIdInternal();
+  const { saveId: currentSaveId, revision: currentSaveRevision } =
+    useCurrentSaveIdInternal();
 
   useEffect(() => {
     // 清空消息，等待正确的 conversationId
@@ -120,7 +135,7 @@ export function useMessages(conversationId: string | null): Message[] {
 
     // 验证 conversationId 是否属于当前存档
     const conversationsMap = saveDoc.get(
-      "conversations"
+      "conversations",
     ) as Y.Map<Conversation>;
     if (!conversationsMap || !conversationsMap.has(conversationId)) {
       // conversationId 不属于当前存档，清空消息
@@ -135,28 +150,23 @@ export function useMessages(conversationId: string | null): Message[] {
       return;
     }
 
-    const messagesArray = messagesMap.get(conversationId);
-    if (!messagesArray) {
-      setMessages([]);
-      return;
-    }
-
-    // 更新状态的函数
+    // 更新状态的函数（每次都重新获取最新的 Y.Array 引用）
     const updateMessages = () => {
-      setMessages(messagesArray.toArray());
+      const latestMessagesArray = messagesMap.get(conversationId);
+      setMessages(latestMessagesArray ? latestMessagesArray.toArray() : []);
     };
 
-    // 订阅变化
-    messagesArray.observe(updateMessages);
+    // 订阅变化（包含 map key 替换和数组内部变化）
+    messagesMap.observeDeep(updateMessages);
 
     // 初始加载
     updateMessages();
 
     // 清理订阅
     return () => {
-      messagesArray.unobserve(updateMessages);
+      messagesMap.unobserveDeep(updateMessages);
     };
-  }, [conversationId, currentSaveId]); // 当存档切换时重新订阅
+  }, [conversationId, currentSaveId, currentSaveRevision]); // 当存档切换/回溯时重新订阅
 
   return messages;
 }
@@ -168,14 +178,15 @@ export function useMessages(conversationId: string | null): Message[] {
  * @returns 会话对象，不存在时返回 undefined
  */
 export function useConversation(
-  conversationId: string | null
+  conversationId: string | null,
 ): Conversation | undefined {
   const [conversation, setConversation] = useState<Conversation | undefined>(
-    undefined
+    undefined,
   );
 
   // 监听存档切换
-  const currentSaveId = useCurrentSaveIdInternal();
+  const { saveId: currentSaveId, revision: currentSaveRevision } =
+    useCurrentSaveIdInternal();
 
   useEffect(() => {
     if (!conversationId) {
@@ -190,7 +201,7 @@ export function useConversation(
     }
 
     const conversationsMap = saveDoc.get(
-      "conversations"
+      "conversations",
     ) as Y.Map<Conversation>;
     if (!conversationsMap) {
       setConversation(undefined);
@@ -212,7 +223,7 @@ export function useConversation(
     return () => {
       conversationsMap.unobserve(updateConversation);
     };
-  }, [conversationId, currentSaveId]); // 当存档切换时重新订阅
+  }, [conversationId, currentSaveId, currentSaveRevision]); // 当存档切换/回溯时重新订阅
 
   return conversation;
 }
@@ -223,11 +234,12 @@ export function useConversation(
  * 这个版本使用 React 18 的 useSyncExternalStore，
  * 可以更好地与 React 的并发特性配合。
  *
- * 注意：currentSaveId 在依赖数组中是故意的，用于在存档切换时重新创建函数
+ * 注意：currentSaveId/currentSaveRevision 在依赖数组中是故意的，用于在存档切换/回溯时重新创建函数
  */
 export function useConversationsSync(): Conversation[] {
   // 监听存档切换，用于触发重新订阅
-  const currentSaveId = useCurrentSaveIdInternal();
+  const { saveId: currentSaveId, revision: currentSaveRevision } =
+    useCurrentSaveIdInternal();
 
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
@@ -235,15 +247,15 @@ export function useConversationsSync(): Conversation[] {
       if (!saveDoc) return () => {};
 
       const conversationsMap = saveDoc.get(
-        "conversations"
+        "conversations",
       ) as Y.Map<Conversation>;
       if (!conversationsMap) return () => {};
 
       conversationsMap.observe(onStoreChange);
       return () => conversationsMap.unobserve(onStoreChange);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId 用于触发重新订阅
-    [currentSaveId]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId/currentSaveRevision 用于触发重新订阅
+    [currentSaveId, currentSaveRevision],
   );
 
   const getSnapshot = useCallback(() => {
@@ -251,15 +263,15 @@ export function useConversationsSync(): Conversation[] {
     if (!saveDoc) return [];
 
     const conversationsMap = saveDoc.get(
-      "conversations"
+      "conversations",
     ) as Y.Map<Conversation>;
     if (!conversationsMap) return [];
 
     const list = Array.from(conversationsMap.values());
     list.sort((a, b) => b.updatedAt - a.updatedAt);
     return list;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId 用于触发重新获取
-  }, [currentSaveId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId/currentSaveRevision 用于触发重新获取
+  }, [currentSaveId, currentSaveRevision]);
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
@@ -267,11 +279,12 @@ export function useConversationsSync(): Conversation[] {
 /**
  * 使用 useSyncExternalStore 订阅消息列表（更高效的实现）
  *
- * 注意：currentSaveId 在依赖数组中是故意的，用于在存档切换时重新创建函数
+ * 注意：currentSaveId/currentSaveRevision 在依赖数组中是故意的，用于在存档切换/回溯时重新创建函数
  */
 export function useMessagesSync(conversationId: string | null): Message[] {
   // 监听存档切换，用于触发重新订阅
-  const currentSaveId = useCurrentSaveIdInternal();
+  const { saveId: currentSaveId, revision: currentSaveRevision } =
+    useCurrentSaveIdInternal();
 
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
@@ -283,14 +296,11 @@ export function useMessagesSync(conversationId: string | null): Message[] {
       const messagesMap = saveDoc.get("messages") as Y.Map<Y.Array<Message>>;
       if (!messagesMap) return () => {};
 
-      const messagesArray = messagesMap.get(conversationId);
-      if (!messagesArray) return () => {};
-
-      messagesArray.observe(onStoreChange);
-      return () => messagesArray.unobserve(onStoreChange);
+      messagesMap.observeDeep(onStoreChange);
+      return () => messagesMap.unobserveDeep(onStoreChange);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId 用于触发重新订阅
-    [conversationId, currentSaveId]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId/currentSaveRevision 用于触发重新订阅
+    [conversationId, currentSaveId, currentSaveRevision],
   );
 
   const getSnapshot = useCallback(() => {
@@ -306,8 +316,8 @@ export function useMessagesSync(conversationId: string | null): Message[] {
     if (!messagesArray) return [];
 
     return messagesArray.toArray();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId 用于触发重新获取
-  }, [conversationId, currentSaveId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId/currentSaveRevision 用于触发重新获取
+  }, [conversationId, currentSaveId, currentSaveRevision]);
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

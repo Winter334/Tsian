@@ -4,6 +4,10 @@
  */
 
 import type { Character } from "@/domain/entities/character";
+import {
+  worldConfigFromYMap,
+  worldConfigToYMap,
+} from "@/lib/world/world-config-codec";
 import { characterToYMap, yMapToCharacter } from "@/modules/game/repository";
 import { IndexeddbPersistence } from "y-indexeddb";
 import * as Y from "yjs";
@@ -512,6 +516,11 @@ export class YjsManager {
     }
     saveMap.set("gameState", gameStateMap);
 
+    // 写入世界配置快照
+    if (data.worldConfig) {
+      saveMap.set("worldConfig", worldConfigToYMap(data.worldConfig));
+    }
+
     // 创建角色 Map（Phase 2 → 统一为 Y.Map<Y.Map<unknown>>）
     if (data.characters && data.characters.length > 0) {
       const charactersMap = new Y.Map<Y.Map<unknown>>();
@@ -628,6 +637,13 @@ export class YjsManager {
       });
     }
 
+    // 提取世界配置快照
+    const worldConfigValue = saveMap.get("worldConfig");
+    const worldConfig =
+      worldConfigValue instanceof Y.Map
+        ? worldConfigFromYMap(worldConfigValue)
+        : null;
+
     // 提取角色数据（Phase 2 → 统一从 Y.Map<Y.Map<unknown>> 读取）
     const charactersMap = saveMap.get("characters") as
       | Y.Map<Y.Map<unknown>>
@@ -687,6 +703,7 @@ export class YjsManager {
       conversations,
       messages,
       gameState,
+      worldConfig: worldConfig ?? undefined,
       characters: characters.length > 0 ? characters : undefined,
     };
   }
@@ -701,7 +718,7 @@ export class YjsManager {
   updateSaveMembers(
     saveId: string,
     members: SaveMemberInfo[],
-    roomCode?: string
+    roomCode?: string,
   ): void {
     const saves = this.getSaveSlots();
     const save = saves.get(saveId) as Y.Map<unknown>;
@@ -737,7 +754,7 @@ export class YjsManager {
       roomCode?: string;
       maxPlayers?: number;
       turnDuration?: number;
-    }
+    },
   ): void {
     const saves = this.getSaveSlots();
     const save = saves.get(saveId) as Y.Map<unknown>;
