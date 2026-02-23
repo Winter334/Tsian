@@ -82,7 +82,7 @@ function parseRuleScriptFromResponse(response: string): RuleScript | null {
     const parsed = JSON.parse(jsonText);
 
     // 验证基本结构
-    if (parsed && parsed.version === 1 && Array.isArray(parsed.actions)) {
+    if (parsed && parsed.version === 2 && Array.isArray(parsed.actions)) {
       return parsed as RuleScript;
     }
 

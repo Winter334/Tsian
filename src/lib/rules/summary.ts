@@ -48,9 +48,33 @@ export function generateMechanicSummary(
   if (input.checks.length > 0) {
     for (const check of input.checks) {
       const result = check.success ? "成功" : "失败";
-      const degreeText = check.degree ? `（${check.degree}）` : "";
+      const dcPart =
+        check.dcSource === "opposed"
+          ? (() => {
+              const opposedSkillText = check.opposedSkill ?? "unknown";
+
+              if (
+                typeof check.opposedRoll === "number" &&
+                typeof check.opposedModifier === "number" &&
+                typeof check.opposedTotal === "number"
+              ) {
+                const opposedModifierText =
+                  check.opposedModifier >= 0
+                    ? `+${check.opposedModifier}`
+                    : `${check.opposedModifier}`;
+                return ` vs 对抗(${opposedSkillText}) ${check.opposedRoll}${opposedModifierText}=${check.opposedTotal}`;
+              }
+
+              return typeof check.opposedTotal === "number"
+                ? ` vs 对抗(${opposedSkillText}) ${check.opposedTotal}`
+                : "";
+            })()
+          : typeof check.dc === "number"
+            ? ` vs DC ${check.dc}`
+            : "";
+      const marginPart = `（余量 ${check.margin >= 0 ? "+" : ""}${check.margin}）`;
       lines.push(
-        `${check.name}：${check.roll}+${check.modifier}=${check.total} vs DC ${check.dc}，${result}${degreeText}。`,
+        `${check.name}：${check.roll}+${check.modifier}=${check.total}${dcPart}，${result}${marginPart}。`,
       );
     }
   }

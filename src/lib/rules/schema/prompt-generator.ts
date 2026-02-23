@@ -140,7 +140,7 @@ function renderSchema(schema: ActionSchema): string {
 
 function renderWorldInfo(
   worldConfig: WorldConfig,
-  entities?: EntityInfo[]
+  entities?: EntityInfo[],
 ): string {
   const lines: string[] = [];
 
@@ -173,7 +173,7 @@ function renderWorldInfo(
       lines.push(
         `- ${cond.id} (${cond.name})${triggerInfo}${
           cond.description ? `: ${cond.description}` : ""
-        }`
+        }`,
       );
     }
   }
@@ -188,7 +188,7 @@ function renderWorldInfo(
         .join(", ");
       const mechanicPart = modInfo ? ` [自动修正: ${modInfo}]` : " [仅语义]";
       lines.push(
-        `- ${talent.id} (${talent.name})${mechanicPart}: ${talent.description}`
+        `- ${talent.id} (${talent.name})${mechanicPart}: ${talent.description}`,
       );
     }
   }
@@ -199,7 +199,7 @@ function renderWorldInfo(
       (e) =>
         e.controlType === "npc" &&
         e.status !== "archived" &&
-        e.status !== "dead"
+        e.status !== "dead",
     );
     if (npcEntities.length > 0) {
       lines.push("");
@@ -210,6 +210,64 @@ function renderWorldInfo(
         const status = npc.status ?? "active";
         lines.push(`- ${npc.id}: ${name} (Lv.${level}, ${status})`);
       }
+    }
+  }
+
+  return lines.join("\n");
+}
+
+// ─── WorldConfig.checkRules 信息区块 ─────────────────────
+
+function renderCheckRuleInfo(worldConfig: WorldConfig): string {
+  const lines: string[] = [];
+  const checkRules = worldConfig.checkRules;
+
+  if (!checkRules) {
+    return "";
+  }
+
+  const dcPresets = Object.entries(checkRules.dcPresets ?? {});
+  if (dcPresets.length > 0) {
+    lines.push("### check.preset 可用值（DC 公式预设）");
+    lines.push(
+      '使用 preset 时，引擎会自动展开为 skill + dcSource="formula" + dcFormula（可被显式字段覆盖）。',
+    );
+    for (const [presetName, preset] of dcPresets) {
+      const skillPart = preset.defaultSkill
+        ? `, defaultSkill=${preset.defaultSkill}`
+        : "";
+      lines.push(
+        `- ${presetName} (${preset.label}): formula=${preset.formula}${skillPart}`,
+      );
+    }
+  }
+
+  const opposedPresets = Object.entries(checkRules.opposedPresets ?? {});
+  if (opposedPresets.length > 0) {
+    if (lines.length > 0) {
+      lines.push("");
+    }
+    lines.push("### check.preset 可用值（对抗检定预设）");
+    lines.push(
+      "使用 preset + opposedEntity 时，引擎会自动展开为 skill + dcSource=opposed + opposedSkill。",
+    );
+    for (const [presetName, preset] of opposedPresets) {
+      lines.push(
+        `- ${presetName} (${preset.label}): attackerSkill=${preset.attackerSkill}, defenderSkill=${preset.defenderSkill}`,
+      );
+    }
+  }
+
+  const guidelineScale = checkRules.dcGuideline?.scale ?? [];
+  if (guidelineScale.length > 0) {
+    if (lines.length > 0) {
+      lines.push("");
+    }
+    lines.push("### AI 情境 DC 参考（dcSource=ai）");
+    lines.push("| 难度 | DC | 说明 |");
+    lines.push("| --- | ---: | --- |");
+    for (const item of guidelineScale) {
+      lines.push(`| ${item.label} | ${item.dc} | ${item.description} |`);
     }
   }
 
@@ -227,7 +285,7 @@ function renderWorldInfo(
  * @returns 纯文本字符串，供 Parser AI 的 prompt 使用
  */
 export function generateOperationDefinitions(
-  options: PromptGeneratorOptions
+  options: PromptGeneratorOptions,
 ): string {
   const { worldConfig, entities, excludeTypes = ["modifyDamage"] } = options;
 
@@ -257,6 +315,12 @@ export function generateOperationDefinitions(
 
   // 动态信息区块
   sections.push(renderWorldInfo(worldConfig, entities));
+
+  // WorldConfig.checkRules 区块（检定预设 + AI DC 参考）
+  const checkRuleInfo = renderCheckRuleInfo(worldConfig);
+  if (checkRuleInfo.length > 0) {
+    sections.push(checkRuleInfo);
+  }
 
   return sections.join("\n\n");
 }

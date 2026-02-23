@@ -1,8 +1,21 @@
 /**
- * Game 模块 Action Schema 声明
+ * Game 模块 Action Schema 声明（RuleScript v2）
  *
- * 为 IRNR 引擎的 15 个 RuleAction 提供结构化元数据，
+ * 为 Game 模块负责的 12 个 AI 可见 RuleAction 提供结构化元数据，
  * 供 Prompt 生成和 AI 输出校验使用。
+ *
+ * Game 模块负责的 AI 可见指令（12 个）：
+ * - 判定: check, roll
+ * - 数值: damage, heal, cost, set
+ * - 状态: addTag, removeTag, modifyTag
+ * - NPC: spawn, despawn
+ * - 流程: branch
+ *
+ * 引擎内部指令（AI 不可见）：
+ * - modifyDamage — 仅在 on_damage 触发器 actions 中使用
+ *
+ * 实体操作（grantItem, removeItem, grantSkill, removeSkill）属于 inventory 模块，
+ * 不在此文件中定义。
  */
 
 import type {
@@ -15,7 +28,7 @@ import type {
 
 function validateTalentIds(
   talentIds: unknown,
-  context: ValidationContext
+  context: ValidationContext,
 ): ValidationResult {
   if (!Array.isArray(talentIds)) {
     return { valid: true, errors: [] };
@@ -30,7 +43,7 @@ function validateTalentIds(
       errors.push(
         `天赋 ID "${id}" 不存在于世界配置中。可用天赋: ${
           [...validIds].join(", ") || "(无)"
-        }`
+        }`,
       );
     }
   }
@@ -41,237 +54,165 @@ function validateTalentIds(
   };
 }
 
-// ─── Schema 定义 ────────────────────────────────────────────
+// ─── 判定类 Schema ──────────────────────────────────────────
 
 const checkSchema: ActionSchema = {
   type: "check",
   category: "combat",
   displayName: "检定",
   description:
-    "执行一次能力检定（技能/属性/豁免/攻击/对抗），根据 DC 判定成败并存储结果。",
+    "执行一次技能/属性检定，根据成败直接走 onSuccess/onFailure 分支。支持四种 DC 来源：formula（公式计算）、opposed（对抗检定）、fixed（固定值）、ai（AI 情境判定）。可使用 preset 简写引用预定义检定规则。",
   params: [
-    {
-      name: "checkType",
-      type: "enum",
-      required: true,
-      description: "检定类型",
-      enumValues: ["ability", "skill", "save", "attack", "contest"],
-    },
     {
       name: "name",
       type: "string",
       required: true,
-      description: '检定名称，如 "力量检定" 或 "潜行"',
+      description: '检定名称（叙事用），如 "挥剑攻击"、"撬锁"、"潜行"',
     },
     {
-      name: "modifier",
-      type: "value",
-      required: true,
-      description: '检定修正值。可以是数字（如 3）或属性表达式（如 "str_mod"）',
-    },
-    {
-      name: "dc",
-      type: "value",
-      required: true,
+      name: "skill",
+      type: "string",
+      required: false,
       description:
-        '难度等级。可以是数字（如 15）或表达式（如 "10 + target.agi_mod"）',
+        '检定使用的技能/属性 ID（对应 WorldConfig 中的定义），如 "athletics"、"stealth"、"int_mod"。使用 preset 时可省略',
     },
     {
       name: "target",
       type: "entityRef",
       required: false,
-      description: "受检实体 ID。省略时默认为当前行动角色",
+      description: "执行检定的实体 ID。省略时默认为当前行动角色",
+    },
+    {
+      name: "modifier",
+      type: "value",
+      required: false,
+      description: "额外检定修正值（加算到掷骰结果上），可为数字或表达式",
+    },
+    {
+      name: "dcSource",
+      type: "enum",
+      required: false,
+      description:
+        "DC 来源类型。优先级：formula > opposed > fixed > ai。省略时默认 ai",
+      enumValues: ["formula", "opposed", "fixed", "ai"],
+    },
+    {
+      name: "dc",
+      type: "value",
+      required: false,
+      description: "dcSource=ai 时使用：AI 根据情境判定的 DC 值",
+    },
+    {
+      name: "dcTarget",
+      type: "entityRef",
+      required: false,
+      description: "dcSource=formula 时使用：DC 公式中引用属性的目标实体 ID",
+    },
+    {
+      name: "dcFormula",
+      type: "string",
+      required: false,
+      description:
+        'dcSource=formula 时使用：DC 计算公式，如 "target.ac"、"8 + target.proficiency + target.wis_mod"',
+    },
+    {
+      name: "opposedEntity",
+      type: "entityRef",
+      required: false,
+      description: "dcSource=opposed 时使用：对抗目标的实体 ID",
+    },
+    {
+      name: "opposedSkill",
+      type: "string",
+      required: false,
+      description:
+        'dcSource=opposed 时使用：对抗目标使用的技能/属性 ID，如 "perception"',
+    },
+    {
+      name: "fixedDC",
+      type: "number",
+      required: false,
+      description: "dcSource=fixed 时使用：固定 DC 值",
+    },
+    {
+      name: "onSuccess",
+      type: "actions",
+      required: true,
+      description:
+        "检定成功时执行的 action 序列。这是 v2 核心改进，取代了 v1 的 check+conditional 两步模式",
+    },
+    {
+      name: "onFailure",
+      type: "actions",
+      required: false,
+      description: "检定失败时执行的 action 序列。省略表示失败时无特殊效果",
+    },
+    {
+      name: "preset",
+      type: "string",
+      required: false,
+      description:
+        "WorldConfig.checkRules 中的预设名。引擎自动展开为 skill/dcSource/dcFormula 或 opposedSkill",
     },
     {
       name: "resultVar",
       type: "string",
       required: false,
       description:
-        "存储检定结果的变量名。后续可在 conditional 中通过此变量判断成败",
-    },
-  ],
-  constraints: [
-    "modifier 和 dc 支持属性表达式，引擎会自动从实体属性中解析",
-    "resultVar 存储的值为布尔类型（true=成功，false=失败），用于 conditional 判断",
-  ],
-  examples: [
-    {
-      scenario: "玩家尝试撬锁，需要敏捷检定",
-      json: `{ "type": "check", "checkType": "skill", "name": "撬锁", "modifier": "agi_mod", "dc": 14, "resultVar": "lockpick_result" }`,
-    },
-  ],
-};
-
-const damageSchema: ActionSchema = {
-  type: "damage",
-  category: "combat",
-  displayName: "造成伤害",
-  description:
-    "对目标造成伤害，减少指定资源字段的值。支持伤害类型标记和触发器联动。",
-  params: [
-    {
-      name: "target",
-      type: "entityRef",
-      required: true,
-      description: "受伤实体 ID",
-    },
-    {
-      name: "amount",
-      type: "value",
-      required: true,
-      description: '伤害量。可以是数字或表达式（如 "2d6 + str_mod"）',
-    },
-    {
-      name: "field",
-      type: "field",
-      required: false,
-      description: "受影响的资源字段",
-      defaultValue: "hp",
-    },
-    {
-      name: "maxField",
-      type: "field",
-      required: false,
-      description: "对应的上限字段，不设置则无下限/上限保护",
-    },
-    {
-      name: "damageType",
-      type: "string",
-      required: false,
-      description:
-        '伤害类型标记（如 "fire"、"slashing"），影响 on_damage 触发器过滤',
+        "存储检定结果的变量名（布尔值）。绝大多数场景不需要（用 onSuccess/onFailure 即可），仅在需要多处引用同一结果时使用",
     },
     {
       name: "reason",
       type: "string",
       required: false,
-      description: "伤害原因说明，用于 mechanicSummary 展示",
+      description: "检定原因说明（叙事桥梁）",
     },
   ],
   constraints: [
-    "damage 会触发目标身上的 on_damage 触发器，触发器可修改实际伤害量",
-    "字段值不会低于 0",
-    'amount 支持骰子表达式（如 "2d6+3"）和属性表达式（如 "str_mod"）',
+    "必须提供 skill（或使用 preset 自动填充）与 onSuccess",
+    "dcSource 选择：攻击目标有 AC → formula；双方对抗 → opposed；固定已知 DC → fixed；情境判断 → ai",
+    "dcSource=ai 时提供 dc；dcSource=fixed 时提供 fixedDC；dcSource=formula 时提供 dcFormula+dcTarget；dcSource=opposed 时提供 opposedEntity+opposedSkill",
+    "90%+ 的条件分支场景应使用 check.onSuccess/onFailure，而非 check+branch 两步模式",
   ],
   examples: [
     {
-      scenario: "战士用剑攻击敌人，造成物理伤害",
-      json: `{ "type": "damage", "target": "哥布林", "amount": "1d8+str_mod", "damageType": "slashing", "reason": "长剑攻击" }`,
+      scenario: "近战攻击，成功造成伤害，失败无事发生",
+      json: `{ "type": "check", "name": "挥剑攻击", "preset": "melee_attack", "dcTarget": "哥布林", "onSuccess": [{ "type": "damage", "target": "哥布林", "amount": "1d8+str_mod", "damageType": "slashing", "reason": "长剑命中" }] }`,
+    },
+    {
+      scenario: "撬锁检定，成功开锁，失败触发警报",
+      json: `{ "type": "check", "name": "撬锁", "skill": "thievery", "dcSource": "ai", "dc": 14, "onSuccess": [{ "type": "set", "target": "door_1", "field": "locked", "value": false, "reason": "成功撬开锁" }], "onFailure": [{ "type": "addTag", "target": "player", "tag": "alarm_triggered", "displayName": "警报触发", "reason": "撬锁失败触发警报" }] }`,
     },
   ],
-};
+  validate: (action: Record<string, unknown>): ValidationResult => {
+    const hasSkill =
+      typeof action.skill === "string" && action.skill.trim().length > 0;
+    const hasPreset =
+      typeof action.preset === "string" && action.preset.trim().length > 0;
 
-const gainSchema: ActionSchema = {
-  type: "gain",
-  category: "attribute",
-  displayName: "恢复/增加",
-  description:
-    "恢复或增加目标的资源值，不超过上限字段的值。常用于治疗、回蓝等正向效果。",
-  params: [
-    {
-      name: "target",
-      type: "entityRef",
-      required: true,
-      description: "目标实体 ID",
-    },
-    {
-      name: "amount",
-      type: "value",
-      required: true,
-      description: "增加量。可以是数字或表达式",
-    },
-    {
-      name: "field",
-      type: "field",
-      required: false,
-      description: "受影响的资源字段",
-      defaultValue: "hp",
-    },
-    {
-      name: "maxField",
-      type: "field",
-      required: false,
-      description:
-        '上限字段。默认为 "max_{field}" 自动推导（如 field=hp → maxField=max_hp）',
-    },
-    {
-      name: "reason",
-      type: "string",
-      required: false,
-      description: "原因说明",
-    },
-  ],
-  constraints: [
-    "增加后的值不会超过 maxField 对应的上限值",
-    '如果不指定 maxField，默认按 "max_{field}" 规则自动推导',
-    "amount 必须为正数",
-  ],
-  examples: [
-    {
-      scenario: "牧师为玩家治疗",
-      json: `{ "type": "gain", "target": "player", "amount": "2d4+2", "field": "hp", "reason": "治疗术" }`,
-    },
-  ],
-};
+    if (!hasSkill && !hasPreset) {
+      return {
+        valid: false,
+        errors: ["check action 必须至少提供 skill 或 preset 之一"],
+      };
+    }
 
-const loseSchema: ActionSchema = {
-  type: "lose",
-  category: "attribute",
-  displayName: "消耗/减少",
-  description:
-    "消耗或减少目标的资源值。与 damage 不同，lose 不会触发 on_damage 触发器，适用于消耗 MP、饥饿值下降等非战斗场景。",
-  params: [
-    {
-      name: "target",
-      type: "entityRef",
-      required: true,
-      description: "目标实体 ID",
-    },
-    {
-      name: "amount",
-      type: "value",
-      required: true,
-      description: "减少量",
-    },
-    {
-      name: "field",
-      type: "field",
-      required: false,
-      description: "受影响的资源字段",
-      defaultValue: "hp",
-    },
-    {
-      name: "reason",
-      type: "string",
-      required: false,
-      description: "原因说明",
-    },
-  ],
-  constraints: [
-    "lose 不会触发 on_damage 触发器，纯数值减少",
-    "值不会低于 0",
-    "战斗伤害请使用 damage，资源消耗请使用 lose",
-    "amount 必须为正数",
-  ],
-  examples: [
-    {
-      scenario: "玩家施法消耗魔力",
-      json: `{ "type": "lose", "target": "player", "amount": 15, "field": "mp", "reason": "施放火球术消耗魔力" }`,
-    },
-  ],
+    return { valid: true, errors: [] };
+  },
 };
 
 const rollSchema: ActionSchema = {
   type: "roll",
   category: "combat",
   displayName: "掷骰",
-  description: "执行一次独立的掷骰操作，将结果存入变量供后续使用。",
+  description:
+    "执行一次独立的掷骰或表达式求值，将结果存入变量供后续使用。大部分场景不需要此指令——damage.amount 可直接写骰子表达式。仅在一次掷骰结果需要在多处引用时使用。",
   params: [
     {
       name: "expression",
       type: "string",
       required: true,
-      description: '骰子表达式，如 "2d6+3"、"1d20"、"3d8-2"',
+      description: '骰子表达式，如 "2d6+3"、"1d20"、"1d4+str_mod"',
     },
     {
       name: "purpose",
@@ -283,26 +224,236 @@ const rollSchema: ActionSchema = {
       name: "resultVar",
       type: "string",
       required: false,
-      description: "存储掷骰结果（数值）的变量名",
+      description: "存储掷骰结果（数值）的变量名，可在后续 action 中引用",
     },
   ],
   constraints: [
-    "如果需要根据掷骰结果做分支判断，务必设置 resultVar，然后在 conditional 中引用",
+    "如果需要根据掷骰结果做分支判断，务必设置 resultVar，然后在 branch 中引用",
+    "大多数伤害场景直接在 damage.amount 写骰子表达式即可，不需要先 roll 再引用",
   ],
   examples: [
     {
-      scenario: "掷伤害骰并存储结果",
+      scenario: "掷伤害骰并存储结果，供多个目标共用",
       json: `{ "type": "roll", "expression": "2d6+3", "purpose": "火球术伤害", "resultVar": "fireball_dmg" }`,
     },
   ],
 };
 
+// ─── 数值类 Schema ──────────────────────────────────────────
+
+const damageSchema: ActionSchema = {
+  type: "damage",
+  category: "combat",
+  displayName: "造成伤害",
+  description:
+    "对目标造成战斗伤害。会触发目标身上的 on_damage 防御链（护甲减免、伤害反射等）。与 cost 的区别：damage 触发防御链，cost 不触发。",
+  params: [
+    {
+      name: "target",
+      type: "entityRef",
+      required: true,
+      description: "受伤实体 ID",
+    },
+    {
+      name: "amount",
+      type: "value",
+      required: true,
+      description:
+        '伤害量。支持数字、骰子表达式、属性引用，如 12、"2d6+str_mod"、"1d8+3"',
+    },
+    {
+      name: "field",
+      type: "field",
+      required: false,
+      description: "受影响的资源字段",
+      defaultValue: "hp",
+    },
+    {
+      name: "maxField",
+      type: "field",
+      required: false,
+      description: "对应的上限字段（用于 clamp），不设置则无上限保护",
+    },
+    {
+      name: "damageType",
+      type: "string",
+      required: false,
+      description:
+        '伤害类型标记（如 "fire"、"slashing"、"poison"），影响 on_damage 触发器过滤',
+    },
+    {
+      name: "reason",
+      type: "string",
+      required: false,
+      description: "伤害原因（叙事桥梁），用于 mechanicSummary 展示",
+    },
+  ],
+  constraints: [
+    "damage 会触发目标身上的 on_damage 触发器（护甲、抗性等），触发器可修改实际伤害量",
+    "字段值不会低于 0",
+    "战斗伤害用 damage，资源消耗用 cost",
+  ],
+  examples: [
+    {
+      scenario: "战士用剑攻击敌人，造成物理伤害",
+      json: `{ "type": "damage", "target": "哥布林", "amount": "1d8+str_mod", "damageType": "slashing", "reason": "长剑攻击" }`,
+    },
+  ],
+};
+
+const healSchema: ActionSchema = {
+  type: "heal",
+  category: "attribute",
+  displayName: "恢复资源",
+  description:
+    "恢复目标的资源值，不超过上限。常用于治疗 HP、回复 MP 等正向效果。",
+  params: [
+    {
+      name: "target",
+      type: "entityRef",
+      required: true,
+      description: "目标实体 ID",
+    },
+    {
+      name: "amount",
+      type: "value",
+      required: true,
+      description: "恢复量。可以是数字或骰子/属性表达式",
+    },
+    {
+      name: "field",
+      type: "field",
+      required: false,
+      description: "受影响的资源字段",
+      defaultValue: "hp",
+    },
+    {
+      name: "maxField",
+      type: "field",
+      required: false,
+      description:
+        '上限字段。默认自动推导 "max_{field}"（如 field=hp → maxField=max_hp）',
+    },
+    {
+      name: "reason",
+      type: "string",
+      required: false,
+      description: "恢复原因（叙事桥梁）",
+    },
+  ],
+  constraints: [
+    "恢复后的值不会超过 maxField 对应的上限值",
+    '如果不指定 maxField，默认按 "max_{field}" 规则自动推导',
+    "amount 必须为正数",
+  ],
+  examples: [
+    {
+      scenario: "牧师为玩家治疗",
+      json: `{ "type": "heal", "target": "player", "amount": "2d4+2", "field": "hp", "reason": "治疗术" }`,
+    },
+  ],
+};
+
+const costSchema: ActionSchema = {
+  type: "cost",
+  category: "attribute",
+  displayName: "消耗资源",
+  description:
+    "消耗目标的资源值。与 damage 不同，cost 不触发 on_damage 防御链。适用于施法消耗 MP、饥饿值下降等非战斗场景。",
+  params: [
+    {
+      name: "target",
+      type: "entityRef",
+      required: true,
+      description: "目标实体 ID",
+    },
+    {
+      name: "amount",
+      type: "value",
+      required: true,
+      description: "消耗量（正数）",
+    },
+    {
+      name: "field",
+      type: "field",
+      required: false,
+      description: "受影响的资源字段",
+      defaultValue: "hp",
+    },
+    {
+      name: "reason",
+      type: "string",
+      required: false,
+      description: "消耗原因（叙事桥梁）",
+    },
+  ],
+  constraints: [
+    "cost 不触发 on_damage 触发器，纯数值减少",
+    "值不会低于 0",
+    "战斗伤害请使用 damage，资源消耗请使用 cost",
+    "amount 必须为正数",
+  ],
+  examples: [
+    {
+      scenario: "玩家施法消耗魔力",
+      json: `{ "type": "cost", "target": "player", "amount": 15, "field": "mp", "reason": "施放火球术消耗魔力" }`,
+    },
+  ],
+};
+
+const setSchema: ActionSchema = {
+  type: "set",
+  category: "attribute",
+  displayName: "设置属性值",
+  description:
+    "直接覆写目标的属性字段值。无上下限保护，慎用。大多数情况应优先使用 damage/heal/cost。",
+  params: [
+    {
+      name: "target",
+      type: "entityRef",
+      required: true,
+      description: "目标实体 ID",
+    },
+    {
+      name: "field",
+      type: "field",
+      required: true,
+      description: '要设置的属性字段名（如 "hp"、"level"）',
+    },
+    {
+      name: "value",
+      type: "value",
+      required: true,
+      description: "目标值。可以是数字、表达式或布尔值",
+    },
+    {
+      name: "reason",
+      type: "string",
+      required: false,
+      description: "设置原因（叙事桥梁）",
+    },
+  ],
+  constraints: [
+    "set 直接覆盖字段值，不做上下限保护",
+    "适用场景：等级提升、重置属性、特殊剧情效果",
+    "不要用 set 来造成伤害或恢复资源，应使用 damage/heal/cost",
+  ],
+  examples: [
+    {
+      scenario: "角色升级，将等级设为 2",
+      json: `{ "type": "set", "target": "player", "field": "level", "value": 2, "reason": "完成主线任务，等级提升" }`,
+    },
+  ],
+};
+
+// ─── 状态类 Schema ──────────────────────────────────────────
+
 const addTagSchema: ActionSchema = {
   type: "addTag",
   category: "status",
-  displayName: "添加标签",
+  displayName: "添加状态",
   description:
-    "为目标添加状态标签（buff/debuff/条件效果）。可配置触发器实现自动化效果。",
+    "为目标添加状态标签（buff/debuff/条件效果）。可配置 trigger 实现持续伤害、被动修正等自动化效果。对于简单叙事标记，只需 tag + displayName 即可。",
   params: [
     {
       name: "target",
@@ -315,13 +466,13 @@ const addTagSchema: ActionSchema = {
       type: "string",
       required: true,
       description:
-        "标签 ID。如果是世界配置中预定义的 condition，使用其 ID；否则自定义命名",
+        "标签 ID。预定义 condition 使用其 ID（系统自动关联触发器）；自定义效果自行命名",
     },
     {
       name: "displayName",
       type: "string",
       required: false,
-      description: '效果的显示名称，如 "灼烧"',
+      description: '效果的显示名称，如 "中毒"、"石化皮肤"',
     },
     {
       name: "effectDescription",
@@ -334,20 +485,50 @@ const addTagSchema: ActionSchema = {
       type: "object",
       required: false,
       description:
-        "结构化触发器，定义自动效果。包含 timing、actions、modifiers 等",
+        "结构化触发器，定义自动化效果。不设置时标签为纯叙事标记。预定义 condition 无需重复设置",
       properties: [
         {
           name: "timing",
           type: "enum",
           required: true,
-          description: "触发时机",
+          description:
+            "触发时机：turn_start=回合开始自动执行 actions；on_damage=受伤时触发（可用 modifyDamage）；passive=引擎自动叠加 modifiers 修正",
           enumValues: ["turn_start", "on_damage", "passive"],
         },
         {
           name: "actions",
           type: "actions",
-          required: true,
-          description: "触发时执行的 action 序列",
+          required: false,
+          description:
+            "触发时执行的 action 序列（timing=turn_start/on_damage 时使用）",
+        },
+        {
+          name: "modifiers",
+          type: "object",
+          required: false,
+          description:
+            "被动修正列表（PassiveModifier[]，仅 timing=passive 使用）。应传数组：[{ scope, reason, filter?, field?, value?, multiplier? }]，scope 可选 check/damage_dealt/damage_taken/stat",
+        },
+        {
+          name: "damageFilter",
+          type: "object",
+          required: false,
+          description:
+            "on_damage 专用：伤害类型过滤，不设置则对所有伤害类型触发",
+          properties: [
+            {
+              name: "damageTypes",
+              type: "object",
+              required: true,
+              description: '伤害类型数组（string[]），如 ["fire", "slashing"]',
+            },
+          ],
+        },
+        {
+          name: "autoDecrement",
+          type: "boolean",
+          required: false,
+          description: "是否在每次触发后自动递减 duration，默认 true",
         },
       ],
     },
@@ -355,25 +536,30 @@ const addTagSchema: ActionSchema = {
       name: "duration",
       type: "number",
       required: false,
-      description: "持续回合数。不设置则为永久效果",
+      description: "持续回合数（正整数）。不设置则为永久效果",
     },
     {
       name: "reason",
       type: "string",
       required: false,
-      description: "添加原因",
+      description: "添加原因（叙事桥梁）",
     },
   ],
   constraints: [
-    "对于简单的叙事性效果，只需 tag + displayName + effectDescription，不需要 trigger",
-    "trigger.timing=passive 时，效果由引擎自动叠加修正，不需要设置 actions",
-    "如果世界配置中已预定义了该 condition，直接使用其 ID 即可，无需重复设置 trigger",
-    "duration 为正整数，表示回合数；不设置则为永久效果",
+    "简单叙事效果：只需 tag + displayName + effectDescription，不需要 trigger",
+    "预定义 condition：直接使用其 ID，系统自动关联触发器，无需重复设置 trigger",
+    "trigger.timing=passive 时使用 modifiers（被动修正），不需要 actions",
+    "trigger.timing=on_damage 时 actions 中可使用 modifyDamage（引擎内部指令）",
+    "duration 为正整数；不设置则为永久效果",
   ],
   examples: [
     {
-      scenario: "为敌人施加中毒状态，每回合受伤",
-      json: `{ "type": "addTag", "target": "哥布林", "tag": "poison", "displayName": "中毒", "effectDescription": "每回合开始时受到毒素伤害", "trigger": { "timing": "turn_start", "actions": [{ "type": "damage", "target": "self", "amount": 3, "damageType": "poison", "reason": "中毒持续伤害" }] }, "duration": 3 }`,
+      scenario: "为敌人施加中毒，每回合受毒素伤害",
+      json: `{ "type": "addTag", "target": "哥布林", "tag": "poison", "displayName": "中毒", "effectDescription": "每回合受到毒素伤害", "trigger": { "timing": "turn_start", "actions": [{ "type": "damage", "target": "self", "amount": 3, "damageType": "poison", "reason": "中毒持续伤害" }] }, "duration": 3 }`,
+    },
+    {
+      scenario: "纯叙事标记（无机制效果）",
+      json: `{ "type": "addTag", "target": "player", "tag": "wanted", "displayName": "被通缉", "effectDescription": "你的画像贴满了城镇的每一面墙", "reason": "偷窃失败被目击" }`,
     },
   ],
 };
@@ -381,8 +567,8 @@ const addTagSchema: ActionSchema = {
 const removeTagSchema: ActionSchema = {
   type: "removeTag",
   category: "status",
-  displayName: "移除标签",
-  description: "移除目标身上的指定状态标签。",
+  displayName: "移除状态",
+  description: "移除目标身上的指定状态标签，同时清除关联的所有触发器效果。",
   params: [
     {
       name: "target",
@@ -400,7 +586,7 @@ const removeTagSchema: ActionSchema = {
       name: "reason",
       type: "string",
       required: false,
-      description: "移除原因",
+      description: "移除原因（叙事桥梁）",
     },
   ],
   constraints: [
@@ -418,9 +604,9 @@ const removeTagSchema: ActionSchema = {
 const modifyTagSchema: ActionSchema = {
   type: "modifyTag",
   category: "status",
-  displayName: "修改标签",
+  displayName: "修改状态叠层",
   description:
-    "修改目标身上已存在标签的叠加层数。可用于 set/increment/decrement 操作。",
+    "修改目标身上已存在标签的叠加层数。用于可叠加效果（如毒素层数）的管理。",
   params: [
     {
       name: "target",
@@ -445,13 +631,13 @@ const modifyTagSchema: ActionSchema = {
       name: "value",
       type: "value",
       required: false,
-      description: "操作值。set 时为目标值，increment/decrement 时为变化量",
+      description: "操作值。set=目标层数，increment/decrement=变化量（默认 1）",
     },
     {
       name: "reason",
       type: "string",
       required: false,
-      description: "修改原因",
+      description: "修改原因（叙事桥梁）",
     },
   ],
   constraints: [
@@ -467,64 +653,175 @@ const modifyTagSchema: ActionSchema = {
   ],
 };
 
-const setValueSchema: ActionSchema = {
-  type: "setValue",
-  category: "attribute",
-  displayName: "设置属性值",
+// ─── NPC 类 Schema ──────────────────────────────────────────
+
+const spawnSchema: ActionSchema = {
+  type: "spawn",
+  category: "npc",
+  displayName: "创建实体",
   description:
-    "直接设置目标的某个属性字段为指定值。这是一个强力操作，请谨慎使用。",
+    "在场景中创建新实体（NPC/怪物/召唤物）。识别到叙事中出现新的重要角色时使用。不要为路人创建实体。",
   params: [
     {
-      name: "target",
+      name: "entity",
+      type: "object",
+      required: true,
+      description: "实体数据对象",
+      properties: [
+        {
+          name: "name",
+          type: "string",
+          required: true,
+          description: "实体名称，必须唯一且有意义",
+        },
+        {
+          name: "description",
+          type: "string",
+          required: false,
+          description: "简要描述",
+        },
+        {
+          name: "personality",
+          type: "string",
+          required: false,
+          description: "性格特征描述",
+        },
+        {
+          name: "appearance",
+          type: "string",
+          required: false,
+          description: "外貌描述",
+        },
+        {
+          name: "attributes",
+          type: "object",
+          required: false,
+          description:
+            "属性值对象。key 必须是世界配置中定义的属性 key（如 str, agi, int）",
+        },
+        {
+          name: "talentIds",
+          type: "talentRef",
+          required: false,
+          description: "天赋 ID 列表。必须是世界配置 talents 中已定义的 ID",
+        },
+      ],
+    },
+  ],
+  constraints: [
+    "entity.name 是必填项，不能为空",
+    "entity.attributes 中的 key 必须与世界配置的 primaryAttributes 匹配",
+    "entity.talentIds 中的每个 ID 必须在世界配置的 talents 中存在",
+    "不要为路人创建实体，只为对剧情有影响的角色使用",
+  ],
+  examples: [
+    {
+      scenario: "创建一个商人 NPC",
+      json: `{ "type": "spawn", "entity": { "name": "老王", "description": "一位经验丰富的武器商人", "personality": "精明但诚实", "attributes": { "str": 8, "int": 14 }, "talentIds": ["bargain_master"] } }`,
+    },
+  ],
+  validate: (
+    action: Record<string, unknown>,
+    context: ValidationContext,
+  ): ValidationResult => {
+    const entity = action.entity as Record<string, unknown> | undefined;
+    if (!entity) {
+      return { valid: false, errors: ["缺少 entity 对象"] };
+    }
+
+    const errors: string[] = [];
+
+    // 检查 name
+    if (
+      !entity.name ||
+      typeof entity.name !== "string" ||
+      entity.name.trim() === ""
+    ) {
+      errors.push("entity.name 不能为空");
+    }
+
+    // 检查 talentIds
+    if (entity.talentIds) {
+      const talentResult = validateTalentIds(entity.talentIds, context);
+      errors.push(...talentResult.errors);
+    }
+
+    // 检查 attributes 的 key 是否合法
+    if (entity.attributes && typeof entity.attributes === "object") {
+      const validAttrKeys = new Set(
+        context.worldConfig.primaryAttributes.map((a) => a.key),
+      );
+      for (const key of Object.keys(
+        entity.attributes as Record<string, unknown>,
+      )) {
+        if (!validAttrKeys.has(key)) {
+          errors.push(
+            `属性 key "${key}" 不在世界配置的 primaryAttributes 中。可用 key: ${[
+              ...validAttrKeys,
+            ].join(", ")}`,
+          );
+        }
+      }
+    }
+
+    return { valid: errors.length === 0, errors };
+  },
+};
+
+const despawnSchema: ActionSchema = {
+  type: "despawn",
+  category: "npc",
+  displayName: "移除实体",
+  description:
+    "将实体从场景中移除。temporary=暂时离场（可通过 spawn 回归），permanent=永久归档。",
+  params: [
+    {
+      name: "entityId",
       type: "entityRef",
       required: true,
       description: "目标实体 ID",
     },
     {
-      name: "field",
-      type: "field",
+      name: "mode",
+      type: "enum",
       required: true,
-      description: '要设置的属性字段名（如 "hp"、"level"）',
-    },
-    {
-      name: "value",
-      type: "value",
-      required: true,
-      description: "目标值。可以是数字或表达式",
+      description: "移除模式",
+      enumValues: ["temporary", "permanent"],
     },
     {
       name: "reason",
       type: "string",
       required: false,
-      description: "设置原因",
+      description: "移除原因（叙事桥梁）",
     },
   ],
   constraints: [
-    "setValue 直接覆盖字段值，不做上下限保护。大多数情况下应优先使用 gain/lose/damage",
-    "适用场景：等级提升、重置属性、特殊剧情效果",
-    "不要用 setValue 来造成伤害或恢复资源，应使用 damage/gain/lose",
+    "temporary: 暂时离场，可在后续通过 spawn 重新出现",
+    "permanent: 永久归档，不再参与当前游戏",
   ],
   examples: [
     {
-      scenario: "角色升级，将等级设为 2",
-      json: `{ "type": "setValue", "target": "player_1", "field": "level", "value": 2, "reason": "完成主线任务，等级提升" }`,
+      scenario: "商人交易结束后暂时离场",
+      json: `{ "type": "despawn", "entityId": "老王", "mode": "temporary", "reason": "交易结束离场" }`,
     },
   ],
 };
 
-const conditionalSchema: ActionSchema = {
-  type: "conditional",
+// ─── 流程类 Schema ──────────────────────────────────────────
+
+const branchSchema: ActionSchema = {
+  type: "branch",
   category: "flow",
   displayName: "条件分支",
   description:
-    "根据条件表达式选择执行不同的 action 序列。常与 check 的 resultVar 配合使用，实现「检定成功→效果A，失败→效果B」的分支逻辑。",
+    "根据条件表达式选择执行不同的 action 序列。这是低频指令——90%+ 的条件分支场景应使用 check.onSuccess/onFailure。branch 仅用于不涉及掷骰判定的条件分支（如检查 HP 阈值、是否拥有标签等）。",
   params: [
     {
       name: "condition",
       type: "string",
       required: true,
       description:
-        "条件表达式。可引用 resultVar 变量、实体属性。返回 truthy 值时执行 then 分支",
+        "条件表达式（ConditionExpression）。支持：属性引用（player.hp < 10）、变量引用（attack_result）、谓词（hasTag(player, 'poisoned')、hasItem(player, 'iron_sword')）、逻辑运算（&& || !）",
     },
     {
       name: "then",
@@ -540,45 +837,28 @@ const conditionalSchema: ActionSchema = {
     },
   ],
   constraints: [
-    "condition 支持引用之前 check/roll 存储的 resultVar 变量",
+    "不要用 branch 做检定后分支——应使用 check.onSuccess/onFailure",
+    "condition 支持引用 check/roll 存储的 resultVar 变量",
+    "condition 支持 hasTag(entity, 'tagId') 和 hasItem(entity, 'itemName') 谓词",
     "嵌套深度不能超过 10 层",
   ],
   examples: [
     {
-      scenario: "根据检定结果决定是否命中",
-      json: `{ "type": "conditional", "condition": "attack_result", "then": [{ "type": "damage", "target": "enemy_1", "amount": "2d6+str_mod" }], "else": [{ "type": "roll", "expression": "0", "purpose": "攻击未命中" }] }`,
+      scenario: "生命垂危时激发求生本能",
+      json: `{ "type": "branch", "condition": "player.hp < 10", "then": [{ "type": "addTag", "target": "player", "tag": "desperate", "displayName": "绝境", "reason": "生命垂危，激发求生本能" }] }`,
     },
   ],
 };
 
-const sequenceSchema: ActionSchema = {
-  type: "sequence",
-  category: "flow",
-  displayName: "顺序执行",
-  description:
-    "按顺序执行一组 action。用于将多个操作组织为一个逻辑单元，常在 conditional 分支或 addTag 触发器中使用。",
-  params: [
-    {
-      name: "steps",
-      type: "actions",
-      required: true,
-      description: "按顺序执行的 action 列表",
-    },
-  ],
-  constraints: [
-    "通常不需要在顶层使用 sequence，因为 RuleScript.actions 本身就是顺序执行的",
-    "主要用途：在 conditional 的 then/else 中组织多步操作，或在 trigger.actions 中使用",
-    "steps 数组不能为空，至少包含一个 action",
-  ],
-  examples: [
-    {
-      scenario: "在条件分支中组合多步效果：先掷骰再造成伤害",
-      json: `{ "type": "sequence", "steps": [{ "type": "roll", "expression": "2d6", "purpose": "火焰伤害", "resultVar": "fire_dmg" }, { "type": "damage", "target": "哥布林", "amount": "fire_dmg", "damageType": "fire", "reason": "火球术爆炸" }] }`,
-    },
-  ],
-};
+// ─── 引擎内部 Schema（AI 不可见） ────────────────────────────
 
-const modifyDamageSchema: ActionSchema = {
+/**
+ * modifyDamage — 引擎内部指令
+ *
+ * 仅在 addTag.trigger.timing="on_damage" 的 actions 中使用，
+ * 不暴露给 Parser AI。保留 schema 定义供校验器使用。
+ */
+export const modifyDamageSchema: ActionSchema = {
   type: "modifyDamage",
   category: "combat",
   displayName: "修改伤害",
@@ -612,239 +892,30 @@ const modifyDamageSchema: ActionSchema = {
   ],
 };
 
-const npcCreateSchema: ActionSchema = {
-  type: "npcCreate",
-  category: "npc",
-  displayName: "创建 NPC",
-  description:
-    "在场景中创建一个新的 NPC 角色。Parser AI 识别到叙事中出现新角色时使用此操作。",
-  params: [
-    {
-      name: "npc",
-      type: "object",
-      required: true,
-      description: "NPC 数据对象",
-      properties: [
-        {
-          name: "name",
-          type: "string",
-          required: true,
-          description: "NPC 名称，必须唯一且有意义",
-        },
-        {
-          name: "description",
-          type: "string",
-          required: false,
-          description: "NPC 简要描述",
-        },
-        {
-          name: "personality",
-          type: "string",
-          required: false,
-          description: "性格特征描述",
-        },
-        {
-          name: "appearance",
-          type: "string",
-          required: false,
-          description: "外貌描述",
-        },
-        {
-          name: "attributes",
-          type: "object",
-          required: false,
-          description:
-            "属性值对象。key 必须是世界配置中定义的属性 key（如 str, agi, int）",
-        },
-        {
-          name: "talentIds",
-          type: "talentRef",
-          required: false,
-          description: "天赋 ID 列表。必须是世界配置 talents 中已定义的 ID",
-        },
-      ],
-    },
-  ],
-  constraints: [
-    "npc.name 是必填项，不能为空",
-    "npc.attributes 中的 key 必须与世界配置的 primaryAttributes 匹配",
-    "npc.talentIds 中的每个 ID 必须在世界配置的 talents 中存在",
-    "不要为路人创建 NPC，只为对剧情有影响的角色使用",
-  ],
-  examples: [
-    {
-      scenario: "创建一个商人 NPC",
-      json: `{ "type": "npcCreate", "npc": { "name": "老王", "description": "一位经验丰富的武器商人", "personality": "精明但诚实", "attributes": { "str": 8, "int": 14 }, "talentIds": ["bargain_master"] } }`,
-    },
-  ],
-  validate: (
-    action: Record<string, unknown>,
-    context: ValidationContext
-  ): ValidationResult => {
-    const npc = action.npc as Record<string, unknown> | undefined;
-    if (!npc) {
-      return { valid: false, errors: ["缺少 npc 对象"] };
-    }
-
-    const errors: string[] = [];
-
-    // 检查 name
-    if (!npc.name || typeof npc.name !== "string" || npc.name.trim() === "") {
-      errors.push("npc.name 不能为空");
-    }
-
-    // 检查 talentIds
-    if (npc.talentIds) {
-      const talentResult = validateTalentIds(npc.talentIds, context);
-      errors.push(...talentResult.errors);
-    }
-
-    // 检查 attributes 的 key 是否合法
-    if (npc.attributes && typeof npc.attributes === "object") {
-      const validAttrKeys = new Set(
-        context.worldConfig.primaryAttributes.map((a) => a.key)
-      );
-      for (const key of Object.keys(
-        npc.attributes as Record<string, unknown>
-      )) {
-        if (!validAttrKeys.has(key)) {
-          errors.push(
-            `属性 key "${key}" 不在世界配置的 primaryAttributes 中。可用 key: ${[
-              ...validAttrKeys,
-            ].join(", ")}`
-          );
-        }
-      }
-    }
-
-    return { valid: errors.length === 0, errors };
-  },
-};
-
-const npcStatusChangeSchema: ActionSchema = {
-  type: "npcStatusChange",
-  category: "npc",
-  displayName: "NPC 状态变更",
-  description: "变更 NPC 的场景状态。用于让 NPC 离场、重新出现或归档。",
-  params: [
-    {
-      name: "npcId",
-      type: "entityRef",
-      required: true,
-      description: "NPC 的实体 ID",
-    },
-    {
-      name: "status",
-      type: "enum",
-      required: true,
-      description: "目标状态",
-      enumValues: ["active", "off_scene", "archived"],
-    },
-  ],
-  constraints: [
-    "active: NPC 在当前场景中活跃",
-    "off_scene: NPC 暂时离场，仍可在后续剧情中重新出现",
-    "archived: NPC 永久退出，不再参与游戏",
-    "只有已存在的 NPC 才能变更状态，不要对未创建的 NPC 使用",
-  ],
-  examples: [
-    {
-      scenario: "商人交易结束后离开场景",
-      json: `{ "type": "npcStatusChange", "npcId": "老王", "status": "off_scene" }`,
-    },
-  ],
-};
-
-const npcActionSchema: ActionSchema = {
-  type: "npcAction",
-  category: "npc",
-  displayName: "NPC 行动",
-  description: "让 NPC 执行一个主动行动。可包含检定需求和直接效果。",
-  params: [
-    {
-      name: "npcId",
-      type: "entityRef",
-      required: true,
-      description: "执行行动的 NPC 实体 ID",
-    },
-    {
-      name: "intention",
-      type: "string",
-      required: true,
-      description: 'NPC 的行动意图描述，如 "向玩家发起攻击" 或 "尝试逃跑"',
-    },
-    {
-      name: "requiresCheck",
-      type: "object",
-      required: false,
-      description: "如果行动需要检定，提供检定参数",
-      properties: [
-        {
-          name: "checkType",
-          type: "enum",
-          required: true,
-          description: "检定类型",
-          enumValues: ["attack", "skill", "ability"],
-        },
-        {
-          name: "attribute",
-          type: "string",
-          required: true,
-          description: '用于检定的属性名（如 "str"、"agi"）',
-        },
-        {
-          name: "dc",
-          type: "number",
-          required: false,
-          description: "难度等级",
-        },
-        {
-          name: "targetId",
-          type: "entityRef",
-          required: false,
-          description: "检定目标实体 ID",
-        },
-      ],
-    },
-    {
-      name: "directEffects",
-      type: "actions",
-      required: false,
-      description: "不需要检定时的直接效果，作为 RuleAction 子序列",
-    },
-  ],
-  constraints: [
-    "requiresCheck 和 directEffects 通常二选一：有检定则由引擎决定结果，无检定则直接执行效果",
-    "intention 是必填的文字描述，用于叙事展示",
-    "npcId 必须是场景中已存在且 active 的 NPC",
-  ],
-  examples: [
-    {
-      scenario: "强盗尝试攻击玩家",
-      json: `{ "type": "npcAction", "npcId": "强盗头目", "intention": "挥刀砍向冒险者", "requiresCheck": { "checkType": "attack", "attribute": "str", "dc": 13, "targetId": "player" } }`,
-    },
-  ],
-};
-
 // ─── 导出 ───────────────────────────────────────────────────
 
 /**
- * Game 模块的全部 Action Schema
+ * Game 模块的全部 AI 可见 Action Schema（12 个）
+ *
+ * 不包含 modifyDamage（引擎内部）和 inventory 模块的 4 个指令。
+ * modifyDamageSchema 单独导出供引擎注册使用。
  */
 export const gameActionSchemas: ActionSchema[] = [
+  // 判定
   checkSchema,
-  damageSchema,
-  gainSchema,
-  loseSchema,
   rollSchema,
+  // 数值
+  damageSchema,
+  healSchema,
+  costSchema,
+  setSchema,
+  // 状态
   addTagSchema,
   removeTagSchema,
   modifyTagSchema,
-  setValueSchema,
-  conditionalSchema,
-  sequenceSchema,
-  modifyDamageSchema,
-  npcCreateSchema,
-  npcStatusChangeSchema,
-  npcActionSchema,
+  // NPC
+  spawnSchema,
+  despawnSchema,
+  // 流程
+  branchSchema,
 ];

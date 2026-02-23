@@ -1,30 +1,22 @@
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
 
-import { CheckpointButton } from "@/modules/checkpoint/components/CheckpointButton";
-import {
-  CharacterButton,
-  CharacterPanelDialog,
-} from "./components/CharacterPanel";
+import { CharacterPanelDialog } from "./components/CharacterPanel";
 import {
   GameWizard,
   type GameMode,
   type WizardResult,
 } from "./components/GameWizard";
-import {
-  LorebookButton,
-  LorebookWorkspace,
-} from "./components/LorebookWorkspace";
-import { RoomInfoButton } from "./components/Multiplayer";
+import { LorebookWorkspace } from "./components/LorebookWorkspace";
+import { RoomInfoDialog } from "./components/Multiplayer";
 import { MultiplayerSaveDialog } from "./components/MultiplayerSaveDialog";
 import { Onboarding } from "./components/Onboarding";
-import { PresetButton, PresetWorkspace } from "./components/PresetWorkspace";
+import { PresetWorkspace } from "./components/PresetWorkspace";
 import { SaveManagerDialog } from "./components/SaveManager";
 import { SettingsDialog } from "./components/Settings";
 import { SplashScreen } from "./components/SplashScreen";
 import { TitleScreen } from "./components/TitleScreen";
-import { AppShell } from "./components/layout";
 import { ToastProvider, useToast } from "./components/ui";
 import { StorageWarningBanner, yjsManager } from "./core/yjs";
 import type { SaveMemberInfo, SaveSlotInfo } from "./core/yjs/types";
@@ -42,16 +34,19 @@ import { savePortrait } from "./lib/portrait/storage";
 import { usePresetStore } from "./lib/prompt";
 import { getLastDisplayName, getOrCreateUserId } from "./lib/user-identity";
 // 通过顶层模块入口导入，确保松耦合
+import { GameHUD } from "./components/GameHUD";
+import { GameHub } from "./components/layout/GameHub";
 import {
+  CheckpointPanel,
   GameView,
-  MemoryButton,
+  MemoryManagerDialog,
   useCurrentSaveId,
   useRoomStore,
   useSaveSlots,
 } from "./modules";
 import { useSettingsStore } from "./stores/settings";
 
-type AppState = "splash" | "onboarding" | "title" | "wizard" | "game";
+type AppState = "splash" | "onboarding" | "title" | "wizard" | "hub" | "game";
 
 /**
  * 房间事件监听器组件
@@ -68,7 +63,7 @@ function RoomEventListener({
   const { toast } = useToast();
   const previousRoomRef = useRef<boolean>(false);
 
-  // 监听联机房间状态 - 当在 wizard/game 状态下房间突然变为 null 时返回标题界面
+  // 监听联机房间状态 - 当在 wizard/hub/game 状态下房间突然变为 null 时返回标题界面
   const currentRoom = useRoomStore((s) => s.currentRoom);
   const mode = useRoomStore((s) => s.mode);
 
@@ -99,8 +94,8 @@ function RoomEventListener({
 
   // 监听房间状态变化
   useEffect(() => {
-    // 只在 wizard 或 game 状态下检查
-    if (appState !== "wizard" && appState !== "game") {
+    // 只在 wizard、hub 或 game 状态下检查
+    if (appState !== "wizard" && appState !== "hub" && appState !== "game") {
       previousRoomRef.current = false;
       return;
     }
@@ -126,6 +121,9 @@ function AppContent() {
   const [presetWorkspaceOpen, setPresetWorkspaceOpen] = useState(false);
   const [lorebookWorkspaceOpen, setLorebookWorkspaceOpen] = useState(false);
   const [characterPanelOpen, setCharacterPanelOpen] = useState(false);
+  const [memoryManagerOpen, setMemoryManagerOpen] = useState(false);
+  const [checkpointPanelOpen, setCheckpointPanelOpen] = useState(false);
+  const [roomInfoOpen, setRoomInfoOpen] = useState(false);
   const [selectedMultiplayerSave, setSelectedMultiplayerSave] =
     useState<SaveSlotInfo | null>(null);
 
@@ -267,13 +265,13 @@ function AppContent() {
           }
         }
 
-        setAppState("game");
+        setAppState("hub");
       } else {
         setAppState("title");
       }
     } else {
-      // 联机模式：直接进入游戏（房间已创建/加入）
-      setAppState("game");
+      // 联机模式：先进入 Hub（房间已创建/加入）
+      setAppState("hub");
     }
   };
 
@@ -284,7 +282,7 @@ function AppContent() {
   };
 
   /**
-   * 加载单人存档并进入游戏
+   * 加载单人存档并进入 Hub
    */
   const loadSoloSave = async (saveId: string): Promise<boolean> => {
     const loadResult = await dispatch({
@@ -294,7 +292,7 @@ function AppContent() {
 
     if (loadResult.success) {
       // 注意：房间状态会在 SAVE_LOADED 事件触发后由 Room 模块自动重置
-      setAppState("game");
+      setAppState("hub");
       return true;
     } else {
       return false;
@@ -417,9 +415,31 @@ function AppContent() {
     setCharacterPanelOpen(true);
   };
 
-  // 从存档管理加载存档后进入游戏
-  const handleLoadSave = () => {
+  // 从 Hub 进入游戏
+  const handleEnterGame = () => {
     setAppState("game");
+  };
+
+  // 从 Game 返回 Hub
+  const handleReturnToHub = () => {
+    setAppState("hub");
+  };
+
+  const handleOpenMemory = () => {
+    setMemoryManagerOpen(true);
+  };
+
+  const handleOpenCheckpoint = () => {
+    setCheckpointPanelOpen(true);
+  };
+
+  const handleOpenRoomInfo = () => {
+    setRoomInfoOpen(true);
+  };
+
+  // 从存档管理加载存档后进入 Hub
+  const handleLoadSave = () => {
+    setAppState("hub");
   };
 
   // 返回标题画面
@@ -476,25 +496,52 @@ function AppContent() {
           />
         )}
 
-        {/* 游戏主界面 */}
-        {appState === "game" && (
-          <AppShell
-            onTitleClick={handleBackToTitle}
-            onSettings={handleSettings}
-            onSaveManager={handleSaveManager}
-            headerExtra={
-              <>
-                <CharacterButton onClick={handleOpenCharacterPanel} />
-                <LorebookButton onClick={handleOpenLorebookWorkspace} />
-                <PresetButton onClick={handleOpenPresetWorkspace} />
-                <MemoryButton />
-                <CheckpointButton />
-                <RoomInfoButton onLeave={handleBackToTitle} />
-              </>
-            }
-          >
-            <GameView className="h-full" />
-          </AppShell>
+        {/* Hub / Game 视图（仅 hub ↔ game 切换使用过渡动画） */}
+        {(appState === "hub" || appState === "game") && (
+          <div className="relative h-dvh">
+            <AnimatePresence mode="wait" initial={false}>
+              {appState === "hub" && (
+                <motion.div
+                  key="hub"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.25 }}
+                  className="absolute inset-0"
+                >
+                  <GameHub
+                    onEnterGame={handleEnterGame}
+                    onBackToTitle={handleBackToTitle}
+                    onSettings={handleSettings}
+                    onSaveManager={handleSaveManager}
+                    onPresetWorkspace={handleOpenPresetWorkspace}
+                    onLorebookWorkspace={handleOpenLorebookWorkspace}
+                    onCheckpoint={handleOpenCheckpoint}
+                    onMemory={handleOpenMemory}
+                    onRoomInfo={handleOpenRoomInfo}
+                  />
+                </motion.div>
+              )}
+
+              {appState === "game" && (
+                <motion.div
+                  key="game"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.25 }}
+                  className="absolute inset-0"
+                >
+                  <GameHUD
+                    onReturnToHub={handleReturnToHub}
+                    onOpenCharacterPanel={handleOpenCharacterPanel}
+                  >
+                    <GameView className="h-full" />
+                  </GameHUD>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         )}
 
         {/* 设置弹窗 */}
@@ -529,6 +576,25 @@ function AppContent() {
         <CharacterPanelDialog
           open={characterPanelOpen}
           onOpenChange={setCharacterPanelOpen}
+        />
+
+        {/* 记忆管理弹窗 */}
+        <MemoryManagerDialog
+          open={memoryManagerOpen}
+          onOpenChange={setMemoryManagerOpen}
+        />
+
+        {/* 检查点管理弹窗 */}
+        <CheckpointPanel
+          open={checkpointPanelOpen}
+          onOpenChange={setCheckpointPanelOpen}
+        />
+
+        {/* 房间信息弹窗 */}
+        <RoomInfoDialog
+          open={roomInfoOpen}
+          onOpenChange={setRoomInfoOpen}
+          onLeave={handleReturnToTitle}
         />
 
         {/* 联机存档选项对话框 */}

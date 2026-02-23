@@ -15,6 +15,7 @@ import { RoomEvents } from "@/domain/events/room";
 import { useRoomStore } from "@/modules/room";
 import { createCheckpointCommandHandlers } from "./handlers";
 
+export { CheckpointButton, CheckpointPanel } from "./components";
 export { useCheckpointCount, useCheckpoints } from "./hooks/useCheckpoints";
 export {
   findCheckpointByMessageId,

@@ -26,19 +26,43 @@ export interface DiceRoll {
   readonly purpose?: string;
 }
 
-export type CheckType = "ability" | "skill" | "save" | "attack" | "contest";
-export type CheckDegree = "critical" | "success" | "failure" | "fumble";
-
-export interface Check {
-  readonly type: CheckType;
+export interface CheckResult {
+  /** 检定名称 */
   readonly name: string;
-  readonly dc: number;
+  /** 使用的技能/属性 */
+  readonly skill: string;
+  /** 掷骰结果（裸骰值） */
   readonly roll: number;
+  /** 修正值 */
   readonly modifier: number;
+  /** 最终结果 = roll + modifier */
   readonly total: number;
+
+  /** DC 来源 */
+  readonly dcSource: "formula" | "opposed" | "fixed" | "ai";
+
+  /** 目标 DC（formula / fixed / ai） */
+  readonly dc?: number;
+  /** DC 公式（dcSource=formula 时，用于调试/展示） */
+  readonly dcFormulaUsed?: string;
+
+  /** 对方掷骰结果（opposed） */
+  readonly opposedRoll?: number;
+  /** 对方修正值（opposed） */
+  readonly opposedModifier?: number;
+  /** 对方最终结果（opposed） */
+  readonly opposedTotal?: number;
+  /** 对方使用的技能（opposed） */
+  readonly opposedSkill?: string;
+
+  /** 是否成功 */
   readonly success: boolean;
-  readonly degree?: CheckDegree;
+  /** 差值（正=成功余量，负=失败差距） */
+  readonly margin: number;
 }
+
+// 兼容既有引用（后续可统一替换为 CheckResult）
+export type Check = CheckResult;
 
 export interface ModifierApplication {
   readonly source: string;
@@ -60,7 +84,7 @@ export interface ResultFrame {
 
   readonly valueChanges: readonly ValueChange[];
   readonly diceRolls: readonly DiceRoll[];
-  readonly checks: readonly Check[];
+  readonly checks: readonly CheckResult[];
   readonly modifiersApplied?: readonly ModifierApplication[];
   readonly structuralChanges?: readonly StructuralChange[];
   readonly mechanicSummary: string;

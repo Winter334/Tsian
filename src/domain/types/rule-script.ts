@@ -2,46 +2,80 @@
  * IRNR 规则脚本（RuleScript）类型定义
  */
 
+import type { ItemEffect } from "../entities/item";
+
 export interface RuleScript {
-  version: 1;
+  version: 2;
   actions: RuleAction[];
 }
 
-export type RuleAction =
-  | CheckAction
-  | DamageAction
-  | GainAction
-  | LoseAction
-  | RollAction
-  | AddTagAction
-  | RemoveTagAction
-  | ModifyTagAction
-  | SetValueAction
-  | ConditionalAction
-  | SequenceAction
-  | ModifyDamageAction
-  | NpcCreateAction
-  | NpcStatusChangeAction
-  | NpcActionAction
-  | GrantItemAction
-  | RemoveItemAction
-  | GrantSkillAction
-  | RemoveSkillAction;
-
 export type ValueExpression = string | number | boolean;
+export type ConditionExpression = string;
 
 interface RuleActionBase {
   type: string;
 }
 
+export type RuleAction =
+  | CheckAction
+  | RollAction
+  | DamageAction
+  | HealAction
+  | CostAction
+  | SetAction
+  | AddTagAction
+  | RemoveTagAction
+  | ModifyTagAction
+  | GrantItemAction
+  | RemoveItemAction
+  | GrantSkillAction
+  | RemoveSkillAction
+  | SpawnAction
+  | DespawnAction
+  | BranchAction;
+
+// 引擎内部（不在 RuleAction 联合类型中暴露给 AI）
+export type InternalAction = ModifyDamageAction;
+
+// 触发器内部可用的 action 类型（RuleAction + InternalAction）
+export type TriggerAction = RuleAction | InternalAction;
+
 export interface CheckAction extends RuleActionBase {
   type: "check";
-  checkType: "ability" | "skill" | "save" | "attack" | "contest";
   name: string;
-  modifier: ValueExpression;
-  dc: ValueExpression;
+  skill: string;
   target?: string;
+  modifier?: ValueExpression;
+
+  /** DC 来源类型（默认由执行器按 ai 兜底处理） */
+  dcSource?: "formula" | "opposed" | "fixed" | "ai";
+
+  /** dcSource=formula 时使用：DC 计算目标实体 ID */
+  dcTarget?: string;
+  /** dcSource=formula 时使用：DC 公式 */
+  dcFormula?: string;
+
+  /** dcSource=opposed 时使用：对抗目标实体 ID */
+  opposedEntity?: string;
+  /** dcSource=opposed 时使用：对抗目标技能/属性 ID */
+  opposedSkill?: string;
+
+  /** dcSource=fixed 时使用：固定 DC */
+  fixedDC?: number;
+
+  /** dcSource=ai 时使用：AI 判定 DC */
+  dc?: ValueExpression;
+
+  /** 检定成功时执行的 action 序列 */
+  onSuccess: RuleAction[];
+  /** 检定失败时执行的 action 序列 */
+  onFailure?: RuleAction[];
+
+  /** WorldConfig.checkRules 的预设简写 */
+  preset?: string;
+  /** 罕见使用：存储检定结果变量 */
   resultVar?: string;
+  reason?: string;
 }
 
 export interface DamageAction extends RuleActionBase {
@@ -56,8 +90,8 @@ export interface DamageAction extends RuleActionBase {
   reason?: string;
 }
 
-export interface GainAction extends RuleActionBase {
-  type: "gain";
+export interface HealAction extends RuleActionBase {
+  type: "heal";
   target: string;
   amount: ValueExpression;
   /** 受影响的资源字段（默认值由 WorldConfig 的第一个资源字段决定，兜底 "hp"） */
@@ -67,8 +101,8 @@ export interface GainAction extends RuleActionBase {
   reason?: string;
 }
 
-export interface LoseAction extends RuleActionBase {
-  type: "lose";
+export interface CostAction extends RuleActionBase {
+  type: "cost";
   target: string;
   amount: ValueExpression;
   /** 受影响的资源字段（默认值由 WorldConfig 的第一个资源字段决定，兜底 "hp"） */
@@ -114,32 +148,27 @@ export interface ModifyTagAction extends RuleActionBase {
   reason?: string;
 }
 
-export interface SetValueAction extends RuleActionBase {
-  type: "setValue";
+export interface SetAction extends RuleActionBase {
+  type: "set";
   target: string;
   field: string;
   value: ValueExpression;
   reason?: string;
 }
 
-export interface ConditionalAction extends RuleActionBase {
-  type: "conditional";
-  condition: string;
+export interface BranchAction extends RuleActionBase {
+  type: "branch";
+  condition: ConditionExpression;
   then: RuleAction[];
   else?: RuleAction[];
 }
 
-export interface SequenceAction extends RuleActionBase {
-  type: "sequence";
-  steps: RuleAction[];
-}
+// ─── NPC / 实体生命周期 Action ─────────────────────────────
 
-// ─── NPC 操作 Action ────────────────────────────────────────
-
-/** NPC 创建操作 - Parser AI 识别到新角色时输出 */
-export interface NpcCreateAction extends RuleActionBase {
-  type: "npcCreate";
-  npc: {
+/** 创建实体操作（当前主要用于生成 NPC） */
+export interface SpawnAction extends RuleActionBase {
+  type: "spawn";
+  entity: {
     name: string;
     description?: string;
     personality?: string;
@@ -151,29 +180,12 @@ export interface NpcCreateAction extends RuleActionBase {
   };
 }
 
-/** NPC 状态变更操作 */
-export interface NpcStatusChangeAction extends RuleActionBase {
-  type: "npcStatusChange";
-  npcId: string;
-  /** 目标状态 */
-  status: "active" | "off_scene" | "archived";
-}
-
-/** NPC 行动操作 - NPC 主动执行动作 */
-export interface NpcActionAction extends RuleActionBase {
-  type: "npcAction";
-  npcId: string;
-  /** NPC 的行动意图描述 */
-  intention: string;
-  /** 需要检定时的参数 */
-  requiresCheck?: {
-    checkType: "attack" | "skill" | "ability";
-    attribute: string;
-    dc?: number;
-    targetId?: string;
-  };
-  /** 不需要检定时的直接效果（RuleAction 子序列） */
-  directEffects?: RuleAction[];
+/** 移除实体操作（当前主要用于 NPC 离场/移除） */
+export interface DespawnAction extends RuleActionBase {
+  type: "despawn";
+  entityId: string;
+  mode: "temporary" | "permanent";
+  reason?: string;
 }
 
 // ─── 装备/背包 Action ────────────────────────────────────────
@@ -187,8 +199,16 @@ export interface GrantItemAction extends RuleActionBase {
   templateId?: string;
   name: string;
   description: string;
-  /** 对应 ItemCategory，AI 输入为 string */
-  category: string;
+  category:
+    | "weapon"
+    | "armor"
+    | "accessory"
+    | "consumable"
+    | "material"
+    | "quest"
+    | "misc";
+  /** 物品效果定义（可选） */
+  effects?: ItemEffect[];
   /** 数量，默认 1 */
   quantity?: number;
   /**
@@ -223,8 +243,7 @@ export interface GrantSkillAction extends RuleActionBase {
   templateId?: string;
   name: string;
   description: string;
-  /** 对应 SkillCategory，AI 输入为 string */
-  category: string;
+  category: "combat" | "magic" | "survival" | "social" | "craft" | "misc";
   /** 是否可主动使用，默认 false */
   activeUsable?: boolean;
   /** 使用消耗 */
@@ -277,13 +296,13 @@ export type ConditionTiming = "turn_start" | "on_damage" | "passive";
  */
 export interface ConditionTrigger {
   /** 触发时机 */
-  timing: ConditionTiming;
+  timing: "turn_start" | "on_damage" | "passive";
 
   /**
-   * 自动执行的 actions
-   * 格式与 RuleScript.actions 一致
+   * 自动执行的 actions（触发器内部可包含 InternalAction，如 modifyDamage）
+   * 格式与 RuleScript.actions 基本一致
    */
-  actions: RuleAction[];
+  actions?: TriggerAction[];
 
   /** 被动修正列表（timing=passive 时使用，引擎自动叠加） */
   modifiers?: PassiveModifier[];
@@ -310,38 +329,19 @@ export interface ConditionTrigger {
  * 由引擎在执行 check/damage 时自动扫描并叠加。
  */
 export interface PassiveModifier {
-  /**
-   * 修正作用域
-   * - check: 检定修正（叠加到 check 的 modifier 上）
-   * - damage_dealt: 造成伤害修正（叠加到 damage 的 amount 上）
-   * - damage_taken: 承受伤害修正（类似 on_damage 的 modifyDamage）
-   * - stat: 属性修正（直接修改实体属性的有效值）
-   */
+  /** 修正作用域 */
   scope: "check" | "damage_dealt" | "damage_taken" | "stat";
 
-  /**
-   * 过滤条件（可选）
-   * - scope=check 时：限定检定类型，如 "attack"、"skill"
-   * - scope=damage_dealt/damage_taken 时：限定伤害类型，如 "fire"、"slashing"
-   * - scope=stat 时：不使用此字段
-   */
+  /** 过滤条件（可选） */
   filter?: string;
 
-  /**
-   * 修正的目标字段（scope=stat 时必填）
-   * 如 "phys_def"、"mag_def"
-   */
+  /** 修正的目标字段（scope=stat 时通常需要） */
   field?: string;
 
-  /**
-   * 加算修正值（与 check modifier、damage amount 相加）
-   * 可以是数字或表达式（如 "level" 表示等级加成）
-   */
+  /** 加算修正值 */
   value?: ValueExpression;
 
-  /**
-   * 乘算修正（scope=damage_taken 时使用，如 0.5 = 减半）
-   */
+  /** 乘算修正（scope=damage_taken 时使用，如 0.5 = 减半） */
   multiplier?: number;
 
   /** 修正来源描述（用于 ResultFrame.modifiersApplied） */

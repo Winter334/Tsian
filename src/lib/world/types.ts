@@ -46,12 +46,35 @@ export interface DerivedStatConfig {
   maxField?: string;
 }
 
+interface DCPreset {
+  label: string;
+  formula: string;
+  defaultSkill?: string;
+}
+
+interface OpposedPreset {
+  label: string;
+  attackerSkill: string;
+  defenderSkill: string;
+}
+
+interface DCGuideline {
+  /** 难度等级参考 */
+  scale: Array<{ label: string; dc: number; description: string }>;
+}
+
 export interface CheckRuleConfig {
   /** 默认骰子表达式 */
   defaultDice?: string; // "1d20" | "2d6" | "1d100" 等
   criticalSuccessThreshold?: number;
   criticalFailureThreshold?: number;
   allowContest?: boolean;
+  /** 预定义的 DC 公式 */
+  dcPresets?: Record<string, DCPreset>;
+  /** 预定义的对抗检定 */
+  opposedPresets?: Record<string, OpposedPreset>;
+  /** AI 情境 DC 参考 */
+  dcGuideline?: DCGuideline;
 }
 
 export interface ConditionConfig {
@@ -455,7 +478,7 @@ export const DEFAULT_WORLD_CONFIG: WorldConfig = {
         timing: "turn_start",
         actions: [
           {
-            type: "gain",
+            type: "heal",
             target: "self",
             amount: "1d4",
             field: "hp",
@@ -474,7 +497,7 @@ export const DEFAULT_WORLD_CONFIG: WorldConfig = {
         timing: "turn_start",
         actions: [
           {
-            type: "gain",
+            type: "heal",
             target: "self",
             amount: "1d4",
             field: "mp",

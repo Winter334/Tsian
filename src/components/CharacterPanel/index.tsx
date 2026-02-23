@@ -29,17 +29,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui";
 import { yjsManager } from "@/core/yjs";
 import type { Character } from "@/domain/entities/character";
-import { computeDerivedStats } from "@/lib/rules/derived-stats";
+import { useCharacterFullStats } from "@/hooks/useCharacterFullStats";
 import { getRuntimeWorldConfig } from "@/lib/world/resolve-config";
 import type { TalentConfig, WorldConfig } from "@/lib/world/types";
 import { resolveDimensionSelections } from "@/lib/world/types";
 import { useCurrentSaveId } from "@/modules";
 import { yMapToCharacter } from "@/modules/game/repository";
 import { color, colorAlpha, glow } from "@/styles/tokens";
-import { CharacterDescriptionPanel } from "./CharacterDescriptionPanel";
 import { CharacterPortraitPanel } from "./CharacterPortraitPanel";
 import { CharacterRadarChart } from "./CharacterRadarChart";
-import { CharacterResources } from "./CharacterResources";
 import { InventorySection } from "./InventorySection";
 import { NpcList } from "./NpcList";
 import { SkillSection } from "./SkillSection";
@@ -375,43 +373,7 @@ function OverviewTabContent({
     [worldConfig],
   );
 
-  // 计算完整属性集（基础 + 衍生），并对资源字段执行保护合并
-  const fullStats = useMemo(() => {
-    const baseFields: Record<string, number | string | boolean> = {};
-    const attrs = character.attributes ?? {};
-    for (const [k, v] of Object.entries(attrs)) {
-      if (
-        typeof v === "number" ||
-        typeof v === "string" ||
-        typeof v === "boolean"
-      ) {
-        baseFields[k] = v;
-      }
-    }
-    const computed = computeDerivedStats(baseFields, worldConfig.derivedStats);
-
-    // 保护合并：资源字段的 current 优先使用 character.attributes 中 AI 已修改的值
-    for (const stat of worldConfig.derivedStats) {
-      if (!stat.isResource || !stat.maxField) continue;
-
-      // current: 优先读取 attributes（保留 AI 战斗中修改的值），缺失回退 computed
-      const attrCurrent = attrs[stat.key];
-      if (typeof attrCurrent === "number" && Number.isFinite(attrCurrent)) {
-        computed[stat.key] = attrCurrent;
-      }
-
-      // max: 优先保持 computed（公式计算值），缺失时回退 attributes
-      const computedMax = computed[stat.maxField];
-      if (typeof computedMax !== "number" || !Number.isFinite(computedMax)) {
-        const attrMax = attrs[stat.maxField];
-        if (typeof attrMax === "number" && Number.isFinite(attrMax)) {
-          computed[stat.maxField] = attrMax;
-        }
-      }
-    }
-
-    return computed;
-  }, [character.attributes, worldConfig.derivedStats]);
+  const fullStats = useCharacterFullStats(character, worldConfig);
 
   // 维度选择解析
   const resolvedDimensions = useMemo(
@@ -457,7 +419,7 @@ function OverviewTabContent({
 
   return (
     <div className="space-y-5">
-      {/* ── 顶部两列区域：左列大头像 + 右列资源/基本信息 ── */}
+      {/* ── 顶部两列区域：左列大头像 + 右列基本信息 ── */}
       <motion.div
         className="grid grid-cols-1 sm:grid-cols-[2fr_3fr] gap-4 items-stretch"
         initial={{ opacity: 0, y: -8 }}
@@ -471,7 +433,7 @@ function OverviewTabContent({
           className="aspect-square w-full max-w-50 sm:max-w-none rounded-lg overflow-hidden"
         />
 
-        {/* 右列：基本信息 + 资源 */}
+        {/* 右列：仅基本信息 */}
         <div className="flex flex-col gap-4 min-w-0">
           {/* 基本信息：角色名 + 状态标签 + 维度行 */}
           <div>
@@ -532,9 +494,6 @@ function OverviewTabContent({
               )}
             </div>
           </div>
-
-          {/* 资源区域 */}
-          <CharacterResources worldConfig={worldConfig} fullStats={fullStats} />
         </div>
       </motion.div>
 
@@ -556,19 +515,6 @@ function OverviewTabContent({
         </motion.div>
       )}
 
-      {/* ── 描述 ── */}
-      <motion.div
-        custom={2}
-        variants={sectionVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        <CharacterDescriptionPanel
-          appearance={character.appearance}
-          personality={character.personality}
-          description={character.description}
-        />
-      </motion.div>
     </div>
   );
 }

@@ -22,6 +22,7 @@ import type {
   DiceRoll,
   ResultFrame,
   RuleScript,
+  TriggerAction,
   ValueChange,
 } from "@/domain/types";
 import type { WorldConfig } from "@/lib/world";
@@ -73,7 +74,7 @@ export interface TriggerPipelineResult {
 export function executeTurnStartTriggers(
   worldConfig: WorldConfig,
   entities: EntityAccessor,
-  baseContext: Omit<ExecutionContext, "actorId" | "targetId">
+  baseContext: Omit<ExecutionContext, "actorId" | "targetId">,
 ): TriggerPipelineResult {
   const engine = new BasicRulesEngine();
   const allDiceRolls: DiceRoll[] = [];
@@ -105,22 +106,24 @@ export function executeTurnStartTriggers(
         triggerCount++;
         if (triggerCount > TRIGGER_LIMITS.maxTriggersPerTurn) {
           warnings.push(
-            `触发器执行超限：已执行 ${triggerCount} 个触发器（上限 ${TRIGGER_LIMITS.maxTriggersPerTurn}），跳过剩余触发器`
+            `触发器执行超限：已执行 ${triggerCount} 个触发器（上限 ${TRIGGER_LIMITS.maxTriggersPerTurn}），跳过剩余触发器`,
           );
           break;
         }
 
         // 安全限制：单个触发器 action 数
-        if (trigger.actions.length > TRIGGER_LIMITS.maxTriggerActions) {
+        const triggerActions: TriggerAction[] = trigger.actions ?? [];
+
+        if (triggerActions.length > TRIGGER_LIMITS.maxTriggerActions) {
           warnings.push(
-            `标签 "${tagMeta.displayName}" (${tagId}) 的触发器包含 ${trigger.actions.length} 个 action（上限 ${TRIGGER_LIMITS.maxTriggerActions}），已跳过`
+            `标签 "${tagMeta.displayName}" (${tagId}) 的触发器包含 ${triggerActions.length} 个 action（上限 ${TRIGGER_LIMITS.maxTriggerActions}），已跳过`,
           );
           // 不 continue，仍需处理 duration 衰减
         } else {
           // 构建触发器的 RuleScript
           const triggerScript: RuleScript = {
-            version: 1,
-            actions: trigger.actions,
+            version: 2,
+            actions: triggerActions as unknown as RuleScript["actions"],
           };
 
           // 执行触发器（actorId = 拥有标签的实体）
@@ -145,14 +148,14 @@ export function executeTurnStartTriggers(
               warnings.push(
                 `标签 "${tagMeta.displayName}" (${tagId}) 触发器执行失败: ${
                   result.error ?? "未知错误"
-                }`
+                }`,
               );
             }
           } catch (error) {
             warnings.push(
               `标签 "${tagMeta.displayName}" (${tagId}) 触发器执行异常: ${
                 error instanceof Error ? error.message : String(error)
-              }`
+              }`,
             );
           }
         }
@@ -213,7 +216,7 @@ export function executeTurnStartTriggers(
           diceRolls: allDiceRolls,
           valueChanges: allValueChanges,
         },
-        baseContext.aliasMap?.displayNames
+        baseContext.aliasMap?.displayNames,
       )
     : "";
 

@@ -17,9 +17,6 @@ export interface ExpressionEvaluationResult {
 const parser = new Parser();
 type ParserEvaluateScope = NonNullable<Parameters<Parser["evaluate"]>[1]>;
 
-const DOLLAR_VARIABLE_PATTERN =
-  /\$([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)/g;
-
 function toRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return null;
@@ -31,7 +28,7 @@ function toRecord(value: unknown): Record<string, unknown> | null {
 function setPath(
   target: Record<string, unknown>,
   path: string,
-  value: ExpressionPrimitive
+  value: ExpressionPrimitive,
 ): void {
   const segments = path.split(".");
   let cursor = target;
@@ -53,21 +50,11 @@ function setPath(
 }
 
 function buildExpressionScope(
-  variables: Record<string, ExpressionPrimitive>
+  variables: Record<string, ExpressionPrimitive>,
 ): Record<string, unknown> {
   const scope: Record<string, unknown> = {};
-  const variableRoot: Record<string, unknown> = {};
-  scope.__vars = variableRoot;
 
   for (const [key, value] of Object.entries(variables)) {
-    if (key.startsWith("$")) {
-      const variablePath = key.slice(1);
-      if (variablePath.length > 0) {
-        setPath(variableRoot, variablePath, value);
-      }
-      continue;
-    }
-
     setPath(scope, key, value);
   }
 
@@ -77,25 +64,21 @@ function buildExpressionScope(
 export function evaluateExpression(
   expression: string,
   variables: Record<string, ExpressionPrimitive>,
-  random: () => number
+  random: () => number,
 ): ExpressionEvaluationResult {
   const preprocessed = preprocessDiceInExpression(expression, random);
-  const transformedExpression = preprocessed.expression.replace(
-    DOLLAR_VARIABLE_PATTERN,
-    (_match, path: string) => `__vars.${path}`
-  );
 
   const evaluationScope = buildExpressionScope(
-    variables
+    variables,
   ) as unknown as ParserEvaluateScope;
 
   let value: unknown;
   try {
-    value = parser.evaluate(transformedExpression, evaluationScope);
+    value = parser.evaluate(preprocessed.expression, evaluationScope);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `表达式求值失败: "${expression}" -> "${preprocessed.expression}" (${message})`
+      `表达式求值失败: "${expression}" -> "${preprocessed.expression}" (${message})`,
     );
   }
 
@@ -105,7 +88,7 @@ export function evaluateExpression(
     typeof value !== "string"
   ) {
     throw new Error(
-      `表达式求值结果类型不支持: ${typeof value}（表达式：${expression}）`
+      `表达式求值结果类型不支持: ${typeof value}（表达式：${expression}）`,
     );
   }
 

@@ -89,7 +89,7 @@ export const BaseTextInput = forwardRef<BaseTextInputRef, BaseTextInputProps>(
       readOnly = false,
       maxHeight = 200,
     },
-    ref
+    ref,
   ) => {
     // 内部状态（非受控模式）
     const [internalValue, setInternalValue] = useState(initialValue);
@@ -113,7 +113,7 @@ export const BaseTextInput = forwardRef<BaseTextInputRef, BaseTextInputProps>(
         }
         onChange?.(newValue);
       },
-      [isControlled, onValueChange, onChange]
+      [isControlled, onValueChange, onChange],
     );
 
     // 暴露方法给父组件
@@ -130,7 +130,7 @@ export const BaseTextInput = forwardRef<BaseTextInputRef, BaseTextInputProps>(
       return {
         borderTop: `2px solid ${colorAlpha(
           "primary",
-          isStrongGlowEnabled ? 0.6 : 0.35
+          isStrongGlowEnabled ? 0.6 : 0.35,
         )}`,
         background: colorAlpha("bgCard", isGlassEffectEnabled ? 0.7 : 0.9),
         backdropFilter: `blur(${isGlassEffectEnabled ? 12 : 4}px)`,
@@ -152,15 +152,15 @@ export const BaseTextInput = forwardRef<BaseTextInputRef, BaseTextInputProps>(
           ? isStrongGlowEnabled
             ? `0 0 25px ${colorAlpha("primary", 0.55)}, 0 0 45px ${colorAlpha(
                 "secondary",
-                0.3
+                0.3,
               )}`
             : `0 0 0 2px ${colorAlpha("primary", 0.25)}, 0 0 12px ${colorAlpha(
                 "primary",
-                0.18
+                0.18,
               )}`
           : isGlassEffectEnabled
-          ? `0 0 8px ${colorAlpha("primary", 0.2)}`
-          : `0 0 0 1px ${colorAlpha("border", 0.2)}`,
+            ? `0 0 8px ${colorAlpha("primary", 0.2)}`
+            : `0 0 0 1px ${colorAlpha("border", 0.2)}`,
       };
     }, [isGlassEffectEnabled, isFocused, isStrongGlowEnabled]);
 
@@ -175,7 +175,7 @@ export const BaseTextInput = forwardRef<BaseTextInputRef, BaseTextInputProps>(
         boxShadow: canSubmit
           ? `0 0 ${isStrongGlowEnabled ? 15 : 8}px ${colorAlpha(
               "primary",
-              isStrongGlowEnabled ? 0.5 : 0.3
+              isStrongGlowEnabled ? 0.5 : 0.3,
             )}`
           : "none",
       };
@@ -188,7 +188,7 @@ export const BaseTextInput = forwardRef<BaseTextInputRef, BaseTextInputProps>(
         textarea.style.height = "auto";
         textarea.style.height = `${Math.min(
           textarea.scrollHeight,
-          maxHeight
+          maxHeight,
         )}px`;
       }
     }, [value, maxHeight]);
@@ -223,7 +223,7 @@ export const BaseTextInput = forwardRef<BaseTextInputRef, BaseTextInputProps>(
         className={cn(
           "p-3.5",
           `transition-all duration-[${animation.duration.normal * 1000}ms]`,
-          "hover:scale-105 active:scale-95"
+          "hover:scale-105 active:scale-95",
         )}
         style={{
           ...buttonStyles,
@@ -263,7 +263,7 @@ export const BaseTextInput = forwardRef<BaseTextInputRef, BaseTextInputProps>(
             <StarfieldBackground transparentBackground useThemeColors />
           </div>
         )}
-        <div className="relative z-10 max-w-3xl mx-auto flex items-end gap-3">
+        <div className="relative z-10 w-full flex items-end gap-3">
           {leadingContent}
           <textarea
             ref={textareaRef}
@@ -283,7 +283,7 @@ export const BaseTextInput = forwardRef<BaseTextInputRef, BaseTextInputProps>(
               `transition-all duration-[${animation.duration.normal * 1000}ms]`,
               "scrollbar-none",
               disabled && "opacity-50 cursor-not-allowed",
-              readOnly && "cursor-default"
+              readOnly && "cursor-default",
             )}
             style={
               {
@@ -296,11 +296,10 @@ export const BaseTextInput = forwardRef<BaseTextInputRef, BaseTextInputProps>(
               if (!isFocused && !disabled && !readOnly) {
                 (e.currentTarget as HTMLTextAreaElement).style.borderColor =
                   colorAlpha("primary", isStrongGlowEnabled ? 0.7 : 0.6);
-                (
-                  e.currentTarget as HTMLTextAreaElement
-                ).style.boxShadow = `0 0 ${
-                  isStrongGlowEnabled ? 12 : 8
-                }px ${colorAlpha("primary", isStrongGlowEnabled ? 0.3 : 0.16)}`;
+                (e.currentTarget as HTMLTextAreaElement).style.boxShadow =
+                  `0 0 ${
+                    isStrongGlowEnabled ? 12 : 8
+                  }px ${colorAlpha("primary", isStrongGlowEnabled ? 0.3 : 0.16)}`;
               }
             }}
             onMouseLeave={(e) => {
@@ -319,7 +318,7 @@ export const BaseTextInput = forwardRef<BaseTextInputRef, BaseTextInputProps>(
         </div>
       </div>
     );
-  }
+  },
 );
 
 BaseTextInput.displayName = "BaseTextInput";

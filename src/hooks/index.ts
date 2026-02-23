@@ -13,3 +13,4 @@ export {
 } from "./use-theme";
 export { useThemeComponent, useThemeComponents } from "./use-theme-component";
 export { useToast } from "./use-toast";
+export { useCharacterFullStats } from "./useCharacterFullStats";

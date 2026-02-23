@@ -7,7 +7,12 @@
  * Phase 4 核心组件：解决 AI 输出的 "player"/"NPC名称" 无法被引擎解析的问题。
  */
 
-import type { RuleAction, RuleScript } from "@/domain/types/rule-script";
+import type {
+  CheckAction,
+  RuleAction,
+  RuleScript,
+  TriggerAction,
+} from "@/domain/types/rule-script";
 import type { WorldConfig } from "@/lib/world/types";
 import { actionSchemaRegistry } from "./registry";
 import type { ActionParamSchema, EntityAliasMap } from "./types";
@@ -112,7 +117,7 @@ export function validateRuleScript(
 
   return {
     ruleScript: {
-      version: 1,
+      version: 2,
       actions: fixedActions,
     },
     errors,
@@ -221,7 +226,7 @@ function validateAction(
     }
   }
 
-  // 递归校验嵌套 actions（conditional.then/else, sequence.steps, npcAction.directEffects）
+  // 递归校验嵌套 actions（branch.then/else）
   if (shouldValidateNestedActions) {
     validateNestedActions(actionObj, index, options, errors);
   }
@@ -449,15 +454,16 @@ function validateNestedActions(
   options: ValidateOptions,
   errors: ValidationError[],
 ): void {
-  // conditional.then / conditional.else
-  if (actionObj.type === "conditional") {
+  // branch.then / branch.else
+  if (actionObj.type === "branch") {
     if (Array.isArray(actionObj.then)) {
       actionObj.then = validateActionArray(
         actionObj.then as RuleAction[],
         parentIndex,
         options,
         errors,
-      );
+        false,
+      ) as unknown as RuleAction[];
     }
     if (Array.isArray(actionObj.else)) {
       actionObj.else = validateActionArray(
@@ -465,49 +471,140 @@ function validateNestedActions(
         parentIndex,
         options,
         errors,
-      );
+        false,
+      ) as unknown as RuleAction[];
     }
   }
 
-  // sequence.steps
-  if (actionObj.type === "sequence" && Array.isArray(actionObj.steps)) {
-    actionObj.steps = validateActionArray(
-      actionObj.steps as RuleAction[],
-      parentIndex,
-      options,
-      errors,
-    );
+  // check.onSuccess / check.onFailure
+  if (actionObj.type === "check") {
+    const checkAction = actionObj as unknown as CheckAction;
+
+    if (Array.isArray(checkAction.onSuccess)) {
+      checkAction.onSuccess = validateActionArray(
+        checkAction.onSuccess,
+        parentIndex,
+        options,
+        errors,
+        false,
+      ) as unknown as RuleAction[];
+    }
+
+    if (Array.isArray(checkAction.onFailure)) {
+      checkAction.onFailure = validateActionArray(
+        checkAction.onFailure,
+        parentIndex,
+        options,
+        errors,
+        false,
+      ) as unknown as RuleAction[];
+    }
   }
 
-  // npcAction.directEffects
-  if (
-    actionObj.type === "npcAction" &&
-    Array.isArray(actionObj.directEffects)
-  ) {
-    actionObj.directEffects = validateActionArray(
-      actionObj.directEffects as RuleAction[],
-      parentIndex,
-      options,
-      errors,
-    );
+  // addTag.trigger.actions
+  if (actionObj.type === "addTag") {
+    const trigger = actionObj.trigger;
+    if (
+      typeof trigger === "object" &&
+      trigger !== null &&
+      Array.isArray((trigger as Record<string, unknown>).actions)
+    ) {
+      const triggerObj = trigger as Record<string, unknown>;
+      const triggerTiming =
+        typeof triggerObj.timing === "string" ? triggerObj.timing : undefined;
+      triggerObj.actions = validateActionArray(
+        triggerObj.actions as TriggerAction[],
+        parentIndex,
+        options,
+        errors,
+        true,
+        triggerTiming,
+      ) as unknown as TriggerAction[];
+    }
   }
 }
 
 function validateActionArray(
-  actions: RuleAction[],
+  actions: TriggerAction[],
   parentIndex: number,
   options: ValidateOptions,
   errors: ValidationError[],
-): RuleAction[] {
-  const result: RuleAction[] = [];
+  allowInternalActions: boolean,
+  triggerTiming?: string,
+): TriggerAction[] {
+  const result: TriggerAction[] = [];
   for (const action of actions) {
-    const cloned = deepCloneAction(action);
+    if (!action || typeof action !== "object") {
+      continue;
+    }
+
+    if (action.type === "modifyDamage") {
+      if (!allowInternalActions) {
+        errors.push({
+          level: "warning",
+          actionIndex: parentIndex,
+          actionType: "modifyDamage",
+          message:
+            'modifyDamage 仅允许在 addTag.trigger.actions（timing="on_damage"）中使用，已移除',
+        });
+        continue;
+      }
+
+      if (triggerTiming !== "on_damage") {
+        errors.push({
+          level: "warning",
+          actionIndex: parentIndex,
+          actionType: "modifyDamage",
+          message:
+            'modifyDamage 仅允许在 addTag.trigger.timing="on_damage" 中使用，已移除',
+        });
+        continue;
+      }
+
+      const cloned = deepCloneTriggerAction(action);
+      const actionObj = cloned as unknown as Record<string, unknown>;
+
+      const multiplier = actionObj.multiplier;
+      const reduction = actionObj.reduction;
+
+      if (multiplier === undefined && reduction === undefined) {
+        errors.push({
+          level: "error",
+          actionIndex: parentIndex,
+          actionType: "modifyDamage",
+          message: "modifyDamage 至少需要提供 multiplier 或 reduction",
+        });
+      }
+
+      if (
+        typeof multiplier === "string" &&
+        /^-?\d+(\.\d+)?$/.test(multiplier.trim())
+      ) {
+        actionObj.multiplier = Number(multiplier.trim());
+      }
+
+      if (
+        typeof reduction === "string" &&
+        /^-?\d+(\.\d+)?$/.test(reduction.trim())
+      ) {
+        actionObj.reduction = Number(reduction.trim());
+      }
+
+      result.push(cloned);
+      continue;
+    }
+
+    const cloned = deepCloneAction(action as RuleAction);
     const validated = validateAction(cloned, parentIndex, options, errors);
     if (validated !== null) {
       result.push(validated);
     }
   }
   return result;
+}
+
+function deepCloneTriggerAction(action: TriggerAction): TriggerAction {
+  return JSON.parse(JSON.stringify(action)) as TriggerAction;
 }
 
 // ─── 工具函数 ─────────────────────────────────────────────

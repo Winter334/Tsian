@@ -1,5 +1,5 @@
 /**
- * RulesEngine 完整实现（P2 泛化版）
+ * RulesEngine 完整实现（v2 适配版）
  *
  * 职责：
  * 1. 接收 RuleScript + ExecutionContext
@@ -7,11 +7,20 @@
  * 3. 收集所有中间结果（骰子、检定、状态变更）
  * 4. 构建 ResultFrame 并生成 mechanicSummary
  *
- * P2 改进：
+ * v2 改进：
+ * - 类型重命名: gain→heal, lose→cost, setValue→set, conditional→branch,
+ *   npcCreate→spawn, npcStatusChange→despawn
+ * - 删除 npcAction/sequence handler
+ * - executeCheck 大幅改造：dcSource 四层分级 + onSuccess/onFailure 内嵌分支
+ *   + 对抗检定 + 预设展开
+ * - 集成 evaluators 模块（resolveValueExpression, evaluateCondition,
+ *   resolveDC, expandPreset, evaluateDCFormula）
+ *
+ * 保留的 P2 特性：
  * - A0: Shadow State（同脚本多步操作读到中间状态）
  * - A1: 动态属性注入（从 EntityAccessor.getAllFields 读取，不硬编码）
  * - A3: 检定骰子从 WorldConfig.checkRules.defaultDice 读取
- * - A4: damage/gain 支持自定义 field 参数
+ * - A4: damage/heal 支持自定义 field 参数
  * - A7: 执行安全限制（action 计数 + 递归深度）
  * - A8: 小修复（evalExpr 日志 / resolveEntityId 不回退 / 注入所有类型）
  */
@@ -35,6 +44,17 @@ import type { SkillInstance } from "@/domain/entities/skill";
 import type { WorldConfig } from "@/lib/world";
 import { getDefaultResourceField, getResourcePairs } from "@/lib/world";
 import { createSeededRandom } from "./dice";
+import type {
+  ConditionContext,
+  DCResolution,
+  EvaluationContext,
+} from "./evaluators";
+import {
+  evaluateCondition,
+  expandPreset,
+  resolveDC,
+  resolveValueExpression,
+} from "./evaluators";
 import type { ExpressionPrimitive } from "./expression";
 import { evaluateExpression } from "./expression";
 import { buildResultFrame } from "./result-builder";
@@ -48,7 +68,7 @@ import { collectPassiveModifiers, findOnDamageTriggers } from "./trigger-utils";
 const EXECUTION_LIMITS = {
   /** 单次 execute() 最大 action 执行数 */
   maxActionCount: 100,
-  /** conditional/sequence 最大嵌套深度 */
+  /** branch/check 嵌套动作最大深度 */
   maxRecursionDepth: 10,
 } as const;
 
@@ -337,8 +357,11 @@ function getKnownEntityIds(
 
 export class BasicRulesEngine implements RulesEngine {
   execute(script: RuleScript, context: ExecutionContext): ExecutionResult {
-    // 验证脚本
-    if (!script || script.version !== 1) {
+    // 验证脚本（兼容 v1 和 v2）
+    if (
+      !script ||
+      (script.version !== 2 && (script as { version: number }).version !== 1)
+    ) {
       return {
         success: false,
         error: `不支持的 RuleScript 版本: ${script?.version}`,
@@ -474,26 +497,25 @@ export class BasicRulesEngine implements RulesEngine {
 
 import type {
   AddTagAction,
+  BranchAction,
   CheckAction,
-  ConditionalAction,
+  CostAction,
   DamageAction,
-  GainAction,
+  DespawnAction,
   GrantItemAction,
   GrantSkillAction,
-  LoseAction,
+  HealAction,
   ModifyDamageAction,
   ModifyTagAction,
-  NpcActionAction,
-  NpcCreateAction,
-  NpcStatusChangeAction,
   RemoveItemAction,
   RemoveSkillAction,
   RemoveTagAction,
   RollAction,
   RuleAction,
-  SequenceAction,
-  SetValueAction,
+  SetAction,
+  SpawnAction,
 } from "@/domain/types";
+import { executeOpposedCheck } from "./opposed-check";
 
 function executeAction(
   action: RuleAction,
@@ -526,6 +548,7 @@ function executeAction(
   }
 
   const normalizedAction = validated.action;
+  const actionType = (normalizedAction as RuleAction | ModifyDamageAction).type;
 
   // A7: action 计数检查
   state.actionCount++;
@@ -535,68 +558,79 @@ function executeAction(
     );
   }
 
-  switch (normalizedAction.type) {
+  switch (actionType) {
     case "check":
-      executeCheck(normalizedAction, context, state);
+      executeCheck(
+        normalizedAction as CheckAction,
+        context,
+        state,
+        actionIndex,
+      );
       break;
     case "damage":
-      executeDamage(normalizedAction, context, state, actionIndex);
+      executeDamage(
+        normalizedAction as DamageAction,
+        context,
+        state,
+        actionIndex,
+      );
       break;
-    case "gain":
-      executeGain(normalizedAction, context, state);
+    case "heal":
+      executeHeal(normalizedAction as HealAction, context, state);
       break;
-    case "lose":
-      executeLose(normalizedAction, context, state);
+    case "cost":
+      executeCost(normalizedAction as CostAction, context, state);
       break;
     case "roll":
-      executeRoll(normalizedAction, context, state);
+      executeRoll(normalizedAction as RollAction, context, state);
       break;
     case "addTag":
-      executeAddTag(normalizedAction, context, state);
+      executeAddTag(normalizedAction as AddTagAction, context, state);
       break;
     case "removeTag":
-      executeRemoveTag(normalizedAction, context, state);
+      executeRemoveTag(normalizedAction as RemoveTagAction, context, state);
       break;
     case "modifyTag":
-      executeModifyTag(normalizedAction, context, state);
+      executeModifyTag(normalizedAction as ModifyTagAction, context, state);
       break;
-    case "setValue":
-      executeSetValue(normalizedAction, context, state);
+    case "set":
+      executeSet(normalizedAction as SetAction, context, state);
       break;
-    case "conditional":
-      executeConditional(normalizedAction, context, state, actionIndex);
-      break;
-    case "sequence":
-      executeSequence(normalizedAction, context, state, actionIndex);
+    case "branch":
+      executeBranch(
+        normalizedAction as BranchAction,
+        context,
+        state,
+        actionIndex,
+      );
       break;
     case "modifyDamage":
-      executeModifyDamage(normalizedAction, context, state);
+      executeModifyDamage(
+        normalizedAction as unknown as ModifyDamageAction,
+        context,
+        state,
+      );
       break;
-    case "npcCreate":
-      executeNpcCreate(normalizedAction, context, state);
+    case "spawn":
+      executeSpawn(normalizedAction as SpawnAction, context, state);
       break;
-    case "npcStatusChange":
-      executeNpcStatusChange(normalizedAction, context, state);
-      break;
-    case "npcAction":
-      executeNpcAction(normalizedAction, context, state, actionIndex);
+    case "despawn":
+      executeDespawn(normalizedAction as DespawnAction, context, state);
       break;
     case "grantItem":
-      executeGrantItem(normalizedAction, context, state);
+      executeGrantItem(normalizedAction as GrantItemAction, context, state);
       break;
     case "removeItem":
-      executeRemoveItem(normalizedAction, context, state);
+      executeRemoveItem(normalizedAction as RemoveItemAction, context, state);
       break;
     case "grantSkill":
-      executeGrantSkill(normalizedAction, context, state);
+      executeGrantSkill(normalizedAction as GrantSkillAction, context, state);
       break;
     case "removeSkill":
-      executeRemoveSkill(normalizedAction, context, state);
+      executeRemoveSkill(normalizedAction as RemoveSkillAction, context, state);
       break;
     default:
-      throw new Error(
-        `未知的 action 类型: ${(normalizedAction as RuleAction).type}`,
-      );
+      throw new Error(`未知的 action 类型: ${actionType}`);
   }
 }
 
@@ -646,7 +680,7 @@ function buildVariables(
 ): Record<string, ExpressionPrimitive> {
   const vars: Record<string, ExpressionPrimitive> = {};
 
-  // 复制已有变量（含 $xxx.yyy）
+  // 复制已有变量
   for (const [k, v] of Object.entries(state.variables)) {
     vars[k] = v;
   }
@@ -752,21 +786,135 @@ function getEntityTypeOrDefault(
   return entities.getEntityType(entityId) ?? "character";
 }
 
+// ─── EvaluationContext 构建辅助 ────────────────────────────
+
+/**
+ * 从引擎当前状态构建求值器所需的 EvaluationContext
+ * 用于 resolveValueExpression / resolveDC / evaluateDCFormula
+ */
+function buildEvaluationContext(
+  context: ExecutionContext,
+  state: InternalExecutionState,
+  actorEntityId: string = context.actorId,
+): EvaluationContext {
+  // 收集 actor 属性（含 shadow）
+  const actorFields = getAllFieldsWithShadow(actorEntityId, context, state);
+  const actorAttributes: Record<string, number> = {};
+  if (actorFields) {
+    for (const [k, v] of Object.entries(actorFields)) {
+      if (typeof v === "number") actorAttributes[k] = v;
+    }
+  }
+
+  // 构建 vars（从 state.variables 中提取 number/boolean）
+  const vars: Record<string, number | boolean> = {};
+  for (const [k, v] of Object.entries(state.variables)) {
+    if (typeof v === "number" || typeof v === "boolean") {
+      vars[k] = v;
+    }
+  }
+
+  return {
+    actorAttributes,
+    vars,
+    getEntityAttributes: (entityId: string) => {
+      const resolvedEntityId =
+        entityId === "target" && context.targetId
+          ? resolveEntityId(context.targetId, context, state)
+          : resolveEntityId(entityId, context, state);
+      const fields = getAllFieldsWithShadow(resolvedEntityId, context, state);
+      if (!fields) return undefined;
+      const numericFields: Record<string, number> = {};
+      for (const [k, v] of Object.entries(fields)) {
+        if (typeof v === "number") numericFields[k] = v;
+      }
+      return numericFields;
+    },
+  };
+}
+
+/**
+ * 从引擎当前状态构建 ConditionContext（扩展 EvaluationContext，含 hasTag/hasItem）
+ * 用于 evaluateCondition
+ */
+function buildConditionContext(
+  context: ExecutionContext,
+  state: InternalExecutionState,
+): ConditionContext {
+  const base = buildEvaluationContext(context, state);
+  return {
+    ...base,
+    hasTag: (entityId: string, tag: string) =>
+      hasTagWithShadow(entityId, tag, context, state),
+    hasItem: (entityId: string, itemName: string) => {
+      if (!context.entities.getItems) return false;
+      const resolvedId = resolveEntityId(entityId, context, state);
+      const items = context.entities.getItems(resolvedId);
+      return items.some((item) => item.name === itemName);
+    },
+  };
+}
+
+/**
+ * 从引擎状态获取实体的技能修正值
+ * 优先查找 skill 字段名对应的属性值
+ */
+function getSkillModifier(
+  entityId: string,
+  skill: string,
+  context: ExecutionContext,
+  state: InternalExecutionState,
+): number {
+  // 优先从 shadow + EntityAccessor 获取以 skill 名为 key 的属性
+  const value = getValueWithShadow(entityId, skill, context, state);
+  if (typeof value === "number") return value;
+
+  // 尝试 skill_mod 格式
+  const modValue = getValueWithShadow(entityId, `${skill}_mod`, context, state);
+  if (typeof modValue === "number") return modValue;
+
+  return 0;
+}
+
 // ─── Action 执行器 ────────────────────────────────────────
 
-// A3: 检定骰子从 WorldConfig.checkRules.defaultDice 读取
+/**
+ * executeCheck — v2 完整检定流程
+ *
+ * 支持 dcSource 四层分级（formula/opposed/fixed/ai）+ 预设展开
+ * + onSuccess/onFailure 内嵌分支 + 对抗检定
+ */
 function executeCheck(
   action: CheckAction,
   context: ExecutionContext,
   state: InternalExecutionState,
+  actionIndex: number,
 ): void {
-  const targetId = resolveEntityId(action.target, context, state);
+  // 1. 预设展开
+  let expandedAction = action;
+  if (action.preset) {
+    expandedAction = expandPreset(action, context.worldConfig.checkRules);
+  }
 
-  // A3: 从 WorldConfig 读取骰子表达式
+  // 2. 解析检定执行者（check.target 表示执行检定的实体）
+  const checkActorId = expandedAction.target
+    ? resolveEntityId(expandedAction.target, context, state)
+    : context.actorId;
+  const checkTargetId = context.targetId
+    ? resolveEntityId(context.targetId, context, state)
+    : undefined;
+
+  // 3. 构建 EvaluationContext
+  const evalCtx = buildEvaluationContext(context, state, checkActorId);
+
+  // 4. 解析 DC
+  const dcResolution: DCResolution = resolveDC(expandedAction, evalCtx);
+
+  // 5. A3: 从 WorldConfig 读取骰子表达式
   const diceExpr = context.worldConfig.checkRules.defaultDice ?? "1d20";
   const diceResult = evaluateExpression(
     diceExpr,
-    buildVariables(context, state, targetId),
+    buildVariables(context, state, checkTargetId),
     state.random,
   );
   const rawRoll = typeof diceResult.value === "number" ? diceResult.value : 0;
@@ -775,79 +923,169 @@ function executeCheck(
   for (const roll of diceResult.diceRolls) {
     state.diceRolls.push({
       ...roll,
-      purpose: action.name ?? action.checkType,
+      purpose: expandedAction.name ?? expandedAction.skill,
     });
   }
 
-  const baseModifier = evalNumber(action.modifier, context, state, targetId);
-  const dc = evalNumber(action.dc, context, state, targetId);
+  // 5. 计算修正值
+  const skillMod = getSkillModifier(
+    checkActorId,
+    expandedAction.skill,
+    context,
+    state,
+  );
+  const extraMod =
+    expandedAction.modifier !== undefined
+      ? resolveValueExpression(expandedAction.modifier, evalCtx)
+      : 0;
 
   // ── 天赋系统：收集 actor 的被动检定修正 ──
   let passiveBonus = 0;
   const passiveMods = collectPassiveModifiers(
-    context.actorId,
+    checkActorId,
     context.entities,
     context.worldConfig,
   );
 
   for (const mod of passiveMods) {
     if (mod.scope !== "check") continue;
-    if (mod.filter && mod.filter !== action.checkType) continue;
+    if (mod.filter && mod.filter !== expandedAction.skill) continue;
 
     const modValue =
       mod.value !== undefined
-        ? evalNumber(mod.value, context, state, targetId)
+        ? evalNumber(mod.value, context, state, checkTargetId)
         : 0;
 
     passiveBonus += modValue;
     state.modifiersApplied.push({
       source: mod.reason,
-      target: context.actorId,
+      target: checkActorId,
       value: modValue,
       reason: mod.reason,
     });
   }
 
-  const modifier = baseModifier + passiveBonus;
-  // ── 被动检定修正结束 ──
+  const totalModifier = skillMod + extraMod + passiveBonus;
+  let attackerTotal = rawRoll + totalModifier;
 
-  const total = rawRoll + modifier;
-  const success = total >= dc;
+  // 6. 根据 DC 结果类型判定
+  let success: boolean;
+  let dc: number | undefined;
+  let margin: number;
+  let opposedRoll: number | undefined;
+  let opposedModifier: number | undefined;
+  let opposedTotal: number | undefined;
+  let opposedSkillName: string | undefined;
+  let dcFormulaUsed: string | undefined;
+  const dcSource = expandedAction.dcSource ?? "ai";
 
-  // 判定等级
-  const critThreshold = context.worldConfig.checkRules.criticalSuccessThreshold;
-  const fumbleThreshold =
-    context.worldConfig.checkRules.criticalFailureThreshold;
+  if (dcResolution.type === "standard") {
+    // standard 路径（formula/fixed/ai）
+    dc = dcResolution.dc;
+    success = attackerTotal >= dc;
+    margin = attackerTotal - dc;
 
-  let degree: Check["degree"];
-  if (critThreshold !== undefined && rawRoll >= critThreshold)
-    degree = "critical";
-  else if (fumbleThreshold !== undefined && rawRoll <= fumbleThreshold)
-    degree = "fumble";
-  else if (success) degree = "success";
-  else degree = "failure";
+    // 记录 dcFormula（如果是 formula 来源）
+    if (dcSource === "formula" && expandedAction.dcFormula) {
+      dcFormulaUsed = expandedAction.dcFormula;
+    }
+  } else {
+    // opposed 路径
+    const defenderEntityId = resolveEntityId(
+      dcResolution.opposedEntityId,
+      context,
+      state,
+    );
+    const defenderDiceResult = evaluateExpression(
+      diceExpr,
+      buildVariables(context, state, defenderEntityId),
+      state.random,
+    );
+    opposedRoll =
+      typeof defenderDiceResult.value === "number"
+        ? defenderDiceResult.value
+        : 0;
 
+    // 记录对方骰子
+    for (const roll of defenderDiceResult.diceRolls) {
+      state.diceRolls.push({
+        ...roll,
+        purpose: `${expandedAction.name ?? expandedAction.skill} (对抗方)`,
+      });
+    }
+
+    opposedModifier = getSkillModifier(
+      defenderEntityId,
+      dcResolution.opposedSkill,
+      context,
+      state,
+    );
+    opposedSkillName = dcResolution.opposedSkill;
+
+    const queuedRolls: number[] = [rawRoll, opposedRoll];
+    const opposedResult = executeOpposedCheck(
+      totalModifier,
+      opposedModifier,
+      () => {
+        const nextRoll = queuedRolls.shift();
+        if (nextRoll === undefined) {
+          throw new Error("对抗检定预置骰值不足");
+        }
+        return nextRoll;
+      },
+    );
+
+    attackerTotal = opposedResult.attackerTotal;
+    opposedRoll = opposedResult.defenderRoll;
+    opposedTotal = opposedResult.defenderTotal;
+    success = opposedResult.success;
+    margin = opposedResult.margin;
+  }
+
+  // 7. 构建 CheckResult（使用 v2 扩展字段）
   const check: Check = {
-    type: action.checkType,
-    name: action.name ?? action.checkType,
-    dc,
+    name: expandedAction.name ?? expandedAction.skill,
+    skill: expandedAction.skill,
     roll: rawRoll,
-    modifier,
-    total,
+    modifier: totalModifier,
+    total: attackerTotal,
+    dcSource,
+    dc,
+    dcFormulaUsed,
+    opposedRoll,
+    opposedModifier,
+    opposedTotal,
+    opposedSkill: opposedSkillName,
     success,
-    degree,
+    margin,
   };
 
   state.checks.push(check);
 
-  // 写入 resultVar
-  if (action.resultVar) {
-    state.variables[`$${action.resultVar}.success`] = success;
-    state.variables[`$${action.resultVar}.roll`] = rawRoll;
-    state.variables[`$${action.resultVar}.total`] = total;
-    state.variables[`$${action.resultVar}.modifier`] = modifier;
-    state.variables[`$${action.resultVar}.dc`] = dc;
-    state.variables[`$${action.resultVar}.degree`] = degree ?? "success";
+  // 8. 写入 resultVar（v2 契约：裸变量键）
+  if (expandedAction.resultVar) {
+    state.variables[expandedAction.resultVar] = success;
+  }
+
+  // 9. 执行分支（onSuccess / onFailure）—— 受嵌套深度限制
+  state.currentDepth++;
+  if (state.currentDepth > EXECUTION_LIMITS.maxRecursionDepth) {
+    state.currentDepth--;
+    throw new Error(
+      `嵌套超限：深度 ${state.currentDepth + 1}（上限 ${EXECUTION_LIMITS.maxRecursionDepth}）`,
+    );
+  }
+
+  try {
+    const branchActions = success
+      ? expandedAction.onSuccess
+      : (expandedAction.onFailure ?? []);
+
+    for (const subAction of branchActions) {
+      executeAction(subAction, context, state, actionIndex);
+    }
+  } finally {
+    state.currentDepth--;
   }
 }
 
@@ -977,8 +1215,13 @@ function executeDamage(
           };
 
           try {
-            for (const triggerAction of trigger.actions) {
-              executeAction(triggerAction, triggerContext, state, actionIndex);
+            for (const triggerAction of trigger.actions ?? []) {
+              executeAction(
+                triggerAction as RuleAction,
+                triggerContext,
+                state,
+                actionIndex,
+              );
             }
           } catch (error) {
             console.warn(
@@ -1065,9 +1308,9 @@ function applyDamageModifications(
   return Math.max(0, Math.floor(amount));
 }
 
-// A4: gain 支持自定义字段 + A0: shadow-aware 读写
-function executeGain(
-  action: GainAction,
+// heal: 恢复资源值（带上限钳制）+ A0: shadow-aware 读写
+function executeHeal(
+  action: HealAction,
   context: ExecutionContext,
   state: InternalExecutionState,
 ): void {
@@ -1099,13 +1342,13 @@ function executeGain(
     oldValue: currentValue,
     newValue,
     delta: newValue - currentValue,
-    reason: action.reason ?? "增加资源",
+    reason: action.reason ?? "恢复资源",
   });
 }
 
-// lose: 消耗资源值（不触发 on_damage）+ A0: shadow-aware 读写
-function executeLose(
-  action: LoseAction,
+// cost: 消耗资源值（不触发 on_damage）+ A0: shadow-aware 读写
+function executeCost(
+  action: CostAction,
   context: ExecutionContext,
   state: InternalExecutionState,
 ): void {
@@ -1160,7 +1403,7 @@ function executeRoll(
   }
 
   if (action.resultVar) {
-    state.variables[`$${action.resultVar}.total`] = result.value;
+    state.variables[action.resultVar] = result.value;
   }
 }
 
@@ -1273,9 +1516,9 @@ function executeModifyTag(
   });
 }
 
-// A0: shadow-aware setValue
-function executeSetValue(
-  action: SetValueAction,
+// A0: shadow-aware set（原 setValue）
+function executeSet(
+  action: SetAction,
   context: ExecutionContext,
   state: InternalExecutionState,
 ): void {
@@ -1289,7 +1532,7 @@ function executeSetValue(
   if (oldValue === undefined) {
     const knownIds = context.entities.getAllEntityIds?.() ?? [];
     console.warn(
-      `[RulesEngine] setValue: 实体 "${targetId}" 的字段 "${action.field}" 的 oldValue 为 undefined。` +
+      `[RulesEngine] set: 实体 "${targetId}" 的字段 "${action.field}" 的 oldValue 为 undefined。` +
         `已注册的实体 ID: [${knownIds.join(", ")}]`,
     );
   }
@@ -1319,9 +1562,9 @@ function executeSetValue(
   });
 }
 
-// A7: 递归深度限制
-function executeConditional(
-  action: ConditionalAction,
+// branch（原 conditional）：使用 evaluateCondition 求值
+function executeBranch(
+  action: BranchAction,
   context: ExecutionContext,
   state: InternalExecutionState,
   actionIndex: number,
@@ -1334,40 +1577,14 @@ function executeConditional(
   }
 
   try {
-    const conditionValue = evalExpr(action.condition, context, state);
-    const isTruthy =
-      conditionValue === true ||
-      (typeof conditionValue === "number" && conditionValue !== 0) ||
-      (typeof conditionValue === "string" && conditionValue.length > 0);
+    const condCtx = buildConditionContext(context, state);
+    const isTruthy = evaluateCondition(action.condition, condCtx);
 
     const branch = isTruthy ? action.then : action.else;
     if (branch) {
       for (const subAction of branch) {
         executeAction(subAction, context, state, actionIndex);
       }
-    }
-  } finally {
-    state.currentDepth--;
-  }
-}
-
-// A7: 递归深度限制
-function executeSequence(
-  action: SequenceAction,
-  context: ExecutionContext,
-  state: InternalExecutionState,
-  actionIndex: number,
-): void {
-  state.currentDepth++;
-  if (state.currentDepth > EXECUTION_LIMITS.maxRecursionDepth) {
-    throw new Error(
-      `嵌套超限：深度 ${state.currentDepth}（上限 ${EXECUTION_LIMITS.maxRecursionDepth}）`,
-    );
-  }
-
-  try {
-    for (const step of action.steps) {
-      executeAction(step, context, state, actionIndex);
     }
   } finally {
     state.currentDepth--;
@@ -1461,40 +1678,41 @@ function registerNpcAlias(
   aliasMap.displayNames.set(npcId, `${npcName}#${index}`);
 }
 
-function executeNpcCreate(
-  action: NpcCreateAction,
+// spawn（原 npcCreate）：适配 v2 的 entity 嵌套结构
+function executeSpawn(
+  action: SpawnAction,
   context: ExecutionContext,
   state: InternalExecutionState,
 ): void {
   const npcId = generateNpcId(state.random);
-  const attributes = action.npc.attributes ?? {};
+  const attributes = action.entity.attributes ?? {};
 
   // 构建 NPC 数据记录
   const npcData: CreatedNpcData = {
     id: npcId,
-    name: action.npc.name,
-    description: action.npc.description,
-    personality: action.npc.personality,
-    appearance: action.npc.appearance,
+    name: action.entity.name,
+    description: action.entity.description,
+    personality: action.entity.personality,
+    appearance: action.entity.appearance,
     attributes,
-    talentIds: action.npc.talentIds,
+    talentIds: action.entity.talentIds,
   };
 
   state.createdNpcs.push(npcData);
 
   // 运行时更新 aliasMap，使本回合后续 action 可通过名称解析到新 NPC
-  registerNpcAlias(context.aliasMap, npcId, action.npc.name);
+  registerNpcAlias(context.aliasMap, npcId, action.entity.name);
 
   // 将所有初始数据写入 fieldOverlay（新 NPC 不在 EntityAccessor 中）
-  setShadowField(state, npcId, "name", action.npc.name);
-  if (action.npc.description) {
-    setShadowField(state, npcId, "description", action.npc.description);
+  setShadowField(state, npcId, "name", action.entity.name);
+  if (action.entity.description) {
+    setShadowField(state, npcId, "description", action.entity.description);
   }
-  if (action.npc.personality) {
-    setShadowField(state, npcId, "personality", action.npc.personality);
+  if (action.entity.personality) {
+    setShadowField(state, npcId, "personality", action.entity.personality);
   }
-  if (action.npc.appearance) {
-    setShadowField(state, npcId, "appearance", action.npc.appearance);
+  if (action.entity.appearance) {
+    setShadowField(state, npcId, "appearance", action.entity.appearance);
   }
 
   for (const [field, value] of Object.entries(attributes)) {
@@ -1511,24 +1729,25 @@ function executeNpcCreate(
     field: "npc.create",
     oldValue: false,
     newValue: true,
-    reason: `NPC「${action.npc.name}」加入场景`,
+    reason: `NPC「${action.entity.name}」加入场景`,
   });
 
   // 记录到 NPC 摘要
   state.npcSummaryEntries.push({
     type: "create",
     npcId,
-    npcName: action.npc.name,
-    detail: action.npc.description ?? "",
+    npcName: action.entity.name,
+    detail: action.entity.description ?? "",
   });
 }
 
-function executeNpcStatusChange(
-  action: NpcStatusChangeAction,
+// despawn（原 npcStatusChange）：适配 mode: "temporary" | "permanent"
+function executeDespawn(
+  action: DespawnAction,
   context: ExecutionContext,
   state: InternalExecutionState,
 ): void {
-  const npcId = resolveEntityId(action.npcId, context, state);
+  const npcId = resolveEntityId(action.entityId, context, state);
 
   // 验证实体存在（在 EntityAccessor 或已创建的 NPC 中）
   const isCreatedNpc = state.createdNpcs.some((n) => n.id === npcId);
@@ -1536,7 +1755,7 @@ function executeNpcStatusChange(
 
   if (!isCreatedNpc && !existsInAccessor) {
     throw new Error(
-      `NPC "${npcId}" 不存在（不在 EntityAccessor 或已创建的 NPC 中）`,
+      `实体 "${npcId}" 不存在（不在 EntityAccessor 或已创建的 NPC 中）`,
     );
   }
 
@@ -1544,8 +1763,11 @@ function executeNpcStatusChange(
   const oldStatus = getValueWithShadow(npcId, "status", context, state);
   const oldStatusStr = typeof oldStatus === "string" ? oldStatus : "active";
 
+  // 根据 mode 映射到对应状态
+  const newStatus = action.mode === "permanent" ? "archived" : "off_scene";
+
   // 写入 fieldOverlay
-  setShadowField(state, npcId, "status", action.status);
+  setShadowField(state, npcId, "status", newStatus);
 
   // 记录 valueChange
   state.valueChanges.push({
@@ -1553,8 +1775,10 @@ function executeNpcStatusChange(
     entityType: "character",
     field: "status",
     oldValue: oldStatusStr,
-    newValue: action.status,
-    reason: `NPC「${npcName}」状态变更`,
+    newValue: newStatus,
+    reason:
+      action.reason ??
+      `NPC「${npcName}」${action.mode === "permanent" ? "永久离场" : "暂时离场"}`,
   });
 
   // 记录到 NPC 摘要
@@ -1562,56 +1786,8 @@ function executeNpcStatusChange(
     type: "statusChange",
     npcId,
     npcName,
-    detail: `${oldStatusStr} → ${action.status}`,
+    detail: `${oldStatusStr} → ${newStatus} (${action.mode})`,
   });
-}
-
-function executeNpcAction(
-  action: NpcActionAction,
-  context: ExecutionContext,
-  state: InternalExecutionState,
-  actionIndex: number,
-): void {
-  const npcId = resolveEntityId(action.npcId, context, state);
-  const npcName = getNpcName(npcId, context, state);
-
-  // 记录行动意图到 NPC 摘要
-  state.npcSummaryEntries.push({
-    type: "action",
-    npcId,
-    npcName,
-    detail: action.intention,
-  });
-
-  // 创建以 NPC 为 actor 的子上下文
-  const npcContext: ExecutionContext = {
-    ...context,
-    actorId: npcId,
-  };
-
-  // 需要检定时：构造 check action 执行
-  if (action.requiresCheck) {
-    const checkAction: CheckAction = {
-      type: "check",
-      checkType: action.requiresCheck.checkType,
-      name: `${npcName}: ${action.intention}`,
-      modifier: action.requiresCheck.attribute,
-      dc: action.requiresCheck.dc ?? 10,
-      target: action.requiresCheck.targetId,
-    };
-
-    executeCheck(checkAction, npcContext, state);
-  }
-
-  // 有直接效果时：遍历执行子 action
-  if (action.directEffects) {
-    for (const effect of action.directEffects) {
-      executeAction(effect, npcContext, state, actionIndex);
-    }
-  }
-
-  // 如果既没有 requiresCheck 也没有 directEffects，
-  // 仅记录意图到 npcSummaryEntries（已在上面完成）
 }
 
 // ─── 装备/背包/技能 Action 执行器 ──────────────────────────
@@ -1865,3 +2041,11 @@ function executeRemoveSkill(
 // ─── 导出单例 ─────────────────────────────────────────────
 
 export const rulesEngine: RulesEngine = new BasicRulesEngine();
+
+// ─── 抑制未使用导入的类型引用（供外部模块使用） ──────────────
+
+export type {
+  ConditionContext as _ConditionContext,
+  DCResolution as _DCResolution,
+  EvaluationContext as _EvaluationContext,
+};

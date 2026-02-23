@@ -28,38 +28,98 @@ export const defaultParserPreset: Preset = {
 
 【职责一：解构上轮叙事】
 分析对话历史中上一轮正文 AI 的叙事输出（最近一条 assistant 消息）。
-识别其中尚未被结构化的新变化：
-- 新 NPC 出现 → npcCreate
-- NPC 离开/归档 → npcStatusChange
-- NPC 发起了需要检定的行为（攻击/施法等）→ npcAction + requiresCheck
-- 场景变化、物品转移等（未来扩展）
-注意：NPC 的对话、情绪、非机械行为不需要结构化，忽略它们。
+识别其中尚未被结构化的新变化，并映射到操作：
+- 新实体出现（NPC/怪物/召唤物）→ spawn
+- 实体离场/永久移除 → despawn
+- 确定性伤害/受伤（无需检定即可成立）→ damage
+- 恢复效果（治疗/回复）→ heal
+- 资源消耗（法力/体力/金钱）→ cost
+- 属性直接变更（升级/重置）→ set
+- 获得新效果/状态 → addTag
+- 效果消失/解除 → removeTag
+- 获得物品/装备 → grantItem
+- 失去物品 → removeItem
+- 习得技能 → grantSkill
+- 失去技能 → removeSkill
+- 需要检定的不确定行为（攻击/施法/偷窃等）→ check（优先 onSuccess/onFailure 内嵌分支）
+注意：纯叙事对话、情绪、非机械行为不需要结构化，忽略它们。
 
 【职责二：解析玩家意图】
-将玩家本轮的行动输入解析为对应的操作：
-- 攻击 → check（attack 检定）
-- 施法/技能 → check（skill 检定）
-- 其他机械行为 → 对应操作
-- 纯叙事/对话行为 → 空 actions
+将玩家本轮输入转成可执行操作：
+- 近战/远程攻击 → check（成功分支里通常接 damage）
+- 施法/技能释放 → 通常 cost + check（确定性收益可直接 heal/addTag）
+- 使用物品 → removeItem（必要时）+ heal/addTag/cost
+- 控制、减益、驱散等状态交互 → check + addTag/removeTag
+- 交易/掉落/掠夺/交付 → grantItem/removeItem/cost
+- 剧情导致的属性调整（升级、重置、剧情修正）→ set
+- 纯叙事或纯对话输入 → actions 为空
 
 【职责三：反应推演】
-基于玩家本轮的行动，推演在场 NPC 的直接反应——
-但仅限于需要检定的机械行为：
-- 战斗中敌方的反击/防御/施法 → npcAction + requiresCheck
-- NPC 的对话回应、情绪反应等不需要推演（由正文 AI 描写）
-- 只推演"因为玩家做了 X，所以 NPC 立即 Y"的直接因果
-- 不要创造与玩家行动无关的独立 NPC 行为
+基于玩家本轮行动，推演在场实体（NPC/怪物）的直接反应（仅机械行为）：
+- 只推演"因为玩家做了 X，所以对方立即 Y"的直接因果
+- 不要创造与玩家行动无关的独立行为
+- NPC 对话、情绪反应由正文 AI 描写，不在 actions 中处理
+
+核心语法原则：
+- NPC/怪物的行动与玩家完全同构，使用相同操作语法，不存在“NPC 专用操作”
+- NPC 攻击 = check（target 设为 NPC，dcTarget 设为被攻击角色）
+- NPC 施法 = cost（NPC 消耗资源）+ check（NPC 发起检定）
+
+检定与 DC 决策：
+1) check 使用策略：
+   - 主模式：check + onSuccess/onFailure（单次检定闭环）
+   - 后备模式：仅在必须复用检定结果时，才用 resultVar + branch
+   - 非检定条件分支才使用 branch
+2) DC 来源选择（dcSource）：
+   - 可引用防御/法术难度等属性时：formula（写 dcFormula）
+   - 双方对抗时：opposed
+   - 固定已知难度时：fixed
+   - 需要情境裁定时：ai
+   - 若存在匹配 preset：优先使用 preset 简写
 
 输出要求：
 1) 仅输出 JSON（不要 Markdown 包裹，不要额外解释）
 2) 顶层结构必须为：
 {
-  "version": 1,
+  "version": 2,
   "actions": []
 }
 3) 只能使用 operationDefinitions 中定义的操作
 4) 当信息不足无法执行时，返回最小安全脚本（actions 为空）
 5) actions 中先放解构结果，再放玩家意图，最后放反应推演
+
+组合示例（仅示意结构，参数细节以 operationDefinitions 为准）：
+示例 A：近战攻击（check 成功后造成伤害）
+{
+  "version": 2,
+  "actions": [
+    {
+      "op": "check",
+      "target": "player",
+      "dcSource": "formula",
+      "dcFormula": "target.ac",
+      "dcTarget": "goblin",
+      "onSuccess": [{ "op": "damage", "target": "goblin" }],
+      "onFailure": []
+    }
+  ]
+}
+示例 B：NPC 反击（NPC 使用与玩家相同语法）
+{
+  "version": 2,
+  "actions": [
+    { "op": "cost", "target": "orc" },
+    {
+      "op": "check",
+      "target": "orc",
+      "dcSource": "formula",
+      "dcFormula": "target.ac",
+      "dcTarget": "player",
+      "onSuccess": [{ "op": "damage", "target": "player" }],
+      "onFailure": []
+    }
+  ]
+}
 
 效果管理规则：
 - 【系统管理效果】由系统自动执行其触发器，不要在 actions 中重复处理
@@ -105,19 +165,22 @@ export const defaultParserPreset: Preset = {
 - 合理行动 → 忠实转化为对应操作
 - 夸大行动 → 降级为合理版本（如"一拳打碎城墙" → 普通力量检定，DC 设高）
 - 超能力行动 → 角色没有该能力时，返回空 actions（正文 AI 会描写失败）
-- 多步行动 → 拆分为多个 check，使用 conditional 串联
+- 多步行动 → 拆分为多个 check，优先使用 check.onSuccess/onFailure 内嵌分支；仅在非检定条件时使用 branch
 
-步骤 4 — DC 难度设定
-根据行动难度和世界观合理性设定 DC：
-- 简单日常行为: DC 8-10
-- 需要技巧的行为: DC 12-15
-- 困难挑战: DC 16-18
-- 接近极限的壮举: DC 20-25
-- 参考角色属性值：属性 modifier 约等于 (属性值 - 10) / 2
+步骤 4 — DC 与来源判定
+- 难度参考以 operationDefinitions 中提供的 DC 参考表为准（来自世界配置），不要硬编码固定数值表
+- 按顺序选择 dcSource：
+  1. 可引用防御/法术难度等属性 → formula（写 dcFormula）
+  2. 双方对抗 → opposed
+  3. 固定已知难度 → fixed
+  4. 需要情境裁定 → ai
+- 若命中可用 preset，优先使用 preset 简写
 
 步骤 5 — 组装 RuleScript
-使用 check + conditional 模式处理需要检定的行动：
-先 check 检定 → 用 conditional 根据结果分支 → 成功执行效果 / 失败无效果`,
+- 需要检定时，首选 check(onSuccess=[...], onFailure=[...]) 形成闭环
+- 仅在必须复用检定结果时使用 resultVar + branch
+- 非检定条件分支才使用 branch
+- 能用 preset 简写就不要展开冗长字段`,
       injectionDepth: 0,
       order: 2,
       enabled: true,
@@ -143,15 +206,15 @@ export const defaultParserPreset: Preset = {
 ⚠️ 你只处理"新变化"。角色数据表中已经存在的实体/效果/物品/技能，不要重复创建。
 
 判断规则：
-1. NPC 已在角色数据表中 → 不要 npcCreate，可用 npcAction/npcStatusChange 操作已有 NPC
+1. 实体（NPC/怪物）已在角色数据表中 → 不要重复 spawn，直接引用现有实体 ID
 2. 效果已在角色当前效果中 → 不要重复 addTag，除非叙事明确描述效果刷新/叠加
 3. 物品已在背包中 → 不要重复 grantItem
 4. 技能已在技能列表中 → 不要重复 grantSkill
 
 关于上一轮叙事（如果有）：
-- 叙事正文中提到的 NPC 如果已在角色数据表中 → 说明已被处理，跳过
-- 叙事中 NPC 的非机械行为（对话、情绪）→ 不需要结构化，忽略
-- 只有叙事中明确出现了"新角色"且不在角色数据表中 → 才使用 npcCreate
+- 叙事正文中提到的实体如果已在角色数据表中 → 说明已被处理，跳过
+- 叙事中的非机械行为（对话、情绪）→ 不需要结构化，忽略
+- 只有叙事中明确出现了"新实体"且不在角色数据表中 → 才使用 spawn
 
 效果管理规则：
 - 标注 [系统管理] 的效果：由系统自动执行触发器，不要在 actions 中处理
@@ -206,7 +269,7 @@ export const defaultParserPreset: Preset = {
     "user-input",
   ],
   metadata: {
-    version: "1.4.0",
+    version: "2.0.0",
     source: "lyra",
     createdAt: Date.now(),
     updatedAt: Date.now(),

@@ -443,8 +443,39 @@ function renderFallbackResultLines(
   for (const check of frame.checks) {
     const modifierText =
       check.modifier >= 0 ? `+${check.modifier}` : `${check.modifier}`;
+
+    let targetPart = "";
+
+    if (check.dcSource === "opposed") {
+      const opposedSkillText = check.opposedSkill ?? "unknown";
+      const opposedModifierText =
+        typeof check.opposedModifier === "number"
+          ? check.opposedModifier >= 0
+            ? `+${check.opposedModifier}`
+            : `${check.opposedModifier}`
+          : "";
+
+      if (
+        typeof check.opposedRoll === "number" &&
+        typeof check.opposedModifier === "number" &&
+        typeof check.opposedTotal === "number"
+      ) {
+        targetPart = `对抗(${opposedSkillText}) ${check.opposedRoll}${opposedModifierText}=${check.opposedTotal}`;
+      } else if (typeof check.opposedTotal === "number") {
+        targetPart = `对抗(${opposedSkillText}) ${check.opposedTotal}`;
+      } else {
+        targetPart = `对抗(${opposedSkillText})`;
+      }
+    } else if (typeof check.dc === "number") {
+      targetPart = `难度 ${check.dc}`;
+    }
+
+    const detailPart = targetPart
+      ? `掷骰 ${check.roll}${modifierText}=${check.total}，${targetPart}`
+      : `掷骰 ${check.roll}${modifierText}=${check.total}`;
+
     lines.push(
-      `${check.name} → ${check.success ? "成功" : "失败"}（掷骰 ${check.roll}${modifierText}=${check.total}，难度 ${check.dc}）`,
+      `${check.name} → ${check.success ? "成功" : "失败"}（${detailPart}）`,
     );
   }
 

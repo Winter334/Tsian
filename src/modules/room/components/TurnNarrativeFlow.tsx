@@ -194,7 +194,7 @@ export function TurnNarrativeFlow({
       )}
 
       {/* 消息列表 */}
-      <div className="max-w-3xl mx-auto space-y-4">
+      <div className="w-full space-y-4">
         {messages.map(renderMessage)}
 
         {/* AI 处理状态（processing/retrying/failed/aborted） */}

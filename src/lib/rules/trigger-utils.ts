@@ -37,7 +37,7 @@ export const TRIGGER_LIMITS = {
  */
 export function resolveTrigger(
   tagMeta: TagMetadata,
-  worldConfig: WorldConfig
+  worldConfig: WorldConfig,
 ): ConditionTrigger | undefined {
   // 优先：运行时 trigger（AI 内联或之前设置的）
   if (tagMeta.trigger) return tagMeta.trigger;
@@ -79,7 +79,7 @@ export function resolveTrigger(
 export function collectPassiveModifiers(
   entityId: string,
   entities: EntityAccessor,
-  worldConfig: WorldConfig
+  worldConfig: WorldConfig,
 ): PassiveModifier[] {
   const tagsMap = entities.getTagsWithMetadata?.(entityId);
   if (!tagsMap || tagsMap.size === 0) return [];
@@ -116,7 +116,7 @@ export function findOnDamageTriggers(
   targetId: string,
   damageType: string | undefined,
   entities: EntityAccessor,
-  worldConfig: WorldConfig
+  worldConfig: WorldConfig,
 ): Array<{
   tagId: string;
   tagMeta: TagMetadata;
@@ -144,9 +144,10 @@ export function findOnDamageTriggers(
     }
 
     // 安全限制
-    if (trigger.actions.length > TRIGGER_LIMITS.maxTriggerActions) {
+    const triggerActions = trigger.actions ?? [];
+    if (triggerActions.length > TRIGGER_LIMITS.maxTriggerActions) {
       console.warn(
-        `[TriggerPipeline] on_damage 触发器 "${tagMeta.displayName}" (${tagId}) 包含 ${trigger.actions.length} 个 action（上限 ${TRIGGER_LIMITS.maxTriggerActions}），已跳过`
+        `[TriggerPipeline] on_damage 触发器 "${tagMeta.displayName}" (${tagId}) 包含 ${triggerActions.length} 个 action（上限 ${TRIGGER_LIMITS.maxTriggerActions}），已跳过`,
       );
       continue;
     }

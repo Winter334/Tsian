@@ -385,13 +385,15 @@ describe("renderResultFrame（通过 resultFrame marker 的 render 调用）", (
       diceRolls: [],
       checks: [
         {
-          type: "attack",
           name: "近战攻击",
+          skill: "attack",
+          dcSource: "ai",
           dc: 12,
           roll: 15,
           modifier: 3,
           total: 18,
           success: true,
+          margin: 6,
         },
       ],
       structuralChanges: [

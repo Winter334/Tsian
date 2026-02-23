@@ -7,7 +7,10 @@ import type { ModuleManifest } from "@/core/registry";
 import { actionSchemaRegistry } from "@/lib/rules/schema";
 import { createGameCommandHandlers } from "./handlers";
 import { irnrPipelineService } from "./services";
-import { gameActionSchemas } from "./services/action-schemas";
+import {
+  gameActionSchemas,
+  modifyDamageSchema,
+} from "./services/action-schemas";
 import { IRNR_PIPELINE_SERVICE_TOKEN } from "./services/tokens";
 
 // 导出服务
@@ -25,7 +28,10 @@ const manifest: ModuleManifest = {
 export async function registerGameModule(): Promise<void> {
   await registry.register(manifest);
   services.register(IRNR_PIPELINE_SERVICE_TOKEN, irnrPipelineService);
-  actionSchemaRegistry.registerActions("lyra.game", gameActionSchemas);
+  actionSchemaRegistry.registerActions("lyra.game", [
+    ...gameActionSchemas,
+    modifyDamageSchema,
+  ]);
 }
 
 /**
