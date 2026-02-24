@@ -37,7 +37,14 @@ import type {
   SkillRemovedPayload,
 } from "@/domain/events/inventory";
 import { InventoryEvents } from "@/domain/events/inventory";
+import type { RuleAction } from "@/domain/types/rule-script";
 import { getRuntimeWorldConfig } from "@/lib/world";
+import {
+  executeItemViaEngine,
+  executeSimpleAction,
+  requiresEngine,
+  validateTargetRequirement,
+} from "./consumable-executor";
 import { getInventoryRepository } from "./repository";
 import { useInventoryStore } from "./store";
 
@@ -376,12 +383,57 @@ const handleUseItem: CommandHandler<UseItemPayload, void> = async (
     return { success: false, error: "Insufficient item quantity" };
   }
 
+  // === Phase 4b: onUse 双路径执行 ===
+  const allOnUseActions: RuleAction[] = [];
+  if (item.effects) {
+    for (const effect of item.effects) {
+      if (effect.onUse?.length) {
+        allOnUseActions.push(...effect.onUse);
+      }
+    }
+  }
+
+  // 如果有需要目标的 actions 但未提供 targetId，拒绝使用
+  if (
+    allOnUseActions.length > 0 &&
+    !validateTargetRequirement(allOnUseActions, targetId)
+  ) {
+    throw new Error("该物品需要选择目标才能使用");
+  }
+
   // 扣减数量
   const newQty = item.quantity - useQty;
   repo.updateItemQuantity(characterId, instanceId, newQty);
   useInventoryStore
     .getState()
     ._updateItemQuantity(characterId, instanceId, newQty);
+
+  if (allOnUseActions.length > 0) {
+    if (requiresEngine(allOnUseActions)) {
+      // 路径 B：引擎执行 → ResultFrame
+      // 注意：executeItemViaEngine 会将效果应用到 Yjs，并返回 ResultFrame
+      // ResultFrame 将来会存入操作日志（Phase 4c），目前只记录日志
+      const resultFrame = executeItemViaEngine(
+        allOnUseActions,
+        characterId,
+        targetId,
+        item,
+      );
+      if (resultFrame) {
+        console.log(
+          "[handleUseItem] 路径B执行完成，ResultFrame:",
+          resultFrame.mechanicSummary,
+        );
+        // TODO Phase 4c: 存入操作日志
+        // useOperationLogStore.getState().addEntry({ source: `使用 ${item.name}`, resultFrame, timestamp: Date.now() });
+      }
+    } else {
+      // 路径 A：静默生效
+      for (const action of allOnUseActions) {
+        executeSimpleAction(action, characterId, targetId);
+      }
+    }
+  }
 
   // 发射事件
   eventBus.emit(

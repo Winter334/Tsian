@@ -6,13 +6,18 @@ import { registry, services } from "@/core";
 import type { ModuleManifest } from "@/core/registry";
 import { actionSchemaRegistry } from "@/lib/rules/schema";
 import { createGameCommandHandlers } from "./handlers";
-import { directActionService, irnrPipelineService } from "./services";
+import {
+  directActionService,
+  gameStateService,
+  irnrPipelineService,
+} from "./services";
 import {
   gameActionSchemas,
   modifyDamageSchema,
 } from "./services/action-schemas";
 import {
   DIRECT_ACTION_SERVICE_TOKEN,
+  GAME_STATE_SERVICE_TOKEN,
   IRNR_PIPELINE_SERVICE_TOKEN,
 } from "./services/tokens";
 
@@ -32,6 +37,7 @@ export async function registerGameModule(): Promise<void> {
   await registry.register(manifest);
   services.register(IRNR_PIPELINE_SERVICE_TOKEN, irnrPipelineService);
   services.register(DIRECT_ACTION_SERVICE_TOKEN, directActionService);
+  services.register(GAME_STATE_SERVICE_TOKEN, gameStateService);
   actionSchemaRegistry.registerActions("lyra.game", [
     ...gameActionSchemas,
     modifyDamageSchema,
@@ -43,6 +49,7 @@ export async function registerGameModule(): Promise<void> {
  */
 export async function unregisterGameModule(): Promise<void> {
   actionSchemaRegistry.unregisterModule("lyra.game");
+  services.unregister(GAME_STATE_SERVICE_TOKEN);
   services.unregister(IRNR_PIPELINE_SERVICE_TOKEN);
   services.unregister(DIRECT_ACTION_SERVICE_TOKEN);
   await registry.unregister("lyra.game");

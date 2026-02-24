@@ -5,6 +5,8 @@
  * 放置在 domain 层以便各模块合法引用。
  */
 
+import type { ItemInstance } from "../entities/item";
+import type { SkillInstance } from "../entities/skill";
 import type { EntityType, TagMetadata } from "./result-frame";
 
 // ─── EntityData ───────────────────────────────────────────
@@ -20,6 +22,46 @@ export interface EntityData {
   fields: Record<string, number | string | boolean>;
   /** 标签存储（Map<tagId, TagMetadata>） */
   tags: Map<string, TagMetadata>;
+}
+
+// ─── EntityAccessor ───────────────────────────────────────
+
+/**
+ * 实体访问器接口
+ *
+ * 为规则引擎和执行服务提供统一的只读实体访问能力。
+ */
+export interface EntityAccessor {
+  /** 读取实体属性值 */
+  getValue(
+    entityId: string,
+    field: string,
+  ): number | string | boolean | undefined;
+
+  /** 获取实体类型 */
+  getEntityType(entityId: string): EntityType | undefined;
+
+  /** 检查实体是否拥有标签 */
+  hasTag(entityId: string, tagId: string): boolean;
+
+  /** 获取实体所有标签（可选） */
+  getTags?(entityId: string): string[];
+
+  /** 获取实体所有字段（用于动态属性注入） */
+  getAllFields?(
+    entityId: string,
+  ): Record<string, number | string | boolean> | undefined;
+
+  /** 获取所有实体 ID */
+  getAllEntityIds?(): string[];
+
+  /** 获取实体标签及元数据 */
+  getTagsWithMetadata?(entityId: string): Map<string, TagMetadata>;
+
+  /** 获取角色的物品实例列表（可选） */
+  getItems?(entityId: string): readonly ItemInstance[];
+  /** 获取角色的技能实例列表（可选） */
+  getSkills?(entityId: string): readonly SkillInstance[];
 }
 
 // ─── EntityFinalState ─────────────────────────────────────

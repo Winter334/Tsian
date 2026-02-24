@@ -38,6 +38,13 @@ export {
 } from "./direct-action-service";
 
 export {
+  createGameStateService,
+  gameStateService,
+  type GameStateServiceContract,
+} from "./game-state-service";
+
+export {
   DIRECT_ACTION_SERVICE_TOKEN,
+  GAME_STATE_SERVICE_TOKEN,
   IRNR_PIPELINE_SERVICE_TOKEN,
 } from "./tokens";

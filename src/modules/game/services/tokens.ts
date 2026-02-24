@@ -5,7 +5,9 @@
  */
 export {
   DIRECT_ACTION_SERVICE_TOKEN,
+  GAME_STATE_SERVICE_TOKEN,
   IRNR_PIPELINE_SERVICE_TOKEN,
   type DirectActionServiceContract,
+  type GameStateServiceContract,
   type IrnrPipelineServiceContract,
 } from "@/core/services/tokens";

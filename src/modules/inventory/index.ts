@@ -6,14 +6,16 @@
  * @module inventory
  */
 
-import { registry } from "@/core";
+import { registry, services } from "@/core";
 import type { ModuleManifest } from "@/core/registry";
+import { INVENTORY_QUERY_SERVICE_TOKEN } from "@/core/services/tokens";
 import { yjsManager } from "@/core/yjs";
 import { SaveEvents, type SaveDeletedPayload } from "@/domain/events/save";
 import { actionSchemaRegistry } from "@/lib/rules/schema";
 import { createInventoryCommandHandlers } from "./handlers";
 import { clearInventoryRepositoryCache } from "./repository";
 import { inventoryActionSchemas } from "./schemas/action-schemas";
+import { createInventoryQueryService } from "./services/inventory-query-service";
 import { InventorySyncBridge } from "./sync/InventorySyncBridge";
 
 // 导出公共 API
@@ -76,6 +78,10 @@ const manifest: ModuleManifest = {
  */
 export async function registerInventoryModule(): Promise<void> {
   await registry.register(manifest);
+
+  const inventoryQueryService = createInventoryQueryService();
+  services.register(INVENTORY_QUERY_SERVICE_TOKEN, inventoryQueryService);
+
   actionSchemaRegistry.registerActions(
     "lyra.inventory",
     inventoryActionSchemas,
@@ -95,6 +101,9 @@ export async function unregisterInventoryModule(): Promise<void> {
     syncBridge.destroy();
     syncBridge = null;
   }
+
+  services.unregister(INVENTORY_QUERY_SERVICE_TOKEN);
+
   actionSchemaRegistry.unregisterModule("lyra.inventory");
   await registry.unregister("lyra.inventory");
 }

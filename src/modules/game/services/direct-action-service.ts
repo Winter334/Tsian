@@ -5,7 +5,8 @@
  * 跳过 Parser AI / Rules Engine，直接走 CommandBus。
  */
 
-import { commandBus } from "@/core";
+import { commandBus, services } from "@/core";
+import { INVENTORY_QUERY_SERVICE_TOKEN } from "@/core/services/tokens";
 import {
   InventoryCommands,
   type EquipItemPayload,
@@ -21,7 +22,6 @@ import type {
   ValidationResult,
 } from "@/domain/types/direct-action";
 import { getRuntimeWorldConfig } from "@/lib/world";
-import { useInventoryStore } from "@/modules/inventory/store";
 
 /** 轻量管线服务契约 */
 export interface DirectActionServiceContract {
@@ -53,7 +53,8 @@ interface DropPayloadInput {
 }
 
 function readInventoryItem(actorId: string, instanceId: string) {
-  const items = useInventoryStore.getState().items[actorId] ?? [];
+  const inventoryQuery = services.getRequired(INVENTORY_QUERY_SERVICE_TOKEN);
+  const items = inventoryQuery.getItems(actorId);
   return items.find((item) => item.instanceId === instanceId);
 }
 

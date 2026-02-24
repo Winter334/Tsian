@@ -16,7 +16,8 @@ import type {
   EntityData,
   EntityFinalState,
 } from "@/domain/types";
-import { serializeTagsForYjs } from "@/domain/types";
+import type { TagMetadata } from "@/domain/types/result-frame";
+import { serializeTagsForYjs } from "@/domain/types/tag-serialization";
 import * as Y from "yjs";
 
 import {
@@ -75,8 +76,17 @@ export interface GameStateRepository {
    */
   upsertFromEntityStates(
     entityStates: EntityFinalState[],
-    createdNpcs?: CreatedNpcData[]
+    createdNpcs?: CreatedNpcData[],
   ): void;
+
+  /** 添加标签 */
+  addTag(characterId: string, tagId: string, metadata: TagMetadata): void;
+
+  /** 移除标签 */
+  removeTag(characterId: string, tagId: string): void;
+
+  /** 更新单个属性字段 */
+  updateAttribute(characterId: string, field: string, value: unknown): void;
 
   /** 更新角色状态 */
   updateCharacterStatus(id: string, status: CharacterStatus): void;
@@ -95,7 +105,7 @@ export interface GameStateRepository {
  */
 export function createGameStateRepository(
   charactersMap: Y.Map<Y.Map<unknown>>,
-  transactDoc: Y.Doc
+  transactDoc: Y.Doc,
 ): GameStateRepository {
   // ── 读取 ──
 
@@ -128,7 +138,7 @@ export function createGameStateRepository(
 
   function getActiveCharacters(): Character[] {
     return getCharacters().filter(
-      (c) => c.status === "active" || c.status === "off_scene"
+      (c) => c.status === "active" || c.status === "off_scene",
     );
   }
 
@@ -164,7 +174,7 @@ export function createGameStateRepository(
 
   function upsertFromEntityStates(
     entityStates: EntityFinalState[],
-    createdNpcs?: CreatedNpcData[]
+    createdNpcs?: CreatedNpcData[],
   ): void {
     if (entityStates.length === 0) return;
 
@@ -223,6 +233,84 @@ export function createGameStateRepository(
     });
   }
 
+  function addTag(
+    characterId: string,
+    tagId: string,
+    metadata: TagMetadata,
+  ): void {
+    const charMap = charactersMap.get(characterId);
+    if (!charMap) return;
+
+    transactDoc.transact(() => {
+      const rawTags = charMap.get("tags");
+      const serializedTags: Record<string, unknown> =
+        rawTags && typeof rawTags === "object" && !Array.isArray(rawTags)
+          ? { ...(rawTags as Record<string, unknown>) }
+          : {};
+
+      const tags = new Map<string, TagMetadata>();
+      for (const [id, rawMeta] of Object.entries(serializedTags)) {
+        if (rawMeta && typeof rawMeta === "object" && !Array.isArray(rawMeta)) {
+          tags.set(id, rawMeta as TagMetadata);
+        }
+      }
+
+      tags.set(tagId, metadata);
+      charMap.set("tags", serializeTagsForYjs(tags));
+      charMap.set("updatedAt", Date.now());
+    });
+  }
+
+  function removeTag(characterId: string, tagId: string): void {
+    const charMap = charactersMap.get(characterId);
+    if (!charMap) return;
+
+    transactDoc.transact(() => {
+      const rawTags = charMap.get("tags");
+      if (!rawTags || typeof rawTags !== "object" || Array.isArray(rawTags)) {
+        return;
+      }
+
+      const tags = new Map<string, TagMetadata>();
+      for (const [id, rawMeta] of Object.entries(
+        rawTags as Record<string, unknown>,
+      )) {
+        if (rawMeta && typeof rawMeta === "object" && !Array.isArray(rawMeta)) {
+          tags.set(id, rawMeta as TagMetadata);
+        }
+      }
+
+      if (!tags.has(tagId)) return;
+
+      tags.delete(tagId);
+      charMap.set("tags", serializeTagsForYjs(tags));
+      charMap.set("updatedAt", Date.now());
+    });
+  }
+
+  function updateAttribute(
+    characterId: string,
+    field: string,
+    value: unknown,
+  ): void {
+    const charMap = charactersMap.get(characterId);
+    if (!charMap) return;
+
+    transactDoc.transact(() => {
+      const rawAttributes = charMap.get("attributes");
+      const nextAttributes =
+        rawAttributes &&
+        typeof rawAttributes === "object" &&
+        !Array.isArray(rawAttributes)
+          ? { ...(rawAttributes as Record<string, unknown>) }
+          : {};
+
+      nextAttributes[field] = value;
+      charMap.set("attributes", nextAttributes);
+      charMap.set("updatedAt", Date.now());
+    });
+  }
+
   function updateCharacterStatus(id: string, status: CharacterStatus): void {
     if (!isCharacterStatus(status)) return;
 
@@ -251,6 +339,9 @@ export function createGameStateRepository(
     getActiveCharacters,
     toEntityDataList,
     upsertFromEntityStates,
+    addTag,
+    removeTag,
+    updateAttribute,
     updateCharacterStatus,
     addCharacter,
   };

@@ -11,7 +11,8 @@
  * 对外提供 runSolo / runMultiplayer 两个入口。
  */
 
-import { commandBus } from "@/core";
+import { commandBus, services } from "@/core";
+import { INVENTORY_QUERY_SERVICE_TOKEN } from "@/core/services/tokens";
 import { subdocManager, yjsManager } from "@/core/yjs";
 import { MemoryCommands } from "@/domain/commands";
 import type {
@@ -44,7 +45,6 @@ import {
 import type { WorldConfig } from "@/lib/world";
 import { getRuntimeWorldConfig } from "@/lib/world/resolve-config";
 import { createGameStateRepository } from "@/modules/game/repository";
-import { useInventoryStore } from "@/modules/inventory/store";
 import {
   createDelayedCommitManager,
   type DelayedCommitManager,
@@ -148,7 +148,7 @@ async function executePipeline(input: {
     baseVariableContext: input.baseVariableContext,
   });
 
-  const inventoryState = useInventoryStore.getState();
+  const inventoryQuery = services.getRequired(INVENTORY_QUERY_SERVICE_TOKEN);
   for (const entityId of entityAccessor.getAllEntityIds()) {
     const entity = entityAccessor.getEntityData(entityId);
     if (!entity || entity.type !== "character") continue;
@@ -158,8 +158,7 @@ async function executePipeline(input: {
       applyTalentsToEntity(entity, talentIds, worldConfig);
     }
 
-    const charItems = inventoryState.items[entityId] ?? [];
-    const equippedItems = charItems.filter((item) => item.equipped);
+    const equippedItems = inventoryQuery.getEquippedItems(entityId);
     if (equippedItems.length > 0) {
       applyEquipmentEffectsToEntity(entity, equippedItems);
     }
@@ -868,22 +867,22 @@ function buildEntityEffects(
 }
 
 /**
- * 从 InventoryStore 构建物品/技能数据（供 VariableContext 注入）
+ * 从 InventoryQueryService 构建物品/技能数据（供 VariableContext 注入）
  *
- * 遍历所有已知实体，从 useInventoryStore 获取对应的物品和技能列表，
+ * 遍历所有已知实体，通过 InventoryQueryService 获取对应的物品和技能列表，
  * 组装为简化的数据结构。使用 aliasMap 获取角色显示名称。
  */
 function buildInventoryData(
   accessor: MapEntityAccessor,
   aliasMap?: EntityAliasMap,
 ): NonNullable<VariableContext["inventoryData"]> {
-  const inventoryState = useInventoryStore.getState();
+  const inventoryQuery = services.getRequired(INVENTORY_QUERY_SERVICE_TOKEN);
   const result: NonNullable<VariableContext["inventoryData"]> = [];
 
   const entityIds = accessor.getAllEntityIds?.() ?? [];
   for (const entityId of entityIds) {
-    const items = inventoryState.items[entityId] ?? [];
-    const skills = inventoryState.skills[entityId] ?? [];
+    const items = inventoryQuery.getItems(entityId);
+    const skills = inventoryQuery.getSkills(entityId);
 
     // 跳过没有任何物品/技能的角色
     if (items.length === 0 && skills.length === 0) continue;
