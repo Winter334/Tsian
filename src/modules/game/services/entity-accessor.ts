@@ -7,9 +7,15 @@
  * - 单人模式：基于 WorldConfig 默认值 + 衍生属性计算
  */
 
-import type { EntityData, EntityType, TagMetadata } from "@/domain/types";
+import type { ItemInstance } from "@/domain/entities/item";
+import type {
+  EntityData,
+  EntityType,
+  PassiveModifier,
+  TagMetadata,
+} from "@/domain/types";
 import type { EntityAccessor } from "@/lib/rules";
-import { computeDerivedStats } from "@/lib/rules/derived-stats";
+import { computeFullStats } from "@/lib/rules/stats-pipeline";
 import type { TalentConfig, WorldConfig } from "@/lib/world";
 
 // ─── 实体数据 ─────────────────────────────────────────────
@@ -29,7 +35,7 @@ export class MapEntityAccessor implements EntityAccessor {
 
   getValue(
     entityId: string,
-    field: string
+    field: string,
   ): number | string | boolean | undefined {
     const entity = this.entities.get(entityId);
     if (!entity) return undefined;
@@ -61,7 +67,7 @@ export class MapEntityAccessor implements EntityAccessor {
 
   /** 获取实体所有字段（用于动态属性注入） */
   getAllFields(
-    entityId: string
+    entityId: string,
   ): Record<string, number | string | boolean> | undefined {
     const entity = this.entities.get(entityId);
     if (!entity) return undefined;
@@ -71,6 +77,11 @@ export class MapEntityAccessor implements EntityAccessor {
   /** 获取所有实体 ID */
   getAllEntityIds(): string[] {
     return Array.from(this.entities.keys());
+  }
+
+  /** 获取实体数据引用（用于 shadow tag 注入） */
+  getEntityData(entityId: string): EntityData | undefined {
+    return this.entities.get(entityId);
   }
 
   /**
@@ -93,68 +104,31 @@ export class MapEntityAccessor implements EntityAccessor {
  *
  * 1. 填充基础属性（primaryAttributes）的 defaultValue
  * 2. 应用 overrides 覆盖值
- * 3. 通过 computeDerivedStats 计算所有衍生属性（formula 驱动）
+ * 3. 通过 computeFullStats 统一计算基础/衍生属性（formula 驱动）
  */
 export function buildDefaultEntityFromWorldConfig(
   entityId: string,
   worldConfig: WorldConfig,
-  overrides?: Record<string, number | string | boolean>
+  overrides?: Record<string, number | string | boolean>,
+  passiveModifiers?: PassiveModifier[],
 ): EntityData {
-  const fields: Record<string, number | string | boolean> = {};
+  const fullStats = computeFullStats({
+    baseAttributes: overrides ?? {},
+    primaryAttributes: worldConfig.primaryAttributes,
+    derivedStats: worldConfig.derivedStats,
+    passiveModifiers,
+  });
 
-  // 1. 填充基础属性
-  for (const attr of worldConfig.primaryAttributes) {
-    fields[attr.key] = attr.defaultValue;
-  }
-
-  // 2. 应用覆盖值（在衍生属性计算之前，这样覆盖的基础属性会影响衍生计算）
+  // overrides 可能包含对衍生属性的显式覆盖，以及非数值字段
+  const fields: Record<string, number | string | boolean> = { ...fullStats };
   if (overrides) {
     for (const [key, value] of Object.entries(overrides)) {
       fields[key] = value;
     }
   }
 
-  // 3. 计算衍生属性
-  const fullFields = computeDerivedStats(fields, worldConfig.derivedStats);
-
-  // 4. 再次应用覆盖值（覆盖可能包含对衍生属性的显式覆盖，如自定义 hp）
-  if (overrides) {
-    for (const [key, value] of Object.entries(overrides)) {
-      fullFields[key] = value;
-    }
-  }
-
   return {
     id: entityId,
-    type: "character",
-    fields: fullFields,
-    tags: new Map(),
-  };
-}
-
-/**
- * 从联机角色数据构建实体数据
- */
-export function buildEntityFromCharacterData(
-  characterId: string,
-  attributes?: Record<string, unknown>
-): EntityData {
-  const fields: Record<string, number | string | boolean> = {};
-
-  if (attributes) {
-    for (const [key, value] of Object.entries(attributes)) {
-      if (
-        typeof value === "number" ||
-        typeof value === "string" ||
-        typeof value === "boolean"
-      ) {
-        fields[key] = value;
-      }
-    }
-  }
-
-  return {
-    id: characterId,
     type: "character",
     fields,
     tags: new Map(),
@@ -174,13 +148,13 @@ export function buildEntityFromCharacterData(
 export function applyTalentsToEntity(
   entity: EntityData,
   talentIds: string[],
-  worldConfig: WorldConfig
+  worldConfig: WorldConfig,
 ): void {
   if (!worldConfig.talents) return;
 
   for (const talentId of talentIds) {
     const talent: TalentConfig | undefined = worldConfig.talents.find(
-      (t) => t.id === talentId
+      (t) => t.id === talentId,
     );
     if (!talent) continue;
 
@@ -201,5 +175,57 @@ export function applyTalentsToEntity(
     };
 
     entity.tags.set(talent.id, metadata);
+  }
+}
+
+/**
+ * 将已装备物品的效果作为 shadow Tag 注入实体
+ *
+ * 与 applyTalentsToEntity 类似，shadow Tag 是运行时派生的，
+ * 不单独持久化。每次构建实体时从 equippedItems 重新计算。
+ *
+ * Tag ID 格式：`equip:{instanceId}`
+ * Tag category：`"equipment"`
+ */
+export function applyEquipmentEffectsToEntity(
+  entity: EntityData,
+  equippedItems: ItemInstance[],
+): void {
+  for (const item of equippedItems) {
+    if (!item.effects?.length) continue;
+
+    const allModifiers: PassiveModifier[] = [];
+    const descriptions: string[] = [];
+
+    for (const effect of item.effects) {
+      if (effect.modifiers) {
+        allModifiers.push(...effect.modifiers);
+      }
+      if (effect.description) {
+        descriptions.push(effect.description);
+      }
+    }
+
+    // 只有有效果信息的装备才创建 shadow Tag
+    if (allModifiers.length === 0 && descriptions.length === 0) continue;
+
+    const tagId = `equip:${item.instanceId}`;
+    const metadata: TagMetadata = {
+      id: tagId,
+      displayName: item.name,
+      effectDescription: descriptions.join("; "),
+      source: "predefined",
+      category: "equipment",
+    };
+
+    // 有结构化修正时包装为 passive trigger
+    if (allModifiers.length > 0) {
+      metadata.trigger = {
+        timing: "passive",
+        modifiers: allModifiers,
+      };
+    }
+
+    entity.tags.set(tagId, metadata);
   }
 }

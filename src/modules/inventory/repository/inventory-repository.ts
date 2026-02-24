@@ -35,6 +35,17 @@ export interface InventoryRepository {
     quantity?: number,
   ): boolean;
   findItem(characterId: string, instanceId: string): ItemInstance | undefined;
+  updateEquipStatus(
+    characterId: string,
+    instanceId: string,
+    equipped: boolean,
+    slot?: string,
+  ): void;
+  updateItemQuantity(
+    characterId: string,
+    instanceId: string,
+    newQuantity: number,
+  ): void;
 
   // 技能操作
   getSkills(characterId: string): SkillInstance[];
@@ -170,6 +181,72 @@ export function createInventoryRepository(
     return undefined;
   }
 
+  function updateEquipStatus(
+    characterId: string,
+    instanceId: string,
+    equipped: boolean,
+    slot?: string,
+  ): void {
+    const arr = inventoriesMap.get(characterId) as
+      | Y.Array<Y.Map<unknown>>
+      | undefined;
+    if (!arr) return;
+
+    let targetIndex = -1;
+    for (let i = 0; i < arr.length; i++) {
+      const map = arr.get(i);
+      if (map.get("instanceId") === instanceId) {
+        targetIndex = i;
+        break;
+      }
+    }
+
+    if (targetIndex === -1) return;
+
+    doc.transact(() => {
+      const map = arr.get(targetIndex);
+      map.set("equipped", equipped);
+
+      if (equipped) {
+        map.set("equipSlot", slot ?? "");
+      } else {
+        map.delete("equipSlot");
+      }
+    });
+  }
+
+  function updateItemQuantity(
+    characterId: string,
+    instanceId: string,
+    newQuantity: number,
+  ): void {
+    const arr = inventoriesMap.get(characterId) as
+      | Y.Array<Y.Map<unknown>>
+      | undefined;
+    if (!arr) return;
+
+    let targetIndex = -1;
+    for (let i = 0; i < arr.length; i++) {
+      const map = arr.get(i);
+      if (map.get("instanceId") === instanceId) {
+        targetIndex = i;
+        break;
+      }
+    }
+
+    if (targetIndex === -1) return;
+
+    doc.transact(() => {
+      if (newQuantity <= 0) {
+        arr.delete(targetIndex, 1);
+        return;
+      }
+
+      const map = arr.get(targetIndex);
+      map.set("quantity", newQuantity);
+    });
+  }
+
   // ── 技能操作 ──
 
   function getSkills(characterId: string): SkillInstance[] {
@@ -250,6 +327,8 @@ export function createInventoryRepository(
     addItem,
     removeItem,
     findItem,
+    updateEquipStatus,
+    updateItemQuantity,
     getSkills,
     addSkill,
     removeSkill,

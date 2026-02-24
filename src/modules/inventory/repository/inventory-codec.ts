@@ -7,7 +7,11 @@
  * @module inventory/repository/inventory-codec
  */
 
-import type { ItemCategory, ItemInstance } from "@/domain/entities/item";
+import {
+  isItemEffectArray,
+  type ItemCategory,
+  type ItemInstance,
+} from "@/domain/entities/item";
 import type {
   ResourceCost,
   SkillCategory,
@@ -79,6 +83,10 @@ export function itemInstanceToYMap(item: ItemInstance): Y.Map<unknown> {
     map.set("equipSlot", item.equipSlot);
   }
 
+  if (item.effects !== undefined) {
+    map.set("effects", JSON.stringify(item.effects));
+  }
+
   return map;
 }
 
@@ -98,6 +106,7 @@ export function yMapToItemInstance(map: Y.Map<unknown>): ItemInstance {
   const quantity = map.get("quantity");
   const equipped = map.get("equipped");
   const equipSlot = map.get("equipSlot");
+  const effectsRaw = map.get("effects");
   const source = map.get("source");
   const acquiredAt = map.get("acquiredAt");
 
@@ -116,6 +125,17 @@ export function yMapToItemInstance(map: Y.Map<unknown>): ItemInstance {
 
   if (isEquipSlot(equipSlot)) {
     item.equipSlot = equipSlot;
+  }
+
+  if (typeof effectsRaw === "string") {
+    try {
+      const parsed: unknown = JSON.parse(effectsRaw);
+      if (isItemEffectArray(parsed)) {
+        item.effects = parsed;
+      }
+    } catch {
+      // 忽略无效 JSON
+    }
   }
 
   return item;

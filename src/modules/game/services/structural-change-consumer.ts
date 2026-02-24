@@ -8,14 +8,24 @@
  */
 
 import type { Command, CommandResult } from "@/core/command-bus";
-import { InventoryCommands } from "@/domain/commands/inventory";
-import type { ItemCategory } from "@/domain/entities/item";
+import {
+  InventoryCommands,
+  type EquipItemPayload,
+  type UnequipItemPayload,
+  type UseItemPayload,
+} from "@/domain/commands/inventory";
+import {
+  isItemEffectArray,
+  type ItemCategory,
+  type ItemEffect,
+} from "@/domain/entities/item";
 import type { ResourceCost, SkillCategory } from "@/domain/entities/skill";
 import type { StructuralChange } from "@/domain/types/result-frame";
 
-/** 命令分发接口（仅需 dispatch 方法） */
+/** 命令分发接口（需 dispatch/createCommand 方法） */
 interface CommandDispatcher {
   dispatch<C, R>(command: Command<C>): Promise<CommandResult<R>>;
+  createCommand<C>(type: string, payload: C): Command<C>;
 }
 
 // ─── 类型守卫 ──────────────────────────────────────────────
@@ -57,7 +67,7 @@ function isFailedChange(change: StructuralChange): boolean {
  * 消费 ResultFrame 中的结构化变更，转化为对应的命令分发
  *
  * @param structuralChanges - ResultFrame 中的 structuralChanges
- * @param commandBus - 命令总线实例（需具有 dispatch 方法）
+ * @param commandBus - 命令总线实例（需具有 dispatch/createCommand 方法）
  */
 export async function applyStructuralChanges(
   structuralChanges: readonly StructuralChange[] | undefined,
@@ -81,6 +91,15 @@ export async function applyStructuralChanges(
           break;
         case "item_removed":
           await dispatchRemoveItem(change, commandBus);
+          break;
+        case "item_equipped":
+          await dispatchEquipItem(change, commandBus);
+          break;
+        case "item_unequipped":
+          await dispatchUnequipItem(change, commandBus);
+          break;
+        case "item_used":
+          await dispatchUseItem(change, commandBus);
           break;
         case "skill_learned":
           await dispatchGrantSkill(change, commandBus);
@@ -114,7 +133,20 @@ async function dispatchGrantItem(
   const equipSlot =
     typeof details.equipSlot === "string" ? details.equipSlot : undefined;
 
-  await commandBus.dispatch({
+  let effects: ItemEffect[] | undefined;
+  const effectsRaw = details.effects;
+  if (typeof effectsRaw === "string") {
+    try {
+      const parsed: unknown = JSON.parse(effectsRaw);
+      if (isItemEffectArray(parsed)) {
+        effects = parsed;
+      }
+    } catch {
+      // 忽略无效 JSON
+    }
+  }
+
+  const result = await commandBus.dispatch({
     type: InventoryCommands.GRANT_ITEM,
     payload: {
       characterId: change.targetId,
@@ -124,9 +156,18 @@ async function dispatchGrantItem(
       category,
       quantity,
       equipSlot,
+      effects,
       reason: change.reason,
     },
   });
+
+  if (!result.success) {
+    console.error(
+      `[StructuralChangeConsumer] ${change.type} dispatch failed:`,
+      result.error,
+      change,
+    );
+  }
 }
 
 async function dispatchRemoveItem(
@@ -137,7 +178,7 @@ async function dispatchRemoveItem(
   const quantity =
     typeof details.quantity === "number" ? details.quantity : undefined;
 
-  await commandBus.dispatch({
+  const result = await commandBus.dispatch({
     type: InventoryCommands.REMOVE_ITEM,
     payload: {
       characterId: change.targetId,
@@ -146,6 +187,90 @@ async function dispatchRemoveItem(
       reason: change.reason,
     },
   });
+
+  if (!result.success) {
+    console.error(
+      `[StructuralChangeConsumer] ${change.type} dispatch failed:`,
+      result.error,
+      change,
+    );
+  }
+}
+
+async function dispatchEquipItem(
+  change: StructuralChange,
+  commandBus: CommandDispatcher,
+): Promise<void> {
+  const slot =
+    typeof change.details?.slot === "string" ? change.details.slot : undefined;
+
+  const result = await commandBus.dispatch(
+    commandBus.createCommand(InventoryCommands.EQUIP_ITEM, {
+      characterId: change.targetId,
+      instanceId: change.entityId,
+      targetSlot: slot,
+      reason: change.reason,
+    } satisfies EquipItemPayload),
+  );
+
+  if (!result.success) {
+    console.error(
+      `[StructuralChangeConsumer] ${change.type} dispatch failed:`,
+      result.error,
+      change,
+    );
+  }
+}
+
+async function dispatchUnequipItem(
+  change: StructuralChange,
+  commandBus: CommandDispatcher,
+): Promise<void> {
+  const result = await commandBus.dispatch(
+    commandBus.createCommand(InventoryCommands.UNEQUIP_ITEM, {
+      characterId: change.targetId,
+      instanceId: change.entityId,
+      reason: change.reason,
+    } satisfies UnequipItemPayload),
+  );
+
+  if (!result.success) {
+    console.error(
+      `[StructuralChangeConsumer] ${change.type} dispatch failed:`,
+      result.error,
+      change,
+    );
+  }
+}
+
+async function dispatchUseItem(
+  change: StructuralChange,
+  commandBus: CommandDispatcher,
+): Promise<void> {
+  const quantity =
+    typeof change.details?.quantity === "number" ? change.details.quantity : 1;
+  const targetId =
+    typeof change.details?.useTarget === "string"
+      ? change.details.useTarget
+      : undefined;
+
+  const result = await commandBus.dispatch(
+    commandBus.createCommand(InventoryCommands.USE_ITEM, {
+      characterId: change.targetId,
+      instanceId: change.entityId,
+      quantity,
+      targetId,
+      reason: change.reason,
+    } satisfies UseItemPayload),
+  );
+
+  if (!result.success) {
+    console.error(
+      `[StructuralChangeConsumer] ${change.type} dispatch failed:`,
+      result.error,
+      change,
+    );
+  }
 }
 
 async function dispatchGrantSkill(
@@ -171,7 +296,7 @@ async function dispatchGrantSkill(
     cost = { field: details.costField, amount: details.costAmount };
   }
 
-  await commandBus.dispatch({
+  const result = await commandBus.dispatch({
     type: InventoryCommands.GRANT_SKILL,
     payload: {
       characterId: change.targetId,
@@ -184,13 +309,21 @@ async function dispatchGrantSkill(
       reason: change.reason,
     },
   });
+
+  if (!result.success) {
+    console.error(
+      `[StructuralChangeConsumer] ${change.type} dispatch failed:`,
+      result.error,
+      change,
+    );
+  }
 }
 
 async function dispatchRemoveSkill(
   change: StructuralChange,
   commandBus: CommandDispatcher,
 ): Promise<void> {
-  await commandBus.dispatch({
+  const result = await commandBus.dispatch({
     type: InventoryCommands.REMOVE_SKILL,
     payload: {
       characterId: change.targetId,
@@ -198,4 +331,12 @@ async function dispatchRemoveSkill(
       reason: change.reason,
     },
   });
+
+  if (!result.success) {
+    console.error(
+      `[StructuralChangeConsumer] ${change.type} dispatch failed:`,
+      result.error,
+      change,
+    );
+  }
 }

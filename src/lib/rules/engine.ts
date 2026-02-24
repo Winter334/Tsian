@@ -41,6 +41,11 @@ import type {
 } from "@/domain";
 import type { ItemInstance } from "@/domain/entities/item";
 import type { SkillInstance } from "@/domain/entities/skill";
+import type {
+  EquipItemAction,
+  UnequipItemAction,
+  UseItemAction,
+} from "@/domain/types/rule-script";
 import type { WorldConfig } from "@/lib/world";
 import { getDefaultResourceField, getResourcePairs } from "@/lib/world";
 import { createSeededRandom } from "./dice";
@@ -622,6 +627,15 @@ function executeAction(
       break;
     case "removeItem":
       executeRemoveItem(normalizedAction as RemoveItemAction, context, state);
+      break;
+    case "equipItem":
+      executeEquipItem(normalizedAction as EquipItemAction, context, state);
+      break;
+    case "unequipItem":
+      executeUnequipItem(normalizedAction as UnequipItemAction, context, state);
+      break;
+    case "useItem":
+      executeUseItem(normalizedAction as UseItemAction, context, state);
       break;
     case "grantSkill":
       executeGrantSkill(normalizedAction as GrantSkillAction, context, state);
@@ -1924,6 +1938,9 @@ function executeGrantItem(
       ...(typeof action.equipSlot === "string"
         ? { equipSlot: action.equipSlot }
         : {}),
+      ...(action.effects !== undefined
+        ? { effects: JSON.stringify(action.effects) }
+        : {}),
     },
     reason: action.reason ?? `获得物品「${action.name}」`,
   });
@@ -1956,6 +1973,187 @@ function executeRemoveItem(
       quantity: action.quantity ?? 1,
     },
     reason: action.reason ?? "移除物品",
+  });
+}
+
+function executeEquipItem(
+  action: EquipItemAction,
+  context: ExecutionContext,
+  state: InternalExecutionState,
+): void {
+  const targetId = resolveEntityId(action.target, context, state);
+  const instanceId = action.instanceId;
+  const currentItems = context.entities.getItems?.(targetId);
+  const item = currentItems?.find((i) => i.instanceId === instanceId);
+
+  if (!item) {
+    state.structuralChanges.push({
+      type: "item_equipped",
+      entityId: instanceId,
+      targetId,
+      details: {
+        failed: true,
+        error: `角色 "${targetId}" 没有物品实例 "${instanceId}"`,
+      },
+      reason: action.reason,
+    });
+    return;
+  }
+
+  const slot = action.slot ?? item.equipSlot ?? "";
+  if (!slot) {
+    state.structuralChanges.push({
+      type: "item_equipped",
+      entityId: instanceId,
+      targetId,
+      details: {
+        failed: true,
+        error: "No equip slot specified for item",
+      },
+      reason: action.reason,
+    });
+    return;
+  }
+
+  state.structuralChanges.push({
+    type: "item_equipped",
+    entityId: instanceId,
+    targetId,
+    details: {
+      slot,
+      name: item.name,
+    },
+    reason: action.reason,
+  });
+}
+
+function executeUnequipItem(
+  action: UnequipItemAction,
+  context: ExecutionContext,
+  state: InternalExecutionState,
+): void {
+  const targetId = resolveEntityId(action.target, context, state);
+  const instanceId = action.instanceId;
+  const currentItems = context.entities.getItems?.(targetId);
+  const item = currentItems?.find((i) => i.instanceId === instanceId);
+
+  if (!item) {
+    state.structuralChanges.push({
+      type: "item_unequipped",
+      entityId: instanceId,
+      targetId,
+      details: {
+        failed: true,
+        error: `角色 "${targetId}" 没有物品实例 "${instanceId}"`,
+      },
+      reason: action.reason,
+    });
+    return;
+  }
+
+  if (item.equipped !== true) {
+    state.structuralChanges.push({
+      type: "item_unequipped",
+      entityId: instanceId,
+      targetId,
+      details: {
+        failed: true,
+        error: `物品实例 "${instanceId}" 尚未装备`,
+      },
+      reason: action.reason,
+    });
+    return;
+  }
+
+  state.structuralChanges.push({
+    type: "item_unequipped",
+    entityId: instanceId,
+    targetId,
+    details: {
+      slot: item.equipSlot ?? "",
+      name: item.name,
+    },
+    reason: action.reason,
+  });
+}
+
+function executeUseItem(
+  action: UseItemAction,
+  context: ExecutionContext,
+  state: InternalExecutionState,
+): void {
+  const targetId = resolveEntityId(action.target, context, state);
+  const instanceId = action.instanceId;
+  const currentItems = context.entities.getItems?.(targetId);
+  const item = currentItems?.find((i) => i.instanceId === instanceId);
+
+  if (!item) {
+    state.structuralChanges.push({
+      type: "item_used",
+      entityId: instanceId,
+      targetId,
+      details: {
+        failed: true,
+        error: `角色 "${targetId}" 没有物品实例 "${instanceId}"`,
+      },
+      reason: action.reason,
+    });
+    return;
+  }
+
+  if (item.category !== "consumable") {
+    state.structuralChanges.push({
+      type: "item_used",
+      entityId: instanceId,
+      targetId,
+      details: {
+        failed: true,
+        error: `物品实例 "${instanceId}" 不是 consumable 类别`,
+      },
+      reason: action.reason,
+    });
+    return;
+  }
+
+  const quantity = action.quantity ?? 1;
+  if (quantity < 1 || !Number.isInteger(quantity)) {
+    state.structuralChanges.push({
+      type: "item_used",
+      entityId: instanceId,
+      targetId,
+      details: {
+        failed: true,
+        error: "Use quantity must be a positive integer",
+      },
+      reason: action.reason,
+    });
+    return;
+  }
+
+  if (item.quantity < quantity) {
+    state.structuralChanges.push({
+      type: "item_used",
+      entityId: instanceId,
+      targetId,
+      details: {
+        failed: true,
+        error: `物品实例 "${instanceId}" 数量不足（当前 ${item.quantity}，需要 ${quantity}）`,
+      },
+      reason: action.reason,
+    });
+    return;
+  }
+
+  state.structuralChanges.push({
+    type: "item_used",
+    entityId: instanceId,
+    targetId,
+    details: {
+      name: item.name,
+      quantity,
+      ...(action.useTarget ? { useTarget: action.useTarget } : {}),
+    },
+    reason: action.reason,
   });
 }
 

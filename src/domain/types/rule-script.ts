@@ -32,7 +32,10 @@ export type RuleAction =
   | RemoveSkillAction
   | SpawnAction
   | DespawnAction
-  | BranchAction;
+  | BranchAction
+  | EquipItemAction
+  | UnequipItemAction
+  | UseItemAction; // 领域扩展
 
 // 引擎内部（不在 RuleAction 联合类型中暴露给 AI）
 export type InternalAction = ModifyDamageAction;
@@ -229,6 +232,42 @@ export interface RemoveItemAction extends RuleActionBase {
   instanceId: string;
   /** 移除数量，默认全部 */
   quantity?: number;
+  reason?: string;
+}
+
+/** 装备物品（领域扩展指令） */
+export interface EquipItemAction extends RuleActionBase {
+  type: "equipItem";
+  /** 角色 ID */
+  target: string;
+  /** 物品实例 ID */
+  instanceId: string;
+  /** 目标槽位 */
+  slot?: string;
+  reason?: string;
+}
+
+/** 卸下装备（领域扩展指令） */
+export interface UnequipItemAction extends RuleActionBase {
+  type: "unequipItem";
+  /** 角色 ID */
+  target: string;
+  /** 物品实例 ID */
+  instanceId: string;
+  reason?: string;
+}
+
+/** 使用物品（领域扩展指令） */
+export interface UseItemAction extends RuleActionBase {
+  type: "useItem";
+  /** 使用者 ID */
+  target: string;
+  /** 物品实例 ID */
+  instanceId: string;
+  /** 使用数量 */
+  quantity?: number;
+  /** 使用目标 */
+  useTarget?: string;
   reason?: string;
 }
 

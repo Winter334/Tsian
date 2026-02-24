@@ -1,68 +1,64 @@
 import { useMemo } from "react";
 
 import type { Character } from "@/domain/entities/character";
-import { computeDerivedStats } from "@/lib/rules/derived-stats";
+import { deserializeTagsFromYjs, type PassiveModifier } from "@/domain/types";
+import { computeFullStats } from "@/lib/rules/stats-pipeline";
 import type { WorldConfig } from "@/lib/world/types";
+import { useInventoryStore } from "@/modules";
 
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
+const EMPTY_ITEMS: ReturnType<
+  typeof useInventoryStore.getState
+>["items"][string] = [];
 
-/**
- * 计算角色完整属性（基础 + 衍生），并对资源字段执行保护合并。
- *
- * 合并规则：
- * - current（资源当前值）：优先保留 attributes 中已被运行时修改的值
- * - max（资源上限）：优先使用公式计算结果，缺失时回退 attributes
- */
 export function useCharacterFullStats(
   character: Character | null,
   worldConfig: WorldConfig,
 ): Record<string, number> {
+  const characterItems = useInventoryStore((s) =>
+    character ? (s.items[character.id] ?? EMPTY_ITEMS) : EMPTY_ITEMS,
+  );
+
   return useMemo(() => {
-    if (!character) {
-      return {};
-    }
+    if (!character) return {};
 
-    const attributes = character.attributes ?? {};
-    const baseFields: Record<string, number | string | boolean> = {};
+    const passiveModifiers: PassiveModifier[] = [];
 
-    for (const [key, value] of Object.entries(attributes)) {
-      if (
-        typeof value === "number" ||
-        typeof value === "string" ||
-        typeof value === "boolean"
-      ) {
-        baseFields[key] = value;
+    for (const item of characterItems) {
+      if (!item.equipped) continue;
+
+      for (const effect of item.effects ?? []) {
+        if (effect.type !== "modifier" || !effect.modifiers?.length) continue;
+        passiveModifiers.push(...effect.modifiers);
       }
     }
 
-    const computed = computeDerivedStats(baseFields, worldConfig.derivedStats);
-
-    for (const stat of worldConfig.derivedStats) {
-      if (!stat.isResource || !stat.maxField) continue;
-
-      const attrCurrent = attributes[stat.key];
-      if (isFiniteNumber(attrCurrent)) {
-        computed[stat.key] = attrCurrent;
-      }
-
-      const computedMax = computed[stat.maxField];
-      if (!isFiniteNumber(computedMax)) {
-        const attrMax = attributes[stat.maxField];
-        if (isFiniteNumber(attrMax)) {
-          computed[stat.maxField] = attrMax;
-        }
-      }
+    const talentsById = new Map(
+      (worldConfig.talents ?? []).map((talent) => [talent.id, talent]),
+    );
+    for (const talentId of character.talentIds ?? []) {
+      const talent = talentsById.get(talentId);
+      if (!talent?.modifiers?.length) continue;
+      passiveModifiers.push(...talent.modifiers);
     }
 
-    const fullStats: Record<string, number> = {};
-    for (const [key, value] of Object.entries(computed)) {
-      if (isFiniteNumber(value)) {
-        fullStats[key] = value;
-      }
+    const tagsMap = deserializeTagsFromYjs(character.tags);
+    for (const [, tagMetadata] of tagsMap) {
+      const trigger = tagMetadata.trigger;
+      if (trigger?.timing !== "passive" || !trigger.modifiers?.length) continue;
+      passiveModifiers.push(...trigger.modifiers);
     }
 
-    return fullStats;
-  }, [character, worldConfig.derivedStats]);
+    return computeFullStats({
+      baseAttributes: character.attributes ?? {},
+      primaryAttributes: worldConfig.primaryAttributes,
+      derivedStats: worldConfig.derivedStats,
+      passiveModifiers,
+    });
+  }, [
+    character,
+    characterItems,
+    worldConfig.primaryAttributes,
+    worldConfig.derivedStats,
+    worldConfig.talents,
+  ]);
 }

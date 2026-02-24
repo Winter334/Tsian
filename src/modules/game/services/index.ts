@@ -17,9 +17,9 @@ export {
 } from "./delayed-commit";
 
 export {
+  applyEquipmentEffectsToEntity,
   applyTalentsToEntity,
   buildDefaultEntityFromWorldConfig,
-  buildEntityFromCharacterData,
   MapEntityAccessor,
   type EntityData,
 } from "./entity-accessor";
@@ -31,4 +31,13 @@ export {
   type GameContext,
 } from "./result-frame-accessor";
 
-export { IRNR_PIPELINE_SERVICE_TOKEN } from "./tokens";
+export {
+  createDirectActionService,
+  directActionService,
+  type DirectActionServiceContract,
+} from "./direct-action-service";
+
+export {
+  DIRECT_ACTION_SERVICE_TOKEN,
+  IRNR_PIPELINE_SERVICE_TOKEN,
+} from "./tokens";

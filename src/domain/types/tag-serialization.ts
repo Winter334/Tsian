@@ -21,7 +21,7 @@ import type { ConditionTrigger } from "./rule-script";
  * 纯 JSON 兼容的对象层级（没有 Map/Set），可以直接存储。
  */
 export function serializeTagsForYjs(
-  tags: Map<string, TagMetadata>
+  tags: Map<string, TagMetadata>,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, meta] of tags) {
@@ -39,7 +39,7 @@ export function serializeTagsForYjs(
  * 结构完整。缺失的可选字段不会被填充，保持 undefined。
  */
 export function deserializeTagsFromYjs(
-  raw: Record<string, unknown> | undefined | null
+  raw: Record<string, unknown> | undefined | null,
 ): Map<string, TagMetadata> {
   const tags = new Map<string, TagMetadata>();
   if (!raw || typeof raw !== "object") return tags;
@@ -74,7 +74,11 @@ export function deserializeTagsFromYjs(
       if (typeof meta.addedAtTurn === "number") {
         tagMetadata.addedAtTurn = meta.addedAtTurn;
       }
-      if (meta.category === "talent" || meta.category === "condition") {
+      if (
+        meta.category === "talent" ||
+        meta.category === "condition" ||
+        meta.category === "equipment"
+      ) {
         tagMetadata.category = meta.category;
       }
 

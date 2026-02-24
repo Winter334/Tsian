@@ -62,3 +62,8 @@ export * from "./ai-status";
  * IRNR Pipeline 公共契约类型
  */
 export * from "./pipeline-contract";
+
+/**
+ * 轻量管线（Direct Pipeline）类型
+ */
+export * from "./direct-action";

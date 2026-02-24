@@ -96,15 +96,16 @@ export interface ResultFrame {
  * 结构化变更记录
  *
  * 记录物品/技能等结构性实体的增减，与 ValueChange（数值变更）互补。
- * V1 支持 item/skill 的添加和移除；V1.5 将扩展 use/equip/upgrade 等操作。
  */
 export interface StructuralChange {
   readonly type:
     | "item_added"
     | "item_removed"
+    | "item_equipped"
+    | "item_unequipped"
+    | "item_used"
     | "skill_learned"
     | "skill_removed";
-  // V1.5 再追加: item_used | item_equipped | item_unequipped | skill_used | skill_upgraded | skill_evolved
   /** 物品/技能实例 ID */
   readonly entityId: string;
   /** 角色 ID */
@@ -142,8 +143,8 @@ export interface TagMetadata {
   source: "predefined" | "ai-generated";
   /** 添加时的回合号 */
   addedAtTurn?: number;
-  /** 标签类别：talent=天赋, condition=状态效果（默认 condition） */
-  category?: "talent" | "condition";
+  /** 标签类别：talent=天赋, condition=状态效果（默认 condition）, equipment=装备效果 */
+  category?: "talent" | "condition" | "equipment";
 }
 
 // ─── 伤害上下文 ───────────────────────────────────────────

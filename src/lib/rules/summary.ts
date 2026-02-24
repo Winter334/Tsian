@@ -152,6 +152,9 @@ export function generateMechanicSummary(
         case "item_removed":
           lines.push(`失去物品: ${name}${quantity > 1 ? ` x${quantity}` : ""}`);
           break;
+        case "item_used":
+          lines.push(`使用物品: ${name} ×${quantity} (${change.targetId})`);
+          break;
         case "skill_learned":
           lines.push(`习得技能: ${name}`);
           break;

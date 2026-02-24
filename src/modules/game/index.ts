@@ -6,12 +6,15 @@ import { registry, services } from "@/core";
 import type { ModuleManifest } from "@/core/registry";
 import { actionSchemaRegistry } from "@/lib/rules/schema";
 import { createGameCommandHandlers } from "./handlers";
-import { irnrPipelineService } from "./services";
+import { directActionService, irnrPipelineService } from "./services";
 import {
   gameActionSchemas,
   modifyDamageSchema,
 } from "./services/action-schemas";
-import { IRNR_PIPELINE_SERVICE_TOKEN } from "./services/tokens";
+import {
+  DIRECT_ACTION_SERVICE_TOKEN,
+  IRNR_PIPELINE_SERVICE_TOKEN,
+} from "./services/tokens";
 
 // 导出服务
 export * from "./services";
@@ -28,6 +31,7 @@ const manifest: ModuleManifest = {
 export async function registerGameModule(): Promise<void> {
   await registry.register(manifest);
   services.register(IRNR_PIPELINE_SERVICE_TOKEN, irnrPipelineService);
+  services.register(DIRECT_ACTION_SERVICE_TOKEN, directActionService);
   actionSchemaRegistry.registerActions("lyra.game", [
     ...gameActionSchemas,
     modifyDamageSchema,
@@ -40,5 +44,6 @@ export async function registerGameModule(): Promise<void> {
 export async function unregisterGameModule(): Promise<void> {
   actionSchemaRegistry.unregisterModule("lyra.game");
   services.unregister(IRNR_PIPELINE_SERVICE_TOKEN);
+  services.unregister(DIRECT_ACTION_SERVICE_TOKEN);
   await registry.unregister("lyra.game");
 }

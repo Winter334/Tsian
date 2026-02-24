@@ -1,8 +1,8 @@
 /**
  * 背包物品列表组件
  *
- * 在角色面板中展示指定角色的物品列表（只读）
- * 支持点击展开/折叠查看物品详情
+ * 在角色面板中展示指定角色的物品列表
+ * 支持装备/卸下/使用/丢弃等交互操作
  */
 
 import { motion } from "framer-motion";
@@ -15,10 +15,14 @@ import {
   ScrollText,
   Shield,
   Sword,
+  Trash2,
 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { ItemCategory, ItemInstance } from "@/domain/entities/item";
+import type { DirectAction } from "@/domain/types";
 import type { WorldConfig } from "@/lib/world";
+import { directActionService } from "@/modules/game/services";
 import { useInventoryStore } from "@/modules/inventory/store";
 import { color, colorAlpha, glow } from "@/styles/tokens";
 
@@ -56,6 +60,18 @@ function getCategoryIcon(category: ItemCategory) {
       return <HelpCircle className="w-3.5 h-3.5" />;
   }
 }
+
+function isEquippableItem(item: ItemInstance): boolean {
+  return (
+    Boolean(item.equipSlot) ||
+    item.category === "weapon" ||
+    item.category === "armor" ||
+    item.category === "accessory"
+  );
+}
+
+const ACTION_BUTTON_CLASS_NAME =
+  "inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium leading-none transition-all duration-150 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-55";
 
 // ── 动画 ──
 
@@ -98,6 +114,117 @@ export function InventorySection({
     ]),
   );
 
+  const [confirmDiscardItemId, setConfirmDiscardItemId] = useState<
+    string | null
+  >(null);
+  const [submittingItemId, setSubmittingItemId] = useState<string | null>(null);
+  const isSubmitting = submittingItemId !== null;
+
+  const runDirectAction = useCallback(
+    async (action: DirectAction, actionLabel: string) => {
+      const instanceId = action.payload.instanceId as string;
+      setSubmittingItemId(instanceId);
+
+      try {
+        const result = await directActionService.execute(action);
+        if (!result.success) {
+          console.warn(
+            `[InventorySection] ${actionLabel} failed:`,
+            result.error,
+          );
+        }
+      } finally {
+        setSubmittingItemId((current) =>
+          current === instanceId ? null : current,
+        );
+      }
+    },
+    [],
+  );
+
+  const handleEquipItem = useCallback(
+    async (item: ItemInstance) => {
+      setConfirmDiscardItemId(null);
+      await runDirectAction(
+        {
+          type: "equip_item",
+          actorId: characterId,
+          payload: { instanceId: item.instanceId },
+        },
+        "装备",
+      );
+    },
+    [characterId, runDirectAction],
+  );
+
+  const handleUnequipItem = useCallback(
+    async (item: ItemInstance) => {
+      setConfirmDiscardItemId(null);
+      await runDirectAction(
+        {
+          type: "unequip_item",
+          actorId: characterId,
+          payload: { instanceId: item.instanceId },
+        },
+        "卸下",
+      );
+    },
+    [characterId, runDirectAction],
+  );
+
+  const handleUseItem = useCallback(
+    async (item: ItemInstance) => {
+      setConfirmDiscardItemId(null);
+      await runDirectAction(
+        {
+          type: "use_item",
+          actorId: characterId,
+          payload: { instanceId: item.instanceId },
+        },
+        "使用",
+      );
+    },
+    [characterId, runDirectAction],
+  );
+
+  const handleDiscardItem = useCallback(
+    async (item: ItemInstance) => {
+      if (item.equipped) {
+        return;
+      }
+
+      if (confirmDiscardItemId !== item.instanceId) {
+        setConfirmDiscardItemId(item.instanceId);
+        return;
+      }
+
+      setConfirmDiscardItemId(null);
+      await runDirectAction(
+        {
+          type: "drop_item",
+          actorId: characterId,
+          payload: { instanceId: item.instanceId },
+        },
+        "丢弃",
+      );
+    },
+    [characterId, confirmDiscardItemId, runDirectAction],
+  );
+
+  useEffect(() => {
+    if (!confirmDiscardItemId) {
+      return;
+    }
+
+    const stillExists = items.some(
+      (item) => item.instanceId === confirmDiscardItemId,
+    );
+
+    if (!stillExists) {
+      setConfirmDiscardItemId(null);
+    }
+  }, [confirmDiscardItemId, items]);
+
   return (
     <motion.div
       custom={animationIndex}
@@ -135,8 +262,21 @@ export function InventorySection({
       ) : (
         <div className="space-y-2 pl-1">
           {items.map((item) => {
+            const canEquip = !item.equipped && isEquippableItem(item);
+            const canUnequip = item.equipped;
+            const canUse = item.category === "consumable";
+            const canDiscard = !item.equipped;
+            const hasActions = canEquip || canUnequip || canUse || canDiscard;
             const hasDetails =
-              item.description || item.equipSlot || item.equipped;
+              Boolean(item.description) ||
+              Boolean(item.equipSlot) ||
+              item.equipped ||
+              hasActions;
+            const isConfirmingDiscard =
+              confirmDiscardItemId === item.instanceId;
+            const isSubmittingCurrentItem =
+              submittingItemId === item.instanceId;
+
             return (
               <div
                 key={item.instanceId}
@@ -266,6 +406,107 @@ export function InventorySection({
                         >
                           {item.equipped ? "✦ 已装备" : "未装备"}
                         </span>
+                      </div>
+                    )}
+
+                    {/* 操作按钮 */}
+                    {hasActions && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        {canEquip && (
+                          <button
+                            type="button"
+                            className={ACTION_BUTTON_CLASS_NAME}
+                            style={{
+                              background: colorAlpha("primary", 0.1),
+                              color: color("primary"),
+                              border: `1px solid ${colorAlpha("primary", 0.22)}`,
+                            }}
+                            onClick={() => {
+                              void handleEquipItem(item);
+                            }}
+                            disabled={isSubmitting}
+                          >
+                            <Sword className="w-3 h-3" />
+                            <span>
+                              {isSubmittingCurrentItem ? "处理中..." : "装备"}
+                            </span>
+                          </button>
+                        )}
+
+                        {canUnequip && (
+                          <button
+                            type="button"
+                            className={ACTION_BUTTON_CLASS_NAME}
+                            style={{
+                              background: colorAlpha("secondary", 0.12),
+                              color: color("secondary"),
+                              border: `1px solid ${colorAlpha("secondary", 0.24)}`,
+                            }}
+                            onClick={() => {
+                              void handleUnequipItem(item);
+                            }}
+                            disabled={isSubmitting}
+                          >
+                            <Shield className="w-3 h-3" />
+                            <span>
+                              {isSubmittingCurrentItem ? "处理中..." : "卸下"}
+                            </span>
+                          </button>
+                        )}
+
+                        {canUse && (
+                          <button
+                            type="button"
+                            className={ACTION_BUTTON_CLASS_NAME}
+                            style={{
+                              background: colorAlpha("success", 0.12),
+                              color: color("success"),
+                              border: `1px solid ${colorAlpha("success", 0.24)}`,
+                            }}
+                            onClick={() => {
+                              void handleUseItem(item);
+                            }}
+                            disabled={isSubmitting}
+                          >
+                            <FlaskConical className="w-3 h-3" />
+                            <span>
+                              {isSubmittingCurrentItem ? "处理中..." : "使用"}
+                            </span>
+                          </button>
+                        )}
+
+                        {canDiscard && (
+                          <button
+                            type="button"
+                            className={ACTION_BUTTON_CLASS_NAME}
+                            style={
+                              isConfirmingDiscard
+                                ? {
+                                    background: colorAlpha("error", 0.14),
+                                    color: color("error"),
+                                    border: `1px solid ${colorAlpha("error", 0.26)}`,
+                                  }
+                                : {
+                                    background: colorAlpha("warning", 0.12),
+                                    color: color("warning"),
+                                    border: `1px solid ${colorAlpha("warning", 0.24)}`,
+                                  }
+                            }
+                            onClick={() => {
+                              void handleDiscardItem(item);
+                            }}
+                            disabled={isSubmitting}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>
+                              {isSubmittingCurrentItem
+                                ? "处理中..."
+                                : isConfirmingDiscard
+                                  ? "确认丢弃？"
+                                  : "丢弃"}
+                            </span>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

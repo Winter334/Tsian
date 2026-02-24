@@ -1,10 +1,12 @@
 # 装备系统与双管线架构设计方案
 
-**版本**：1.1  
-**性质**：核心架构设计文档  
-**前置依赖**：IRNR 管线、Inventory 模块、Rules Engine  
-**设计日期**：2025-07-15  
-**修订日期**：2025-07-15（v1.1 — 简化叙事策略，引入操作缓冲区）
+**版本**：1.2
+**性质**：核心架构设计文档
+**前置依赖**：IRNR 管线、Inventory 模块、Rules Engine（RuleScript v2 已完成实现）
+**设计日期**：2025-07-15
+**修订日期**：2025-07-16（v1.2 — 适配 RuleScript v2 已完成状态，更新实施路线）
+
+> **RuleScript v2 实现状态**：`rule-script.ts` 已完整实现 v2 指令集（16 个核心指令，含 `check.onSuccess/onFailure`、DC 分层、`GrantItemAction.effects` 等）。装备操作指令（`equipItem`/`unequipItem`/`useItem`）作为领域扩展指令待本方案实施时新增。
 
 ---
 
@@ -33,20 +35,20 @@
 
 **结构性缺口汇总：**
 
-| # | 缺口 | 影响 |
-|---|------|------|
-| 1 | 没有「玩家 UI 操作 → 数据变更」的通路 | 玩家无法从 UI 装备/使用物品 |
-| 2 | `ItemInstance` 不携带 `effects` 字段 | 装备效果数据在模板→实例转换中丢失 |
-| 3 | 属性计算管线不统一（UI 侧 vs 引擎侧） | 装备效果无处注入，两条路径不同步 |
-| 4 | 缺少 equip/unequip/use 的完整实现 | 从 Action 到 UI 全链路缺失 |
+| #   | 缺口                                  | 影响                              |
+| --- | ------------------------------------- | --------------------------------- |
+| 1   | 没有「玩家 UI 操作 → 数据变更」的通路 | 玩家无法从 UI 装备/使用物品       |
+| 2   | `ItemInstance` 不携带 `effects` 字段  | 装备效果数据在模板→实例转换中丢失 |
+| 3   | 属性计算管线不统一（UI 侧 vs 引擎侧） | 装备效果无处注入，两条路径不同步  |
+| 4   | 缺少 equip/unequip/use 的完整实现     | 从 Action 到 UI 全链路缺失        |
 
 ### 1.3 核心洞察：操作分类
 
-| 类型 | 特征 | 示例 | 需要引擎？ |
-|------|------|------|--------|
-| **仲裁型操作** | 结果不确定，需要掷骰/检定/触发器 | 攻击、施法、潜行、社交检定 | ✅ 是 |
-| **确定型操作** | 结果确定，仅需校验合法性 | 装备、卸下、使用消耗品、丢弃 | ❌ 否 |
-| **纯查看** | 不修改状态 | 查看背包、查看属性 | ❌ 否 |
+| 类型           | 特征                             | 示例                         | 需要引擎？ |
+| -------------- | -------------------------------- | ---------------------------- | ---------- |
+| **仲裁型操作** | 结果不确定，需要掷骰/检定/触发器 | 攻击、施法、潜行、社交检定   | ✅ 是       |
+| **确定型操作** | 结果确定，仅需校验合法性         | 装备、卸下、使用消耗品、丢弃 | ❌ 否       |
+| **纯查看**     | 不修改状态                       | 查看背包、查看属性           | ❌ 否       |
 
 规则引擎的价值集中在**仲裁型操作**——公平性、可预测性、触发器联动。把这个重型机制强加到确定型操作上是过度设计。
 
@@ -91,15 +93,15 @@
 
 ### 2.2 管线分工
 
-| 维度 | 重型管线 (IRNR) | 轻量管线 (Direct) |
-|------|----------------|------------------|
-| **触发条件** | 玩家文字输入、AI 主动行为 | 玩家 UI 点击操作 |
-| **意图解析** | Parser AI 解析自然语言 | 无需解析，UI 已明确 |
-| **规则执行** | Rules Engine 执行（掷骰、触发器） | 直接校验 + 执行 |
-| **叙事生成** | Narrative AI 生成叙事正文 | 无（UI toast/状态变更即可） |
+| 维度            | 重型管线 (IRNR)                   | 轻量管线 (Direct)                        |
+| --------------- | --------------------------------- | ---------------------------------------- |
+| **触发条件**    | 玩家文字输入、AI 主动行为         | 玩家 UI 点击操作                         |
+| **意图解析**    | Parser AI 解析自然语言            | 无需解析，UI 已明确                      |
+| **规则执行**    | Rules Engine 执行（掷骰、触发器） | 直接校验 + 执行                          |
+| **叙事生成**    | Narrative AI 生成叙事正文         | 无（UI toast/状态变更即可）              |
 | **AI 感知方式** | ResultFrame 直接传给 Narrative AI | 预设上下文中的状态数据（下一轮自然感知） |
-| **适用场景** | 战斗、检定、复杂交互 | 装备、卸下、使用、丢弃 |
-| **新增成本** | 10 层垂直切片 | 3-4 层 |
+| **适用场景**    | 战斗、检定、复杂交互              | 装备、卸下、使用、丢弃                   |
+| **新增成本**    | 10 层垂直切片                     | 3-4 层                                   |
 
 ### 2.3 AI 感知机制
 
@@ -275,8 +277,10 @@ export interface CreateItemInstanceParams {
 - `createItemInstance()` 工厂函数：传递 effects
 - `inventory-codec.ts`：编解码 effects（JSON 序列化存入 Y.Map）
 - `action-schemas.ts`：grantItem schema 增加 effects 参数描述
-- `rule-script.ts`：GrantItemAction 增加 effects 字段
-- `engine.ts`：执行 grantItem 时传递 effects
+- ~~`rule-script.ts`：GrantItemAction 增加 effects 字段~~ → ✅ **已随 RuleScript v2 完成**
+- `engine.ts`：执行 grantItem 时传递 effects 到 StructuralChange.details
+- `commands/inventory.ts`：GrantItemPayload 增加 `effects` 字段
+- `handlers.ts`：handleGrantItem 创建实例时传递 effects
 
 ### 4.2 统一属性计算函数
 
@@ -564,10 +568,19 @@ switch (change.type) {
 
 ### 5.8 AI Action 支持（重型管线兼容）
 
-AI 也应能通过重型管线发出装备/卸下指令：
+AI 也应能通过重型管线发出装备/卸下指令。根据 RuleScript v2 设计文档（Appendix A），这些是**领域扩展指令**，不属于核心 16 个指令，但遵循相同的架构模式。
+
+> **v2 对齐说明**：核心集 16 + 领域扩展上限 ~4 = 总上限 ~20 个 AI 可见指令。
+> `equipItem`/`unequipItem`/`useItem` 是装备子系统的领域指令（+3），因为 `item.equipped` 不是实体属性（entity.fields），无法用核心指令 `set` 表达。
+
+**需要修改的文件**：
+
+1. `src/domain/types/rule-script.ts` — 新增类型定义 + 加入 `RuleAction` 联合类型
+2. `src/lib/rules/engine.ts` — 在 action switch-case 中增加 `executeEquipItem`/`executeUnequipItem`/`executeUseItem`
+3. `src/modules/inventory/schemas/action-schemas.ts` — 增加对应的 ActionSchema 定义
 
 ```typescript
-// src/domain/types/rule-script.ts — 新增
+// src/domain/types/rule-script.ts — 新增类型 + 加入 RuleAction 联合类型
 
 export interface EquipItemAction extends RuleActionBase {
   type: "equipItem";
@@ -592,6 +605,15 @@ export interface UseItemAction extends RuleActionBase {
   useTarget?: string;   // 使用目标
   reason?: string;
 }
+
+// 需要更新 RuleAction 联合类型：
+export type RuleAction =
+  | CheckAction
+  | RollAction
+  // ... 现有 14 个 ...
+  | EquipItemAction      // ← 领域扩展
+  | UnequipItemAction    // ← 领域扩展
+  | UseItemAction;       // ← 领域扩展
 ```
 
 ---
@@ -802,42 +824,50 @@ async function handleEquip(characterId: string, item: ItemInstance) {
 
 ## 9. 实施路线
 
-### Phase 0: 地基（P0）— 预计 1-2 天
+### Phase 0: 地基（P0）
+
+> **前置状态**：`GrantItemAction.effects` 已随 RuleScript v2 完成（`rule-script.ts`）。
+> 此阶段主要修补数据层缺口，使 effects 能贯穿整个数据流。
 
 - [ ] `ItemInstance` 增加 `effects?: ItemEffect[]` 字段
+- [ ] `CreateItemInstanceParams` 增加 `effects?: ItemEffect[]` 字段
 - [ ] 修改 `createItemInstance()` 传递 effects
-- [ ] 修改 `inventory-codec.ts` 编解码 effects（JSON 字符串）
-- [ ] 提取 `computeFullStats()` 统一属性计算函数
+- [ ] 修改 `inventory-codec.ts` 编解码 effects（JSON 序列化存入 Y.Map）
+- [ ] `GrantItemPayload`（`commands/inventory.ts`）增加 `effects` 字段
+- [ ] `handleGrantItem`（`handlers.ts`）创建实例时传递 effects
+- [ ] `engine.ts` `executeGrantItem` 将 effects 写入 StructuralChange.details
+- [ ] `structural-change-consumer.ts` `dispatchGrantItem` 读取并传递 effects
+- [ ] 提取 `computeFullStats()` 统一属性计算函数（`src/lib/rules/stats-pipeline.ts`）
 - [ ] `useCharacterFullStats` 改为调用 `computeFullStats()`
 - [ ] `buildDefaultEntityFromWorldConfig` 改为调用 `computeFullStats()`
 - [ ] `computeFullStats` 中预留 equippedItems 参数（暂不实现效果计算）
 
-### Phase 1: 装备操作垂直切片（P1）— 预计 2-3 天
+### Phase 1: 装备操作垂直切片（P1）
 
 - [ ] 新增命令: `EQUIP_ITEM` / `UNEQUIP_ITEM` / `USE_ITEM`
 - [ ] 新增事件: `ITEM_EQUIPPED` / `ITEM_UNEQUIPPED` / `ITEM_USED`
 - [ ] Store 新增方法: `_equipItem` / `_unequipItem` / `_updateItemQuantity`
 - [ ] Repository 新增: `updateEquipStatus` / `updateItemQuantity`
 - [ ] Handler 实现（含槽位冲突检测）
-- [ ] `StructuralChange` 类型扩展
+- [ ] `StructuralChange` 类型扩展（增加 `item_equipped` / `item_unequipped` / `item_used`）
 - [ ] `StructuralChangeConsumer` 新增 case
-- [ ] AI Action 类型: `EquipItemAction` / `UnequipItemAction` / `UseItemAction`
-- [ ] Action Schema 定义
-- [ ] Rules Engine 执行支持
+- [ ] AI 领域扩展指令类型: `EquipItemAction` / `UnequipItemAction` / `UseItemAction`（加入 `RuleAction` 联合类型）
+- [ ] `action-schemas.ts` 增加 equipItem / unequipItem / useItem 的 ActionSchema 定义
+- [ ] `engine.ts` 增加 `executeEquipItem` / `executeUnequipItem` / `executeUseItem` 分支
 - [ ] `InventorySection` 增加操作按钮（通过 DirectActionService 或直接 CommandBus 执行）
 
-### Phase 2: 轻量管线框架（P2）— 预计 1-2 天
+### Phase 2: 轻量管线框架（P2）
 
 - [ ] 定义 `DirectAction` 类型
 - [ ] 实现 `DirectActionService` 核心（validate + execute 路由）
 - [ ] 实现各操作的 `DirectActionHandler`（equip/unequip/use/drop）
 - [ ] UI 操作改为通过 `DirectActionService` 执行
 
-### Phase 3: 效果联动（P3）— 预计 2-3 天
+### Phase 3: 效果联动（P3）
 
 - [ ] `computeFullStats` 实现装备效果计算（读取 equippedItems.effects.modifiers）
 - [ ] 装备/卸下时触发属性重算
-- [ ] AI Action Schema 中增加 effects 参数（让 AI 能动态创造带效果的物品）
+- [ ] `action-schemas.ts` grantItem schema 增加 effects 参数描述（让 AI 能动态创造带效果的物品）
 - [ ] grantItem 时从模板自动继承 effects
 
 ### Phase 4: 增强体验（P4）— 后续
@@ -893,19 +923,19 @@ AI 通过预设上下文中的状态快照感知变化，这意味着：
 
 ## 附录 A：当前 vs 改进后的操作新增成本对比
 
-| 操作 | 当前成本 | 改进后成本 | 说明 |
-|------|---------|-----------|------|
-| 新增一个仲裁型操作 | 10 层 | 10 层 | 不变，这类操作本就需要完整管线 |
-| 新增一个确定型操作 | 10 层 | 3-4 层 | Command + Handler + DirectActionHandler |
-| 新增一个纯 UI 展示 | 1 层 | 1 层 | 不变，直接读 Store |
+| 操作               | 当前成本 | 改进后成本 | 说明                                    |
+| ------------------ | -------- | ---------- | --------------------------------------- |
+| 新增一个仲裁型操作 | 10 层    | 10 层      | 不变，这类操作本就需要完整管线          |
+| 新增一个确定型操作 | 10 层    | 3-4 层     | Command + Handler + DirectActionHandler |
+| 新增一个纯 UI 展示 | 1 层     | 1 层       | 不变，直接读 Store                      |
 
 ## 附录 B：与同类项目的对比
 
-| 维度 | 同类项目 | Lyra（改进后） |
-|------|---------|---------------|
-| 战斗系统公平性 | AI 自说自话 | 规则引擎仲裁，掷骰决定 |
-| 简单操作开发效率 | 半天 | 半天（轻量管线） |
-| AI 感知玩家操作 | 手动维护状态描述 | 自动注入（预设上下文状态快照） |
-| 装备效果联动 | 无或手动 | PassiveModifier 自动计算 |
-| 多端同步 | 无 | Yjs 实时同步 |
-| 世界设定灵活性 | 硬编码 | WorldConfig 数据驱动 |
+| 维度             | 同类项目         | Lyra（改进后）                 |
+| ---------------- | ---------------- | ------------------------------ |
+| 战斗系统公平性   | AI 自说自话      | 规则引擎仲裁，掷骰决定         |
+| 简单操作开发效率 | 半天             | 半天（轻量管线）               |
+| AI 感知玩家操作  | 手动维护状态描述 | 自动注入（预设上下文状态快照） |
+| 装备效果联动     | 无或手动         | PassiveModifier 自动计算       |
+| 多端同步         | 无               | Yjs 实时同步                   |
+| 世界设定灵活性   | 硬编码           | WorldConfig 数据驱动           |

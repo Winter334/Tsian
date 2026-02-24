@@ -2,14 +2,8 @@
  * Inventory 模块命令定义
  */
 
-import type {
-  EquipSlot,
-  ItemCategory,
-} from "../entities/item";
-import type {
-  ResourceCost,
-  SkillCategory,
-} from "../entities/skill";
+import type { EquipSlot, ItemCategory, ItemEffect } from "../entities/item";
+import type { ResourceCost, SkillCategory } from "../entities/skill";
 
 /**
  * Inventory 命令类型常量
@@ -17,6 +11,9 @@ import type {
 export const InventoryCommands = {
   GRANT_ITEM: "inventory.grant_item",
   REMOVE_ITEM: "inventory.remove_item",
+  EQUIP_ITEM: "inventory.equip_item",
+  UNEQUIP_ITEM: "inventory.unequip_item",
+  USE_ITEM: "inventory.use_item",
   GRANT_SKILL: "inventory.grant_skill",
   REMOVE_SKILL: "inventory.remove_skill",
 } as const;
@@ -42,6 +39,7 @@ export interface GrantItemPayload {
   /** 默认 1 */
   quantity?: number;
   equipSlot?: EquipSlot;
+  effects?: ItemEffect[];
   /** 获取原因（叙事记录用） */
   reason?: string;
 }
@@ -54,6 +52,39 @@ export interface RemoveItemPayload {
   instanceId: string;
   /** 默认全部移除 */
   quantity?: number;
+  reason?: string;
+}
+
+/**
+ * 装备物品命令 Payload
+ */
+export interface EquipItemPayload {
+  characterId: string;
+  instanceId: string;
+  /** 目标槽位，不指定时使用物品的 equipSlot 字段 */
+  targetSlot?: string;
+  reason?: string;
+}
+
+/**
+ * 卸下装备命令 Payload
+ */
+export interface UnequipItemPayload {
+  characterId: string;
+  instanceId: string;
+  reason?: string;
+}
+
+/**
+ * 使用物品命令 Payload
+ */
+export interface UseItemPayload {
+  characterId: string;
+  instanceId: string;
+  /** 使用数量，默认 1 */
+  quantity?: number;
+  /** 使用目标（如对谁使用治疗药水） */
+  targetId?: string;
   reason?: string;
 }
 
@@ -88,6 +119,9 @@ export interface RemoveSkillPayload {
 export interface InventoryCommandPayloads {
   [InventoryCommands.GRANT_ITEM]: GrantItemPayload;
   [InventoryCommands.REMOVE_ITEM]: RemoveItemPayload;
+  [InventoryCommands.EQUIP_ITEM]: EquipItemPayload;
+  [InventoryCommands.UNEQUIP_ITEM]: UnequipItemPayload;
+  [InventoryCommands.USE_ITEM]: UseItemPayload;
   [InventoryCommands.GRANT_SKILL]: GrantSkillPayload;
   [InventoryCommands.REMOVE_SKILL]: RemoveSkillPayload;
 }

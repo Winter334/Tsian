@@ -1,8 +1,8 @@
 /**
  * Inventory 模块 Action Schema 声明
  *
- * 为 grantItem / removeItem / grantSkill / removeSkill
- * 四个 RuleAction 提供结构化元数据，供 Prompt 生成和 AI 输出校验使用。
+ * 为 grantItem / removeItem / equipItem / unequipItem / useItem / grantSkill / removeSkill
+ * 七个 RuleAction 提供结构化元数据，供 Prompt 生成和 AI 输出校验使用。
  */
 
 import type { ActionSchema } from "@/lib/rules/schema";
@@ -71,6 +71,13 @@ const grantItemSchema: ActionSchema = {
         "装备槽位 ID（动态值）。合法取值来自 WorldConfig.inventoryRules.equipSlotDefinitions[*].id",
     },
     {
+      name: "effects",
+      type: "object",
+      required: false,
+      description:
+        '物品效果定义（ItemEffect[]，传数组）。每项形如 { type: "narrative"|"modifier", description, modifiers? }；当 type="modifier" 时，modifiers 需提供被动修正（scope/filter/field/value/multiplier/reason）',
+    },
+    {
       name: "reason",
       type: "string",
       required: false,
@@ -83,6 +90,7 @@ const grantItemSchema: ActionSchema = {
     "没有 templateId 时，AI 动态创造的物品会被标记为 ai-generated",
     "category 必须是枚举值之一，不能自定义",
     "equipSlot（若提供）必须来自 WorldConfig.inventoryRules.equipSlotDefinitions 且与 category 约束匹配",
+    "effects（若提供）必须是 ItemEffect 数组，不能传单个对象",
   ],
   examples: [
     {
@@ -92,6 +100,10 @@ const grantItemSchema: ActionSchema = {
     {
       scenario: "使用预设模板发放武器",
       json: `{ "type": "grantItem", "target": "player", "templateId": "iron_sword", "name": "铁剑", "description": "一把普通的铁制长剑", "category": "weapon", "reason": "商人赠送的武器" }`,
+    },
+    {
+      scenario: "发放带属性加成的魔钢胸甲",
+      json: `{ "type": "grantItem", "target": "player", "name": "魔钢胸甲", "description": "刻有防护符文的重甲，穿戴后显著提升生存能力", "category": "armor", "equipSlot": "chest", "effects": [{ "type": "modifier", "description": "穿戴时提升体质并减免所受伤害", "modifiers": [{ "scope": "stat", "field": "con", "value": 2, "reason": "魔钢支撑结构强化体魄" }, { "scope": "damage_taken", "multiplier": 0.9, "reason": "护甲符文吸收部分冲击" }] }], "reason": "完成堡垒守卫任务奖励" }`,
     },
   ],
 };
@@ -137,6 +149,133 @@ const removeItemSchema: ActionSchema = {
     {
       scenario: "角色使用消耗品后移除",
       json: `{ "type": "removeItem", "target": "player", "instanceId": "item_abc123", "quantity": 1, "reason": "饮用治疗药水" }`,
+    },
+  ],
+};
+
+const equipItemSchema: ActionSchema = {
+  type: "equipItem",
+  category: "inventory",
+  displayName: "装备物品",
+  description: "将背包中的物品装备到指定槽位",
+  params: [
+    {
+      name: "target",
+      type: "string",
+      required: true,
+      description: "角色 ID",
+    },
+    {
+      name: "instanceId",
+      type: "string",
+      required: true,
+      description: "物品实例 ID",
+    },
+    {
+      name: "slot",
+      type: "string",
+      required: false,
+      description: "目标装备槽位 ID，不指定时使用物品默认槽位",
+    },
+    {
+      name: "reason",
+      type: "string",
+      required: false,
+      description: "装备原因",
+    },
+  ],
+  constraints: [
+    "物品必须在角色背包中",
+    "物品类别必须与槽位允许的类别匹配",
+    "如果目标槽位已有装备，旧装备会被自动卸下",
+  ],
+  examples: [
+    {
+      scenario: "装备铁剑到主手",
+      json: `{ "type": "equipItem", "target": "player", "instanceId": "item_001", "slot": "main_hand" }`,
+    },
+  ],
+};
+
+const unequipItemSchema: ActionSchema = {
+  type: "unequipItem",
+  category: "inventory",
+  displayName: "卸下装备",
+  description: "卸下角色身上已装备的物品",
+  params: [
+    {
+      name: "target",
+      type: "string",
+      required: true,
+      description: "角色 ID",
+    },
+    {
+      name: "instanceId",
+      type: "string",
+      required: true,
+      description: "物品实例 ID",
+    },
+    {
+      name: "reason",
+      type: "string",
+      required: false,
+      description: "卸下原因",
+    },
+  ],
+  constraints: ["物品必须已被角色装备"],
+  examples: [
+    {
+      scenario: "卸下已装备的铁剑",
+      json: `{ "type": "unequipItem", "target": "player", "instanceId": "item_001" }`,
+    },
+  ],
+};
+
+const useItemSchema: ActionSchema = {
+  type: "useItem",
+  category: "inventory",
+  displayName: "使用物品",
+  description: "使用消耗品（扣减数量，数量归零时自动移除）",
+  params: [
+    {
+      name: "target",
+      type: "string",
+      required: true,
+      description: "使用者角色 ID",
+    },
+    {
+      name: "instanceId",
+      type: "string",
+      required: true,
+      description: "物品实例 ID",
+    },
+    {
+      name: "quantity",
+      type: "number",
+      required: false,
+      description: "使用数量，默认 1",
+    },
+    {
+      name: "useTarget",
+      type: "string",
+      required: false,
+      description: "使用目标角色 ID（如对谁使用治疗药水）",
+    },
+    {
+      name: "reason",
+      type: "string",
+      required: false,
+      description: "使用原因",
+    },
+  ],
+  constraints: [
+    "物品必须是消耗品（category 为 consumable）",
+    "使用数量不能超过当前持有数量",
+  ],
+  examples: [
+    {
+      scenario: "使用一瓶治疗药水",
+      json: `{ "type": "useItem", "target": "player", "instanceId": "potion_001", "reason": "治疗伤势" }`,
     },
   ],
 };
@@ -279,6 +418,9 @@ const removeSkillSchema: ActionSchema = {
 export const inventoryActionSchemas: ActionSchema[] = [
   grantItemSchema,
   removeItemSchema,
+  equipItemSchema,
+  unequipItemSchema,
+  useItemSchema,
   grantSkillSchema,
   removeSkillSchema,
 ];

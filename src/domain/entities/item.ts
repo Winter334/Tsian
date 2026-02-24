@@ -5,7 +5,7 @@
  * 支持预设模板定义和 AI 动态生成。
  */
 
-import type { PassiveModifier } from "../types/rule-script";
+import type { PassiveModifier, RuleAction } from "../types/rule-script";
 
 // ─── 物品类别 ──────────────────────────────────────
 
@@ -28,6 +28,29 @@ export interface ItemEffect {
   type: "narrative" | "modifier";
   description: string;
   modifiers?: PassiveModifier[];
+  /**
+   * 消耗品使用时执行的动作列表（复用 RuleAction 类型）
+   *
+   * 路径自动判断：
+   * - 全部是 heal/cost/set/addTag/removeTag → 路径 A（静默生效）
+   * - 包含 check/damage/roll → 路径 B（引擎执行 → 操作日志）
+   */
+  onUse?: RuleAction[];
+}
+
+/**
+ * 最小结构守卫：校验解析结果是否为有效的 ItemEffect 数组
+ * 仅检查 Array + 每个元素的 type 和 description 字段存在
+ */
+export function isItemEffectArray(value: unknown): value is ItemEffect[] {
+  if (!Array.isArray(value)) return false;
+  return value.every(
+    (item) =>
+      typeof item === "object" &&
+      item !== null &&
+      typeof (item as Record<string, unknown>).type === "string" &&
+      typeof (item as Record<string, unknown>).description === "string",
+  );
 }
 
 // ─── 物品模板（预设作者定义）──────────────────────
@@ -55,6 +78,7 @@ export interface ItemInstance {
   quantity: number;
   equipped: boolean;
   equipSlot?: EquipSlot;
+  effects?: ItemEffect[];
   source: "predefined" | "ai-generated";
   acquiredAt: number;
 }
@@ -68,6 +92,7 @@ export interface CreateItemInstanceParams {
   category: ItemCategory;
   quantity?: number;
   equipSlot?: EquipSlot;
+  effects?: ItemEffect[];
   source: "predefined" | "ai-generated";
 }
 
@@ -88,6 +113,7 @@ export function createItemInstance(
     quantity: params.quantity ?? 1,
     equipped: false,
     equipSlot: params.equipSlot,
+    effects: params.effects,
     source: params.source,
     acquiredAt: Date.now(),
   };

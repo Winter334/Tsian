@@ -25,6 +25,13 @@ export interface InventoryState {
   _setCharacterSkills(characterId: string, skills: SkillInstance[]): void;
   _addItem(characterId: string, item: ItemInstance): void;
   _removeItem(characterId: string, instanceId: string, quantity?: number): void;
+  _equipItem(characterId: string, instanceId: string, slot: string): void;
+  _unequipItem(characterId: string, instanceId: string): void;
+  _updateItemQuantity(
+    characterId: string,
+    instanceId: string,
+    newQuantity: number,
+  ): void;
   _addSkill(characterId: string, skill: SkillInstance): void;
   _removeSkill(characterId: string, instanceId: string): void;
   _clear(): void;
@@ -73,6 +80,53 @@ export const useInventoryStore = create<InventoryState>()(
           // 完全移除
           charItems.splice(index, 1);
         }
+      });
+    },
+
+    _equipItem(characterId: string, instanceId: string, slot: string) {
+      set((state) => {
+        const charItems = state.items[characterId];
+        if (!charItems) return;
+
+        const item = charItems.find((i) => i.instanceId === instanceId);
+        if (!item) return;
+
+        item.equipped = true;
+        item.equipSlot = slot;
+      });
+    },
+
+    _unequipItem(characterId: string, instanceId: string) {
+      set((state) => {
+        const charItems = state.items[characterId];
+        if (!charItems) return;
+
+        const item = charItems.find((i) => i.instanceId === instanceId);
+        if (!item) return;
+
+        item.equipped = false;
+        item.equipSlot = undefined;
+      });
+    },
+
+    _updateItemQuantity(
+      characterId: string,
+      instanceId: string,
+      newQuantity: number,
+    ) {
+      set((state) => {
+        const charItems = state.items[characterId];
+        if (!charItems) return;
+
+        const index = charItems.findIndex((i) => i.instanceId === instanceId);
+        if (index === -1) return;
+
+        if (newQuantity <= 0) {
+          charItems.splice(index, 1);
+          return;
+        }
+
+        charItems[index].quantity = newQuantity;
       });
     },
 

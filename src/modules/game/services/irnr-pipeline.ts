@@ -12,6 +12,7 @@
  */
 
 import { commandBus } from "@/core";
+import { subdocManager, yjsManager } from "@/core/yjs";
 import { MemoryCommands } from "@/domain/commands";
 import type {
   CreatedNpcData,
@@ -42,12 +43,15 @@ import {
 } from "@/lib/rules/schema";
 import type { WorldConfig } from "@/lib/world";
 import { getRuntimeWorldConfig } from "@/lib/world/resolve-config";
+import { createGameStateRepository } from "@/modules/game/repository";
 import { useInventoryStore } from "@/modules/inventory/store";
 import {
   createDelayedCommitManager,
   type DelayedCommitManager,
 } from "./delayed-commit";
 import {
+  applyEquipmentEffectsToEntity,
+  applyTalentsToEntity,
   buildDefaultEntityFromWorldConfig,
   MapEntityAccessor,
   type EntityData,
@@ -109,6 +113,7 @@ async function executePipeline(input: {
   worldConfig?: WorldConfig;
   actorId?: string;
   targetId?: string;
+  roomId?: string;
   onNarrativeChunk?: (chunk: string) => void;
   onNarrativeComplete?: (text: string) => void;
   conversationId?: string;
@@ -134,6 +139,30 @@ async function executePipeline(input: {
     entityAccessor.setEntity(
       buildDefaultEntityFromWorldConfig(actorId, worldConfig),
     );
+  }
+
+  // ── Phase 0+: 注入天赋和装备 shadow tags ───────────────────
+  const talentIdsByEntityId = buildTalentIdsByEntityId({
+    actorId,
+    roomId: input.roomId,
+    baseVariableContext: input.baseVariableContext,
+  });
+
+  const inventoryState = useInventoryStore.getState();
+  for (const entityId of entityAccessor.getAllEntityIds()) {
+    const entity = entityAccessor.getEntityData(entityId);
+    if (!entity || entity.type !== "character") continue;
+
+    const talentIds = talentIdsByEntityId.get(entityId) ?? [];
+    if (talentIds.length > 0) {
+      applyTalentsToEntity(entity, talentIds, worldConfig);
+    }
+
+    const charItems = inventoryState.items[entityId] ?? [];
+    const equippedItems = charItems.filter((item) => item.equipped);
+    if (equippedItems.length > 0) {
+      applyEquipmentEffectsToEntity(entity, equippedItems);
+    }
   }
 
   // ── Phase 0b: 构建 EntityAliasMap ────────────────────────
@@ -578,7 +607,11 @@ async function executePipeline(input: {
     const fields = entityAccessor.getAllFields(entityId);
     const tags = entityAccessor.getTagsWithMetadata(entityId);
     if (fields) {
-      finalEntityStates.push({ id: entityId, fields, tags });
+      finalEntityStates.push({
+        id: entityId,
+        fields,
+        tags: filterTagsForPersistence(tags),
+      });
     }
   }
 
@@ -673,6 +706,110 @@ function applyTagChangesToAccessor(
       tags: tagsMap,
     });
   }
+}
+
+/**
+ * 过滤运行时派生的 shadow tags，避免持久化到 Yjs。
+ *
+ * 当前约定：
+ * - category = "talent" / "equipment" 的标签属于运行时注入
+ * - 历史兼容：ID 以 "equip:" 开头的标签也视为装备 shadow tag
+ */
+function filterTagsForPersistence(
+  tags: Map<string, TagMetadata>,
+): Map<string, TagMetadata> {
+  const filtered = new Map<string, TagMetadata>();
+
+  for (const [tagId, metadata] of tags) {
+    if (tagId.startsWith("equip:")) continue;
+    if (metadata.category === "talent" || metadata.category === "equipment") {
+      continue;
+    }
+    filtered.set(tagId, metadata);
+  }
+
+  return filtered;
+}
+
+/**
+ * 构建角色 talentIds 映射（entityId -> talentIds）
+ *
+ * 优先从 Yjs 角色存储读取（单人：currentSave，联机：MainDoc），
+ * 并使用 VariableContext 作为兜底来源。
+ */
+function buildTalentIdsByEntityId(input: {
+  actorId: string;
+  roomId?: string;
+  baseVariableContext: VariableContext;
+}): Map<string, string[]> {
+  const result = new Map<string, string[]>();
+
+  const pushCharacters = (
+    characters: Array<{ id: string; talentIds?: string[] }>,
+  ) => {
+    for (const character of characters) {
+      if (typeof character.id !== "string" || character.id.length === 0)
+        continue;
+
+      const talentIds =
+        character.talentIds?.filter(
+          (id): id is string => typeof id === "string",
+        ) ?? [];
+
+      if (talentIds.length > 0) {
+        result.set(character.id, talentIds);
+      }
+    }
+  };
+
+  if (input.roomId) {
+    const mainDoc = subdocManager.getMainDoc(input.roomId);
+    if (mainDoc) {
+      const charactersMap = mainDoc.getMap("characters") as
+        | import("yjs").Map<import("yjs").Map<unknown>>
+        | undefined;
+
+      if (charactersMap) {
+        const repo = createGameStateRepository(charactersMap, mainDoc);
+        pushCharacters(repo.getCharacters());
+      }
+    }
+  } else {
+    try {
+      const currentSave = yjsManager.getCurrentSave();
+      const rootDoc = yjsManager.getDoc();
+      const charactersMap = currentSave?.get("characters") as
+        | import("yjs").Map<import("yjs").Map<unknown>>
+        | undefined;
+
+      if (charactersMap) {
+        const repo = createGameStateRepository(charactersMap, rootDoc);
+        pushCharacters(repo.getCharacters());
+      }
+    } catch {
+      // 在初始化前调用时忽略读取失败
+    }
+  }
+
+  const actorTalentIds =
+    input.baseVariableContext.user.character?.talentIds?.filter(
+      (id): id is string => typeof id === "string",
+    ) ?? [];
+
+  if (actorTalentIds.length > 0 && !result.has(input.actorId)) {
+    result.set(input.actorId, actorTalentIds);
+  }
+
+  for (const npc of input.baseVariableContext.activeNpcs ?? []) {
+    const npcTalentIds =
+      npc.talentIds?.filter((id): id is string => typeof id === "string") ?? [];
+
+    if (npcTalentIds.length > 0 && !result.has(npc.id)) {
+      result.set(npc.id, npcTalentIds);
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -853,6 +990,7 @@ class IrnrPipelineServiceImpl implements IrnrPipelineServiceContract {
       worldConfig: input.worldConfig,
       actorId: input.actorId,
       targetId: input.targetId,
+      roomId: input.roomId,
       onNarrativeChunk: input.onNarrativeChunk,
       onNarrativeComplete: input.onNarrativeComplete,
       conversationId: input.conversationId,

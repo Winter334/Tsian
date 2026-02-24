@@ -531,6 +531,10 @@ function renderStructuralChangeLines(
         keyword = "失去物品";
         line = `${targetName} 失去物品: ${name}${quantity > 1 ? ` x${quantity}` : ""}`;
         break;
+      case "item_used":
+        keyword = "使用物品";
+        line = `${targetName} 使用物品: ${name}${quantity > 1 ? ` x${quantity}` : ""}`;
+        break;
       case "skill_learned":
         keyword = "习得技能";
         line = `${targetName} 习得技能: ${name}`;
