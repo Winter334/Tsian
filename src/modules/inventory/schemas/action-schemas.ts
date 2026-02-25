@@ -75,7 +75,7 @@ const grantItemSchema: ActionSchema = {
       type: "object",
       required: false,
       description:
-        '物品效果定义（ItemEffect[]，传数组）。每项形如 { type: "narrative"|"modifier", description, modifiers? }；当 type="modifier" 时，modifiers 需提供被动修正（scope/filter/field/value/multiplier/reason）',
+        '物品效果定义（ItemEffect[]，传数组）。每项形如 { type: "narrative"|"modifier", description, modifiers? }；当 type="modifier" 时，modifiers 为 PassiveModifier[]：scope="stat" 用于属性值修正，必须提供 field 和 value，且 field 必须使用「可用属性字段」中列出的 key；scope="damage_dealt" 用于造成伤害修正，使用 value（加算）与可选 filter，不使用 field；scope="damage_taken" 用于承受伤害修正，使用 value 和/或 multiplier（如 0.5=伤害减半）与可选 filter，不使用 field；scope="check" 用于检定修正，使用 value，filter 可限定技能类型。field 仅在 scope="stat" 时必填，值必须是「可用属性字段」中的 key。',
     },
     {
       name: "reason",
@@ -91,6 +91,7 @@ const grantItemSchema: ActionSchema = {
     "category 必须是枚举值之一，不能自定义",
     "equipSlot（若提供）必须来自 WorldConfig.inventoryRules.equipSlotDefinitions 且与 category 约束匹配",
     "effects（若提供）必须是 ItemEffect 数组，不能传单个对象",
+    "当 effects.type=modifier 时，modifiers 中 field 仅在 scope=stat 时必填，且值必须是「可用属性字段」中的 key；其它 scope 不应提供 field",
   ],
   examples: [
     {
@@ -102,8 +103,8 @@ const grantItemSchema: ActionSchema = {
       json: `{ "type": "grantItem", "target": "player", "templateId": "iron_sword", "name": "铁剑", "description": "一把普通的铁制长剑", "category": "weapon", "reason": "商人赠送的武器" }`,
     },
     {
-      scenario: "发放带属性加成的魔钢胸甲",
-      json: `{ "type": "grantItem", "target": "player", "name": "魔钢胸甲", "description": "刻有防护符文的重甲，穿戴后显著提升生存能力", "category": "armor", "equipSlot": "chest", "effects": [{ "type": "modifier", "description": "穿戴时提升体质并减免所受伤害", "modifiers": [{ "scope": "stat", "field": "con", "value": 2, "reason": "魔钢支撑结构强化体魄" }, { "scope": "damage_taken", "multiplier": 0.9, "reason": "护甲符文吸收部分冲击" }] }], "reason": "完成堡垒守卫任务奖励" }`,
+      scenario: "发放带属性修正的锋利长剑",
+      json: `{ "type": "grantItem", "target": "player", "name": "锋利的长剑", "description": "一把锋利的制式长剑", "category": "weapon", "equipSlot": "main_hand", "effects": [{ "type": "modifier", "description": "增强力量属性", "modifiers": [{ "scope": "stat", "field": "str", "value": 2, "reason": "长剑力量加成" }] }] }`,
     },
   ],
 };

@@ -94,12 +94,12 @@ export const defaultParserPreset: Preset = {
   "version": 2,
   "actions": [
     {
-      "op": "check",
+      "type": "check",
       "target": "player",
       "dcSource": "formula",
       "dcFormula": "target.ac",
       "dcTarget": "goblin",
-      "onSuccess": [{ "op": "damage", "target": "goblin" }],
+      "onSuccess": [{ "type": "damage", "target": "goblin" }],
       "onFailure": []
     }
   ]
@@ -108,14 +108,14 @@ export const defaultParserPreset: Preset = {
 {
   "version": 2,
   "actions": [
-    { "op": "cost", "target": "orc" },
+    { "type": "cost", "target": "orc" },
     {
-      "op": "check",
+      "type": "check",
       "target": "orc",
       "dcSource": "formula",
       "dcFormula": "target.ac",
       "dcTarget": "player",
-      "onSuccess": [{ "op": "damage", "target": "player" }],
+      "onSuccess": [{ "type": "damage", "target": "player" }],
       "onFailure": []
     }
   ]

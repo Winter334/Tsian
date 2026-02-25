@@ -61,6 +61,21 @@ export const useInventoryStore = create<InventoryState>()(
         if (!state.items[characterId]) {
           state.items[characterId] = [];
         }
+
+        const existingIndex = state.items[characterId].findIndex(
+          (current) => current.instanceId === item.instanceId,
+        );
+
+        if (existingIndex !== -1) {
+          if (import.meta.env.DEV) {
+            console.warn(
+              `[InventoryStore] _addItem: 检测到重复 instanceId "${item.instanceId}"，执行替换而非追加`,
+            );
+          }
+          state.items[characterId][existingIndex] = item;
+          return;
+        }
+
         state.items[characterId].push(item);
       });
     },
@@ -135,6 +150,21 @@ export const useInventoryStore = create<InventoryState>()(
         if (!state.skills[characterId]) {
           state.skills[characterId] = [];
         }
+
+        const existingIndex = state.skills[characterId].findIndex(
+          (current) => current.instanceId === skill.instanceId,
+        );
+
+        if (existingIndex !== -1) {
+          if (import.meta.env.DEV) {
+            console.warn(
+              `[InventoryStore] _addSkill: 检测到重复 instanceId "${skill.instanceId}"，执行替换而非追加`,
+            );
+          }
+          state.skills[characterId][existingIndex] = skill;
+          return;
+        }
+
         state.skills[characterId].push(skill);
       });
     },

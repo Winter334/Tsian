@@ -128,11 +128,11 @@ const handleGrantItem: CommandHandler<
 
   // 5. 写入 Yjs
   repo.addItem(characterId, item);
-
-  // 6. 更新 Store
+  // 直接同步更新 Store，保证 UI 即时响应
+  // Store 层 _addItem 内部有 instanceId 去重保护，不会与 SyncBridge 产生重复
   useInventoryStore.getState()._addItem(characterId, item);
 
-  // 7. 发射事件
+  // 6. 发射事件
   eventBus.emit(
     eventBus.createEvent<ItemGrantedPayload>(
       InventoryEvents.ITEM_GRANTED,
@@ -172,12 +172,18 @@ const handleRemoveItem: CommandHandler<RemoveItemPayload, void> = async (
   }
 
   const itemName = existing.name;
+  const finalQuantity =
+    quantity !== undefined && quantity < existing.quantity
+      ? existing.quantity - quantity
+      : 0;
 
   // 从 Yjs 移除
   repo.removeItem(characterId, instanceId, quantity);
 
-  // 更新 Store
-  useInventoryStore.getState()._removeItem(characterId, instanceId, quantity);
+  // 使用绝对值更新 Store，避免与 SyncBridge 双写时发生二次扣减
+  useInventoryStore
+    .getState()
+    ._updateItemQuantity(characterId, instanceId, finalQuantity);
 
   // 发射事件
   eventBus.emit(
@@ -493,8 +499,8 @@ const handleGrantSkill: CommandHandler<
 
   // 写入 Yjs
   repo.addSkill(characterId, skill);
-
-  // 更新 Store
+  // 直接同步更新 Store，保证 UI 即时响应
+  // Store 层 _addSkill 内部有 instanceId 去重保护，不会与 SyncBridge 产生重复
   useInventoryStore.getState()._addSkill(characterId, skill);
 
   // 发射事件

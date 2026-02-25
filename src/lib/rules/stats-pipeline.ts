@@ -47,6 +47,8 @@ function pickNumericFields(
   return numericFields;
 }
 
+const warnedUnknownStatFields = new Set<string>();
+
 export function computeFullStats<T extends StatsComputeInput>(
   input: T,
 ): Record<string, number> {
@@ -64,11 +66,29 @@ export function computeFullStats<T extends StatsComputeInput>(
     }
   }
 
+  const knownStatFields = new Set<string>([
+    ...input.primaryAttributes.map((attr) => attr.key),
+    ...input.derivedStats.map((stat) => stat.key),
+    ...input.derivedStats
+      .map((stat) => stat.maxField)
+      .filter((field): field is string => typeof field === "string"),
+  ]);
+
   // 3) 统一被动修正（passiveModifiers）
   // 仅处理 scope=stat 的加算值；支持 number 与 string(ValueExpression)。
   if (input.passiveModifiers) {
     for (const modifier of input.passiveModifiers) {
       if (modifier.scope !== "stat" || !modifier.field) continue;
+
+      if (
+        !knownStatFields.has(modifier.field) &&
+        !warnedUnknownStatFields.has(modifier.field)
+      ) {
+        warnedUnknownStatFields.add(modifier.field);
+        console.warn(
+          `[Stats Pipeline] modifier.field "${modifier.field}" 不是已知属性，效果可能无法生效`,
+        );
+      }
 
       let delta: number;
       if (isFiniteNumber(modifier.value)) {

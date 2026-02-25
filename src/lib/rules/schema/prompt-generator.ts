@@ -161,6 +161,10 @@ function renderWorldInfo(
     lines.push("衍生属性: " + derivedParts.join(", "));
   }
 
+  lines.push(
+    '⚠️ 重要：当使用 scope="stat" 的 modifier 时，field 只能使用上方主属性 + 衍生属性中列出的 key；未在上方列出的 key 不可用。',
+  );
+
   // 预定义状态
   if (worldConfig.conditions && worldConfig.conditions.length > 0) {
     lines.push("");
