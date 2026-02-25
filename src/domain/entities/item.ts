@@ -5,7 +5,11 @@
  * 支持预设模板定义和 AI 动态生成。
  */
 
-import type { PassiveModifier, RuleAction } from "../types/rule-script";
+import type {
+  ConditionTrigger,
+  PassiveModifier,
+  RuleAction,
+} from "../types/rule-script";
 
 // ─── 物品类别 ──────────────────────────────────────
 
@@ -36,6 +40,12 @@ export interface ItemEffect {
    * - 包含 check/damage/roll → 路径 B（引擎执行 → 操作日志）
    */
   onUse?: RuleAction[];
+  /**
+   * 装备触发效果（如 on_damage/turn_start）
+   * 装备时作为 shadow Tag 的 trigger 注入实体，
+   * 卸下时随 shadow Tag 自动消失
+   */
+  trigger?: ConditionTrigger;
 }
 
 /**

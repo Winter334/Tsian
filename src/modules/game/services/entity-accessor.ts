@@ -184,7 +184,9 @@ export function applyTalentsToEntity(
  * 与 applyTalentsToEntity 类似，shadow Tag 是运行时派生的，
  * 不单独持久化。每次构建实体时从 equippedItems 重新计算。
  *
- * Tag ID 格式：`equip:{instanceId}`
+ * Tag ID 格式：`equip:{instanceId}:{suffix}`
+ * - 被动修正：`equip:{instanceId}:passive`
+ * - 触发效果：`equip:{instanceId}:{timing}`（同 timing 多个时自动追加序号）
  * Tag category：`"equipment"`
  */
 export function applyEquipmentEffectsToEntity(
@@ -194,38 +196,109 @@ export function applyEquipmentEffectsToEntity(
   for (const item of equippedItems) {
     if (!item.effects?.length) continue;
 
-    const allModifiers: PassiveModifier[] = [];
-    const descriptions: string[] = [];
+    const passiveModifiers: PassiveModifier[] = [];
+    const passiveDescriptions: string[] = [];
+    const triggerEntries: Array<{
+      trigger: NonNullable<TagMetadata["trigger"]>;
+      description: string;
+    }> = [];
+    const narrativeDescriptions: string[] = [];
 
     for (const effect of item.effects) {
-      if (effect.modifiers) {
-        allModifiers.push(...effect.modifiers);
+      const effectModifiers = effect.modifiers ?? [];
+      const effectDescription = effect.description ?? "";
+
+      if (effect.trigger) {
+        const mergedModifiers = [
+          ...(effect.trigger.modifiers ?? []),
+          ...effectModifiers,
+        ];
+
+        triggerEntries.push({
+          trigger:
+            mergedModifiers.length > 0
+              ? { ...effect.trigger, modifiers: mergedModifiers }
+              : effect.trigger,
+          description: effectDescription,
+        });
+        continue;
       }
-      if (effect.description) {
-        descriptions.push(effect.description);
+
+      if (effectModifiers.length > 0) {
+        passiveModifiers.push(...effectModifiers);
+        if (effectDescription) {
+          passiveDescriptions.push(effectDescription);
+        }
+        continue;
+      }
+
+      if (effectDescription) {
+        narrativeDescriptions.push(effectDescription);
       }
     }
 
     // 只有有效果信息的装备才创建 shadow Tag
-    if (allModifiers.length === 0 && descriptions.length === 0) continue;
-
-    const tagId = `equip:${item.instanceId}`;
-    const metadata: TagMetadata = {
-      id: tagId,
-      displayName: item.name,
-      effectDescription: descriptions.join("; "),
-      source: "predefined",
-      category: "equipment",
-    };
-
-    // 有结构化修正时包装为 passive trigger
-    if (allModifiers.length > 0) {
-      metadata.trigger = {
-        timing: "passive",
-        modifiers: allModifiers,
-      };
+    if (
+      passiveModifiers.length === 0 &&
+      triggerEntries.length === 0 &&
+      narrativeDescriptions.length === 0
+    ) {
+      continue;
     }
 
-    entity.tags.set(tagId, metadata);
+    const usedTagIds = new Set<string>();
+    const createTagId = (suffix: string): string => {
+      let tagId = `equip:${item.instanceId}:${suffix}`;
+      let serial = 1;
+
+      while (usedTagIds.has(tagId)) {
+        tagId = `equip:${item.instanceId}:${suffix}:${serial}`;
+        serial += 1;
+      }
+
+      usedTagIds.add(tagId);
+      return tagId;
+    };
+
+    // 1) 纯 modifiers 效果：保持旧行为，包装为 passive trigger
+    if (passiveModifiers.length > 0) {
+      const passiveTagId = createTagId("passive");
+      entity.tags.set(passiveTagId, {
+        id: passiveTagId,
+        displayName: item.name,
+        effectDescription: passiveDescriptions.join("; ") || "装备提供被动效果",
+        trigger: {
+          timing: "passive",
+          modifiers: passiveModifiers,
+        },
+        source: "predefined",
+        category: "equipment",
+      });
+    }
+
+    // 2) trigger 效果：按每个 trigger 生成独立 shadow Tag
+    for (const entry of triggerEntries) {
+      const triggerTagId = createTagId(entry.trigger.timing);
+      entity.tags.set(triggerTagId, {
+        id: triggerTagId,
+        displayName: item.name,
+        effectDescription: entry.description || item.description,
+        trigger: entry.trigger,
+        source: "predefined",
+        category: "equipment",
+      });
+    }
+
+    // 3) 仅叙事描述效果：保留无 trigger 的信息标签（兼容旧行为）
+    if (narrativeDescriptions.length > 0) {
+      const infoTagId = createTagId("info");
+      entity.tags.set(infoTagId, {
+        id: infoTagId,
+        displayName: item.name,
+        effectDescription: narrativeDescriptions.join("; "),
+        source: "predefined",
+        category: "equipment",
+      });
+    }
   }
 }
