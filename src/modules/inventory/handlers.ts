@@ -37,6 +37,7 @@ import type {
   SkillRemovedPayload,
 } from "@/domain/events/inventory";
 import { InventoryEvents } from "@/domain/events/inventory";
+import type { ResultFrame } from "@/domain/types/result-frame";
 import type { RuleAction } from "@/domain/types/rule-script";
 import { getRuntimeWorldConfig } from "@/lib/world";
 import {
@@ -408,12 +409,13 @@ const handleUseItem: CommandHandler<UseItemPayload, void> = async (
     .getState()
     ._updateItemQuantity(characterId, instanceId, newQty);
 
+  let resultFrame: ResultFrame | undefined;
+
   if (allOnUseActions.length > 0) {
     if (requiresEngine(allOnUseActions)) {
       // 路径 B：引擎执行 → ResultFrame
       // 注意：executeItemViaEngine 会将效果应用到 Yjs，并返回 ResultFrame
-      // ResultFrame 将来会存入操作日志（Phase 4c），目前只记录日志
-      const resultFrame = executeItemViaEngine(
+      resultFrame = executeItemViaEngine(
         allOnUseActions,
         characterId,
         targetId,
@@ -424,8 +426,6 @@ const handleUseItem: CommandHandler<UseItemPayload, void> = async (
           "[handleUseItem] 路径B执行完成，ResultFrame:",
           resultFrame.mechanicSummary,
         );
-        // TODO Phase 4c: 存入操作日志
-        // useOperationLogStore.getState().addEntry({ source: `使用 ${item.name}`, resultFrame, timestamp: Date.now() });
       }
     } else {
       // 路径 A：静默生效
@@ -439,7 +439,7 @@ const handleUseItem: CommandHandler<UseItemPayload, void> = async (
   eventBus.emit(
     eventBus.createEvent<ItemUsedPayload>(
       InventoryEvents.ITEM_USED,
-      { characterId, item, quantity: useQty, targetId, reason },
+      { characterId, item, quantity: useQty, targetId, reason, resultFrame },
       "lyra.inventory",
     ),
   );

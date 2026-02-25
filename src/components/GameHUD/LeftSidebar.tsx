@@ -9,6 +9,8 @@ import type { WorldConfig } from "@/lib/world/types";
 import { useCurrentSaveId } from "@/modules";
 import { color, colorAlpha, glow } from "@/styles/tokens";
 
+import { OperationLogPanel } from "./OperationLogPanel";
+
 interface LeftSidebarProps {
   onOpenCharacterPanel: () => void;
 }
@@ -373,6 +375,8 @@ export function LeftSidebar({ onOpenCharacterPanel }: LeftSidebarProps) {
         personality={character.personality}
         description={character.description}
       />
+
+      <OperationLogPanel />
     </aside>
   );
 }

@@ -38,6 +38,7 @@ import { yMapToCharacter } from "@/modules/game/repository";
 import { color, colorAlpha, glow } from "@/styles/tokens";
 import { CharacterPortraitPanel } from "./CharacterPortraitPanel";
 import { CharacterRadarChart } from "./CharacterRadarChart";
+import { EquipmentSection } from "./EquipmentSection";
 import { InventorySection } from "./InventorySection";
 import { NpcList } from "./NpcList";
 import { SkillSection } from "./SkillSection";
@@ -49,6 +50,7 @@ type CharacterPanelTabKey =
   | "talents"
   | "skills"
   | "inventory"
+  | "equipment"
   | "npcs";
 
 interface TabItem {
@@ -66,6 +68,7 @@ const TAB_ITEMS: TabItem[] = [
     label: "背包",
     icon: Package,
   },
+  { key: "equipment", label: "装备", icon: Shield },
   { key: "npcs", label: "NPC", icon: Users },
 ];
 
@@ -514,7 +517,6 @@ function OverviewTabContent({
           />
         </motion.div>
       )}
-
     </div>
   );
 }
@@ -659,6 +661,14 @@ function renderActiveTabContent(
     case "inventory":
       return (
         <InventorySection
+          characterId={character.id}
+          worldConfig={worldConfig}
+          animationIndex={0}
+        />
+      );
+    case "equipment":
+      return (
+        <EquipmentSection
           characterId={character.id}
           worldConfig={worldConfig}
           animationIndex={0}

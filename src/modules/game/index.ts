@@ -3,7 +3,12 @@
  */
 
 import { registry, services } from "@/core";
+import type { DomainEvent } from "@/core/event-bus";
 import type { ModuleManifest } from "@/core/registry";
+import {
+  InventoryEvents,
+  type ItemUsedPayload,
+} from "@/domain/events/inventory";
 import { actionSchemaRegistry } from "@/lib/rules/schema";
 import { createGameCommandHandlers } from "./handlers";
 import {
@@ -20,14 +25,33 @@ import {
   GAME_STATE_SERVICE_TOKEN,
   IRNR_PIPELINE_SERVICE_TOKEN,
 } from "./services/tokens";
+import { useOperationLogStore } from "./stores/operation-log-store";
 
 // 导出服务
 export * from "./services";
+
+// 导出 Store（只读使用）
+export { useOperationLogStore } from "./stores/operation-log-store";
 
 const manifest: ModuleManifest = {
   id: "lyra.game",
   version: "0.1.0",
   commands: createGameCommandHandlers(),
+  eventHandlers: {
+    [InventoryEvents.ITEM_USED]: (event) => {
+      const payload = (event as DomainEvent<ItemUsedPayload>).payload;
+      const { item, resultFrame } = payload;
+      if (!resultFrame) {
+        return;
+      }
+
+      useOperationLogStore.getState().addEntry({
+        source: `使用 ${item.name}`,
+        resultFrame,
+        timestamp: Date.now(),
+      });
+    },
+  },
 };
 
 /**

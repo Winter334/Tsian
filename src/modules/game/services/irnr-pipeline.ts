@@ -45,6 +45,7 @@ import {
 import type { WorldConfig } from "@/lib/world";
 import { getRuntimeWorldConfig } from "@/lib/world/resolve-config";
 import { createGameStateRepository } from "@/modules/game/repository";
+import { useOperationLogStore } from "../stores/operation-log-store";
 import {
   createDelayedCommitManager,
   type DelayedCommitManager,
@@ -254,6 +255,9 @@ async function executePipeline(input: {
 
   const seed = Date.now();
 
+  // 消费操作日志（Phase 4c）
+  const operationLogFrames = useOperationLogStore.getState().consumeAll();
+
   // ── Phase 2a: TriggerPipeline.executeTurnStart（回合前触发） ──
 
   let preResultFrame: ResultFrame | undefined;
@@ -458,8 +462,9 @@ async function executePipeline(input: {
       );
     }
 
-    // B3: 合并 pre + main ResultFrame
-    resultFrame = mergeResultFrames(
+    // B3: 合并 operation-log + pre + main ResultFrame
+    resultFrame = mergeAllResultFrames(
+      operationLogFrames,
       preResultFrame,
       executionResult.resultFrame,
     );
@@ -919,25 +924,55 @@ function buildInventoryData(
 }
 
 /**
- * 合并 pre-ResultFrame 和 main-ResultFrame
+ * 合并 operation-log / pre / main 三路 ResultFrame。
  *
- * 如果 pre 为空，直接返回 main。
- * 否则将 pre 的结果合并到 main 的前面。
+ * mechanicSummary 规则：
+ * - 仅存在 main 时，保持原样（不添加 [行动] 前缀）
+ * - 存在操作日志与/或 pre 时，按 [操作日志] → [回合开始] → [行动] 顺序拼接
  */
-function mergeResultFrames(
+function mergeAllResultFrames(
+  operationLogFrames: readonly ResultFrame[],
   pre: ResultFrame | undefined,
   main: ResultFrame,
 ): ResultFrame {
-  if (!pre) return main;
+  const logValueChanges = operationLogFrames.flatMap(
+    (frame) => frame.valueChanges,
+  );
+  const logDiceRolls = operationLogFrames.flatMap((frame) => frame.diceRolls);
+  const logChecks = operationLogFrames.flatMap((frame) => frame.checks);
+
+  const logMechanicSummary = operationLogFrames
+    .map((frame) => frame.mechanicSummary.trim())
+    .filter((summary) => summary.length > 0)
+    .join(" ");
+  const preMechanicSummary = pre?.mechanicSummary.trim();
+
+  const parts: string[] = [];
+  if (logMechanicSummary) {
+    parts.push(`[操作日志] ${logMechanicSummary}`);
+  }
+  if (preMechanicSummary) {
+    parts.push(`[回合开始] ${preMechanicSummary}`);
+  }
+
+  let mechanicSummary = main.mechanicSummary;
+  if (parts.length > 0) {
+    if (main.mechanicSummary) {
+      parts.push(`[行动] ${main.mechanicSummary}`);
+    }
+    mechanicSummary = parts.join(" ");
+  }
 
   return {
     ...main,
-    valueChanges: [...pre.valueChanges, ...main.valueChanges],
-    diceRolls: [...pre.diceRolls, ...main.diceRolls],
-    checks: [...pre.checks, ...main.checks],
-    mechanicSummary: pre.mechanicSummary
-      ? `[回合开始] ${pre.mechanicSummary} [行动] ${main.mechanicSummary}`
-      : main.mechanicSummary,
+    valueChanges: [
+      ...logValueChanges,
+      ...(pre?.valueChanges ?? []),
+      ...main.valueChanges,
+    ],
+    diceRolls: [...logDiceRolls, ...(pre?.diceRolls ?? []), ...main.diceRolls],
+    checks: [...logChecks, ...(pre?.checks ?? []), ...main.checks],
+    mechanicSummary,
   };
 }
 

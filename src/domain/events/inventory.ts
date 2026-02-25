@@ -4,6 +4,7 @@
 
 import type { ItemInstance } from "../entities/item";
 import type { SkillInstance } from "../entities/skill";
+import type { ResultFrame } from "../types/result-frame";
 
 /**
  * Inventory 事件类型常量
@@ -78,6 +79,8 @@ export interface ItemUsedPayload {
   quantity: number;
   targetId?: string;
   reason?: string;
+  /** 路径 B 引擎执行产生的 ResultFrame（路径 A 为 undefined） */
+  resultFrame?: ResultFrame;
 }
 
 /**
