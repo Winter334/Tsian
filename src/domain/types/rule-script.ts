@@ -3,6 +3,7 @@
  */
 
 import type { ItemEffect } from "../entities/item";
+import type { SpawnItemDef, SpawnSkillDef } from "./entity";
 
 export interface RuleScript {
   version: 2;
@@ -176,10 +177,16 @@ export interface SpawnAction extends RuleActionBase {
     description?: string;
     personality?: string;
     appearance?: string;
+    age?: number;
+    gender?: string;
     /** AI 建议的属性值 */
     attributes?: Record<string, number>;
     /** AI 建议的天赋 ID */
     talentIds?: string[];
+    /** 初始物品（可选，AI 可根据角色身份自动决定） */
+    initialItems?: SpawnItemDef[];
+    /** 初始技能（可选，AI 可根据角色职业自动决定） */
+    initialSkills?: SpawnSkillDef[];
   };
 }
 

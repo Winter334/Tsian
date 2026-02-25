@@ -10,6 +10,7 @@ import type {
   CharacterStatus,
   UpdateCharacterParams,
 } from "@/domain/entities/character";
+import type { SpawnItemDef, SpawnSkillDef } from "../types/entity";
 
 /**
  * 房间命令类型
@@ -331,10 +332,18 @@ export interface CreateNpcPayload {
   personality?: string;
   /** 外貌描述 */
   appearance?: string;
+  /** 年龄 */
+  age?: number;
+  /** 性别 */
+  gender?: string;
   /** 初始属性 */
-  attributes?: Record<string, number>;
+  attributes?: Record<string, unknown>;
   /** 已选天赋 ID 列表 */
   talentIds?: string[];
+  /** 初始物品列表（spawn 时批量授予） */
+  initialItems?: SpawnItemDef[];
+  /** 初始技能列表（spawn 时批量授予） */
+  initialSkills?: SpawnSkillDef[];
 }
 
 /**

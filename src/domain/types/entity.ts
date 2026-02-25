@@ -5,7 +5,7 @@
  * 放置在 domain 层以便各模块合法引用。
  */
 
-import type { ItemInstance } from "../entities/item";
+import type { ItemEffect, ItemInstance } from "../entities/item";
 import type { SkillInstance } from "../entities/skill";
 import type { EntityType, TagMetadata } from "./result-frame";
 
@@ -100,8 +100,56 @@ export interface CreatedNpcData {
   personality?: string;
   /** 外貌描述 */
   appearance?: string;
-  /** 初始属性 */
-  attributes: Record<string, number>;
+  /** 年龄 */
+  age?: number;
+  /** 性别 */
+  gender?: string;
+  /**
+   * 初始属性
+   *
+   * 与 Character.attributes 对齐，支持 number/string/boolean 等类型值。
+   */
+  attributes: Record<string, unknown>;
   /** 天赋 ID 列表 */
   talentIds?: string[];
+  /** 初始物品列表（spawn 时批量授予） */
+  initialItems?: SpawnItemDef[];
+  /** 初始技能列表（spawn 时批量授予） */
+  initialSkills?: SpawnSkillDef[];
+}
+
+/**
+ * Spawn 时附带的物品定义
+ *
+ * 与 GrantItemAction 结构对齐，但去除 target（隐含为新创建的 NPC）。
+ */
+export interface SpawnItemDef {
+  templateId?: string;
+  name: string;
+  description?: string;
+  category:
+    | "weapon"
+    | "armor"
+    | "accessory"
+    | "consumable"
+    | "material"
+    | "quest"
+    | "misc";
+  quantity?: number;
+  equipSlot?: string;
+  /** 是否在创建时自动装备 */
+  autoEquip?: boolean;
+  effects?: ItemEffect[];
+}
+
+/**
+ * Spawn 时附带的技能定义
+ */
+export interface SpawnSkillDef {
+  templateId?: string;
+  name: string;
+  description?: string;
+  category: "combat" | "magic" | "survival" | "social" | "craft" | "misc";
+  activeUsable?: boolean;
+  cost?: { field: string; amount: number };
 }

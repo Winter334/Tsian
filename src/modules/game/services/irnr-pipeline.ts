@@ -97,6 +97,38 @@ function parseRuleScriptFromResponse(response: string): RuleScript | null {
   }
 }
 
+function sanitizeNpcAttributes(
+  npcId: string,
+  npcName: string,
+  attributes: Record<string, unknown>,
+): Record<string, number | string | boolean> {
+  const fields: Record<string, number | string | boolean> = {};
+  const droppedFields: string[] = [];
+
+  for (const [key, value] of Object.entries(attributes)) {
+    if (
+      typeof value === "number" ||
+      typeof value === "string" ||
+      typeof value === "boolean"
+    ) {
+      fields[key] = value;
+      continue;
+    }
+
+    const valueType =
+      value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
+    droppedFields.push(`${key}(${valueType})`);
+  }
+
+  if (droppedFields.length > 0) {
+    console.warn(
+      `[IRNR Pipeline] spawn NPC 属性过滤: name=${npcName}, id=${npcId}, dropped=${droppedFields.join(", ")}`,
+    );
+  }
+
+  return fields;
+}
+
 // ─── Pipeline 核心实现 ────────────────────────────────────
 
 /**
@@ -404,9 +436,7 @@ async function executePipeline(input: {
         // 如果引擎已在 shadow state 中注册了该实体，跳过
         if (entityAccessor.hasEntity(npc.id)) continue;
 
-        const fields: Record<string, number | string | boolean> = {
-          ...npc.attributes,
-        };
+        const fields = sanitizeNpcAttributes(npc.id, npc.name, npc.attributes);
         entityAccessor.setEntity({
           id: npc.id,
           type: "character",

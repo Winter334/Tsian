@@ -157,6 +157,7 @@ async function dispatchGrantItem(
       quantity,
       equipSlot,
       effects,
+      instanceId: change.entityId,
       reason: change.reason,
     },
   });

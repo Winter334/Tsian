@@ -40,6 +40,8 @@ export interface GrantItemPayload {
   quantity?: number;
   equipSlot?: EquipSlot;
   effects?: ItemEffect[];
+  /** 可选：外部指定实例 ID（用于 spawn autoEquip 等需要 ID 关联的场景） */
+  instanceId?: string;
   /** 获取原因（叙事记录用） */
   reason?: string;
 }

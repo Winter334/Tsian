@@ -1708,8 +1708,12 @@ function executeSpawn(
     description: action.entity.description,
     personality: action.entity.personality,
     appearance: action.entity.appearance,
+    age: action.entity.age,
+    gender: action.entity.gender,
     attributes,
     talentIds: action.entity.talentIds,
+    initialItems: action.entity.initialItems,
+    initialSkills: action.entity.initialSkills,
   };
 
   state.createdNpcs.push(npcData);
@@ -1727,6 +1731,12 @@ function executeSpawn(
   }
   if (action.entity.appearance) {
     setShadowField(state, npcId, "appearance", action.entity.appearance);
+  }
+  if (action.entity.age !== undefined) {
+    setShadowField(state, npcId, "age", action.entity.age);
+  }
+  if (action.entity.gender !== undefined) {
+    setShadowField(state, npcId, "gender", action.entity.gender);
   }
 
   for (const [field, value] of Object.entries(attributes)) {
@@ -1753,6 +1763,64 @@ function executeSpawn(
     npcName: action.entity.name,
     detail: action.entity.description ?? "",
   });
+
+  // ── 生成初始物品的 StructuralChanges ──
+  if (action.entity.initialItems) {
+    for (const item of action.entity.initialItems) {
+      const instanceId = crypto.randomUUID();
+      state.structuralChanges.push({
+        type: "item_added",
+        entityId: instanceId,
+        targetId: npcId,
+        templateId: item.templateId,
+        details: {
+          name: item.name,
+          description: item.description ?? "",
+          category: item.category,
+          quantity: item.quantity ?? 1,
+          ...(item.equipSlot ? { equipSlot: item.equipSlot } : {}),
+          ...(item.effects ? { effects: JSON.stringify(item.effects) } : {}),
+        },
+        reason: `${action.entity.name} 的初始装备`,
+      });
+
+      // 如果 autoEquip，追加装备变更
+      if (item.autoEquip && item.equipSlot) {
+        state.structuralChanges.push({
+          type: "item_equipped",
+          entityId: instanceId,
+          targetId: npcId,
+          details: { slot: item.equipSlot },
+          reason: `${action.entity.name} 自动装备`,
+        });
+      }
+    }
+  }
+
+  // ── 生成初始技能的 StructuralChanges ──
+  if (action.entity.initialSkills) {
+    for (const skill of action.entity.initialSkills) {
+      state.structuralChanges.push({
+        type: "skill_learned",
+        entityId: crypto.randomUUID(),
+        targetId: npcId,
+        templateId: skill.templateId,
+        details: {
+          name: skill.name,
+          description: skill.description ?? "",
+          category: skill.category,
+          activeUsable: skill.activeUsable ?? false,
+          ...(skill.cost
+            ? {
+                costField: skill.cost.field,
+                costAmount: skill.cost.amount,
+              }
+            : {}),
+        },
+        reason: `${action.entity.name} 的初始技能`,
+      });
+    }
+  }
 }
 
 // despawn（原 npcStatusChange）：适配 mode: "temporary" | "permanent"

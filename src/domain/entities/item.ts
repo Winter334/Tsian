@@ -103,6 +103,7 @@ export interface CreateItemInstanceParams {
   quantity?: number;
   equipSlot?: EquipSlot;
   effects?: ItemEffect[];
+  instanceId?: string;
   source: "predefined" | "ai-generated";
 }
 
@@ -115,7 +116,7 @@ export function createItemInstance(
   params: CreateItemInstanceParams,
 ): ItemInstance {
   return {
-    instanceId: crypto.randomUUID(),
+    instanceId: params.instanceId ?? crypto.randomUUID(),
     templateId: params.templateId,
     name: params.name,
     description: params.description,

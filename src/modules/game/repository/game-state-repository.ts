@@ -221,6 +221,8 @@ export function createGameStateRepository(
           newCharMap.set("description", npcData.description || "");
           newCharMap.set("personality", npcData.personality || "");
           newCharMap.set("appearance", npcData.appearance || "");
+          newCharMap.set("age", npcData.age);
+          newCharMap.set("gender", npcData.gender ?? "");
           newCharMap.set("talentIds", npcData.talentIds || []);
           newCharMap.set("attributes", attributeFields);
           newCharMap.set("tags", serializedTags);

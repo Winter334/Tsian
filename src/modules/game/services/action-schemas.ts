@@ -660,7 +660,9 @@ const spawnSchema: ActionSchema = {
   category: "npc",
   displayName: "创建实体",
   description:
-    "在场景中创建新实体（NPC/怪物/召唤物）。识别到叙事中出现新的重要角色时使用。不要为路人创建实体。",
+    "在场景中创建新实体。识别到叙事中出现新的重要角色时使用。" +
+    "可为实体配置初始物品和技能，使其从出场就拥有完整的游戏能力。" +
+    "不要为路人创建实体。",
   params: [
     {
       name: "entity",
@@ -693,6 +695,18 @@ const spawnSchema: ActionSchema = {
           description: "外貌描述",
         },
         {
+          name: "age",
+          type: "number",
+          required: false,
+          description: "年龄",
+        },
+        {
+          name: "gender",
+          type: "string",
+          required: false,
+          description: "性别",
+        },
+        {
           name: "attributes",
           type: "object",
           required: false,
@@ -705,6 +719,20 @@ const spawnSchema: ActionSchema = {
           required: false,
           description: "天赋 ID 列表。必须是世界配置 talents 中已定义的 ID",
         },
+        {
+          name: "initialItems",
+          type: "object",
+          required: false,
+          description:
+            "初始物品列表（数组）。根据角色身份/职业合理配置。每项包含 name, category, 可选 equipSlot/autoEquip/effects",
+        },
+        {
+          name: "initialSkills",
+          type: "object",
+          required: false,
+          description:
+            "初始技能列表（数组）。根据角色职业/背景合理配置。每项包含 name, category, 可选 activeUsable/cost",
+        },
       ],
     },
   ],
@@ -713,11 +741,52 @@ const spawnSchema: ActionSchema = {
     "entity.attributes 中的 key 必须与世界配置的 primaryAttributes 匹配",
     "entity.talentIds 中的每个 ID 必须在世界配置的 talents 中存在",
     "不要为路人创建实体，只为对剧情有影响的角色使用",
+    "initialItems 中的 category 必须为: weapon/armor/accessory/consumable/material/quest/misc",
+    "initialItems 中的 equipSlot 必须匹配世界配置的 equipSlotDefinitions",
+    "initialSkills 中的 category 必须为: combat/magic/survival/social/craft/misc",
+    "初始物品和技能应与角色身份匹配（商人应有货物，战士应有武器和战斗技能）",
   ],
   examples: [
     {
-      scenario: "创建一个商人 NPC",
-      json: `{ "type": "spawn", "entity": { "name": "老王", "description": "一位经验丰富的武器商人", "personality": "精明但诚实", "attributes": { "str": 8, "int": 14 }, "talentIds": ["bargain_master"] } }`,
+      scenario: "创建一个武器商人 NPC",
+      json: `{
+  "type": "spawn",
+  "entity": {
+    "name": "老王",
+    "description": "一位经验丰富的武器商人",
+    "personality": "精明但诚实",
+    "gender": "male",
+    "age": 45,
+    "attributes": { "str": 8, "int": 14 },
+    "talentIds": ["bargain_master"],
+    "initialItems": [
+      { "name": "精钢长剑", "category": "weapon", "equipSlot": "main_hand" },
+      { "name": "治疗药水", "category": "consumable", "quantity": 3 }
+    ],
+    "initialSkills": [
+      { "name": "鉴定", "category": "social", "description": "识别物品价值和品质" }
+    ]
+  }
+}`,
+    },
+    {
+      scenario: "创建一个持剑守卫",
+      json: `{
+  "type": "spawn",
+  "entity": {
+    "name": "城门守卫",
+    "description": "身着铠甲的城门守卫",
+    "personality": "严肃尽职",
+    "attributes": { "str": 14, "con": 12 },
+    "initialItems": [
+      { "name": "铁剑", "category": "weapon", "equipSlot": "main_hand", "autoEquip": true },
+      { "name": "链甲", "category": "armor", "equipSlot": "body", "autoEquip": true }
+    ],
+    "initialSkills": [
+      { "name": "格挡", "category": "combat", "description": "使用盾牌或武器格挡攻击", "activeUsable": true, "cost": { "field": "sp", "amount": 5 } }
+    ]
+  }
+}`,
     },
   ],
   validate: (
@@ -760,6 +829,66 @@ const spawnSchema: ActionSchema = {
               ...validAttrKeys,
             ].join(", ")}`,
           );
+        }
+      }
+    }
+
+    // initialItems category 校验
+    const validItemCategories = [
+      "weapon",
+      "armor",
+      "accessory",
+      "consumable",
+      "material",
+      "quest",
+      "misc",
+    ];
+    if (entity.initialItems != null) {
+      if (!Array.isArray(entity.initialItems)) {
+        errors.push("initialItems 必须是数组");
+      } else {
+        for (const item of entity.initialItems) {
+          if (item && typeof item === "object") {
+            if (!item.name) {
+              errors.push("initialItems 中的每个物品必须有 name");
+            }
+            if (item.category && !validItemCategories.includes(item.category)) {
+              errors.push(
+                `物品 "${item.name}" 的 category "${item.category}" 无效`,
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // initialSkills category 校验
+    const validSkillCategories = [
+      "combat",
+      "magic",
+      "survival",
+      "social",
+      "craft",
+      "misc",
+    ];
+    if (entity.initialSkills != null) {
+      if (!Array.isArray(entity.initialSkills)) {
+        errors.push("initialSkills 必须是数组");
+      } else {
+        for (const skill of entity.initialSkills) {
+          if (skill && typeof skill === "object") {
+            if (!skill.name) {
+              errors.push("initialSkills 中的每个技能必须有 name");
+            }
+            if (
+              skill.category &&
+              !validSkillCategories.includes(skill.category)
+            ) {
+              errors.push(
+                `技能 "${skill.name}" 的 category "${skill.category}" 无效`,
+              );
+            }
+          }
         }
       }
     }

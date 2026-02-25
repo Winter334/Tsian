@@ -123,6 +123,7 @@ const handleGrantItem: CommandHandler<
     quantity,
     equipSlot,
     effects: resolvedEffects,
+    instanceId: command.payload.instanceId,
     source: templateId ? "predefined" : "ai-generated",
   });
 
