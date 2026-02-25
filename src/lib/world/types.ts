@@ -670,8 +670,9 @@ export const DEFAULT_WORLD_CONFIG: WorldConfig = {
       consumable: true,
       effects: [
         {
-          type: "narrative",
+          type: "modifier",
           description: "恢复少量 HP",
+          onUse: [{ type: "heal", target: "self", amount: 10, field: "hp" }],
         },
       ],
     },
@@ -683,8 +684,11 @@ export const DEFAULT_WORLD_CONFIG: WorldConfig = {
       equipSlot: "main_hand",
       effects: [
         {
-          type: "narrative",
-          description: "一把可靠的近战武器",
+          type: "modifier",
+          description: "攻击力 +2",
+          modifiers: [
+            { scope: "stat", field: "str", value: 2, reason: "铁剑" },
+          ],
         },
       ],
     },

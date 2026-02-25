@@ -175,11 +175,30 @@ export function InventorySection({
   const handleUseItem = useCallback(
     async (item: ItemInstance) => {
       setConfirmDiscardItemId(null);
+
+      // 检查是否需要选择目标（包含 $target 占位符的消耗品）
+      const needsTargetSelection =
+        item.effects?.some((effect) =>
+          effect.onUse?.some(
+            (action) => "target" in action && action.target === "$target",
+          ),
+        ) ?? false;
+
+      if (needsTargetSelection) {
+        // 需要选择目标的消耗品暂不支持（未来通过目标选择弹窗实现）
+        console.warn("[InventorySection] 该消耗品需要选择目标，暂不支持");
+        return;
+      }
+
+      // self 目标或无目标的消耗品：targetId 默认为自身
       await runDirectAction(
         {
           type: "use_item",
           actorId: characterId,
-          payload: { instanceId: item.instanceId },
+          payload: {
+            instanceId: item.instanceId,
+            targetId: characterId,
+          },
         },
         "使用",
       );
