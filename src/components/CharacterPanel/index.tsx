@@ -30,7 +30,7 @@ import { Dialog, DialogContent } from "@/components/ui";
 import { yjsManager } from "@/core/yjs";
 import type { Character } from "@/domain/entities/character";
 import { useCharacterFullStats } from "@/hooks/useCharacterFullStats";
-import { getRuntimeWorldConfig } from "@/lib/world/resolve-config";
+import { useRuntimeWorldConfig } from "@/hooks/useRuntimeWorldConfig";
 import type { TalentConfig, WorldConfig } from "@/lib/world/types";
 import { resolveDimensionSelections } from "@/lib/world/types";
 import { useCurrentSaveId } from "@/modules";
@@ -111,17 +111,6 @@ function getTalent(
   worldConfig: WorldConfig,
 ): TalentConfig | undefined {
   return worldConfig.talents?.find((t) => t.id === talentId);
-}
-
-// ── Hook: 读取运行时 WorldConfig（来自当前存档快照） ──
-
-function useRuntimeWorldConfig(): WorldConfig {
-  const currentSaveId = useCurrentSaveId();
-  return useMemo(() => {
-    // 显式依赖 currentSaveId，确保切换存档时重新读取快照
-    void currentSaveId;
-    return getRuntimeWorldConfig();
-  }, [currentSaveId]);
 }
 
 function getCategoryIcon(category?: TalentConfig["category"]) {

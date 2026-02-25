@@ -27,11 +27,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { yjsManager } from "@/core/yjs";
 import type { Character } from "@/domain/entities/character";
-import type { TalentConfig } from "@/lib/world/types";
-import { DEFAULT_WORLD_CONFIG } from "@/lib/world/types";
+import { useCharacterFullStats } from "@/hooks/useCharacterFullStats";
+import { useRuntimeWorldConfig } from "@/hooks/useRuntimeWorldConfig";
+import type { TalentConfig, WorldConfig } from "@/lib/world/types";
+import { resolveDimensionSelections } from "@/lib/world/types";
 import { useCurrentSaveId } from "@/modules";
 import { yMapToCharacter } from "@/modules/game/repository";
-import { color, colorAlpha, glow } from "@/styles/tokens";
+import { color, colorAlpha } from "@/styles/tokens";
+import { CharacterRadarChart } from "./CharacterRadarChart";
+import { CharacterResources } from "./CharacterResources";
+import { EquipmentSection } from "./EquipmentSection";
+import { InventorySection } from "./InventorySection";
+import { SkillSection } from "./SkillSection";
 
 // ── 动画 ──
 
@@ -64,19 +71,6 @@ const listItemVariants = {
 };
 
 // ── 工具函数（复用 CharacterPanel 的查找逻辑） ──
-
-import { resolveDimensionSelections } from "@/lib/world/types";
-
-function getAttributeLabel(key: string): string {
-  const attr = DEFAULT_WORLD_CONFIG.primaryAttributes.find(
-    (a) => a.key === key
-  );
-  return attr?.label ?? key;
-}
-
-function getTalent(talentId: string): TalentConfig | undefined {
-  return DEFAULT_WORLD_CONFIG.talents?.find((t) => t.id === talentId);
-}
 
 function getCategoryIcon(category?: TalentConfig["category"]) {
   switch (category) {
@@ -168,24 +162,22 @@ export function useNpcCharacters(): Character[] {
 
 // ── NPC 详情面板 ──
 
-interface NpcDetailProps {
+interface NpcDetailPanelProps {
   character: Character;
+  worldConfig: WorldConfig;
 }
 
-function NpcDetail({ character }: NpcDetailProps) {
-  const allocatableKeys = useMemo(
-    () => DEFAULT_WORLD_CONFIG.pointBuyRules?.allocatableAttributes ?? [],
-    []
-  );
-
-  const attributes = (character.attributes ?? {}) as Record<string, number>;
+function NpcDetailPanel({ character, worldConfig }: NpcDetailPanelProps) {
+  const fullStats = useCharacterFullStats(character, worldConfig);
+  const allocatableKeys =
+    worldConfig.pointBuyRules?.allocatableAttributes ?? [];
 
   const talentInfos = useMemo(() => {
     const ids = character.talentIds ?? [];
     return ids
-      .map((id) => getTalent(id))
+      .map((id) => worldConfig.talents?.find((t) => t.id === id))
       .filter((t): t is TalentConfig => t != null);
-  }, [character.talentIds]);
+  }, [character.talentIds, worldConfig.talents]);
 
   return (
     <div className="space-y-3 pt-2">
@@ -194,8 +186,8 @@ function NpcDetail({ character }: NpcDetailProps) {
         Object.keys(character.dimensionSelections).length > 0 && (
           <div className="space-y-1">
             {resolveDimensionSelections(
-              DEFAULT_WORLD_CONFIG,
-              character.dimensionSelections
+              worldConfig,
+              character.dimensionSelections,
             ).map((d) => (
               <div key={d.dimensionId} className="flex items-baseline gap-2">
                 <span
@@ -214,6 +206,44 @@ function NpcDetail({ character }: NpcDetailProps) {
             ))}
           </div>
         )}
+
+      {/* 年龄和性别 */}
+      {(character.age != null || character.gender) && (
+        <div className="flex items-center gap-3">
+          {character.gender && (
+            <div className="flex items-baseline gap-1">
+              <span
+                className="text-xs font-medium"
+                style={{ color: color("textMuted") }}
+              >
+                性别
+              </span>
+              <span
+                className="text-xs"
+                style={{ color: color("textSecondary") }}
+              >
+                {character.gender}
+              </span>
+            </div>
+          )}
+          {character.age != null && (
+            <div className="flex items-baseline gap-1">
+              <span
+                className="text-xs font-medium"
+                style={{ color: color("textMuted") }}
+              >
+                年龄
+              </span>
+              <span
+                className="text-xs"
+                style={{ color: color("textSecondary") }}
+              >
+                {character.age}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 外貌 */}
       {character.appearance && (
@@ -253,7 +283,7 @@ function NpcDetail({ character }: NpcDetailProps) {
         </div>
       )}
 
-      {/* 属性 */}
+      {/* 属性雷达图 */}
       {allocatableKeys.length > 0 && (
         <div>
           <div
@@ -263,60 +293,15 @@ function NpcDetail({ character }: NpcDetailProps) {
             <Shield className="w-3 h-3" />
             <span className="text-xs font-medium">属性</span>
           </div>
-          <div className="grid grid-cols-3 gap-1.5 pl-4">
-            {allocatableKeys.map((key) => {
-              const value = attributes[key] ?? 10;
-              return (
-                <div
-                  key={key}
-                  className="flex items-center gap-1 rounded px-1.5 py-1"
-                  style={{
-                    background: colorAlpha("primary", 0.04),
-                    border: `1px solid ${colorAlpha("primary", 0.08)}`,
-                  }}
-                >
-                  <span
-                    className="text-xs"
-                    style={{ color: color("textMuted") }}
-                  >
-                    {getAttributeLabel(key)}
-                  </span>
-                  <span
-                    className="text-xs font-bold ml-auto"
-                    style={{
-                      color: color("textPrimary"),
-                      textShadow:
-                        value > 12 ? glow("primary", "sm", 0.3) : undefined,
-                    }}
-                  >
-                    {value}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          {/* 等级 */}
-          {attributes.level != null && (
-            <div className="flex items-baseline gap-2 mt-1 pl-4">
-              <span
-                className="text-xs font-medium shrink-0 w-12"
-                style={{ color: color("textMuted") }}
-              >
-                等级
-              </span>
-              <span
-                className="text-xs font-bold"
-                style={{
-                  color: color("secondary"),
-                  textShadow: glow("secondary", "sm", 0.3),
-                }}
-              >
-                {attributes.level}
-              </span>
-            </div>
-          )}
+          <CharacterRadarChart
+            worldConfig={worldConfig}
+            fullStats={fullStats}
+          />
         </div>
       )}
+
+      {/* 资源条 */}
+      <CharacterResources fullStats={fullStats} worldConfig={worldConfig} />
 
       {/* 天赋 */}
       {talentInfos.length > 0 && (
@@ -361,6 +346,23 @@ function NpcDetail({ character }: NpcDetailProps) {
         </div>
       )}
 
+      {/* 技能列表 */}
+      <SkillSection characterId={character.id} />
+
+      {/* 背包（只读） */}
+      <InventorySection
+        characterId={character.id}
+        worldConfig={worldConfig}
+        readonly
+      />
+
+      {/* 装备栏（只读） */}
+      <EquipmentSection
+        characterId={character.id}
+        worldConfig={worldConfig}
+        readonly
+      />
+
       {/* 背景故事 */}
       {character.description && (
         <div>
@@ -389,9 +391,15 @@ interface NpcListItemProps {
   character: Character;
   index: number;
   isOffScene?: boolean;
+  worldConfig: WorldConfig;
 }
 
-function NpcListItem({ character, index, isOffScene }: NpcListItemProps) {
+function NpcListItem({
+  character,
+  index,
+  isOffScene,
+  worldConfig,
+}: NpcListItemProps) {
   const [expanded, setExpanded] = useState(false);
 
   const attributes = (character.attributes ?? {}) as Record<string, number>;
@@ -500,7 +508,7 @@ function NpcListItem({ character, index, isOffScene }: NpcListItemProps) {
                 borderTop: `1px solid ${colorAlpha("primary", 0.08)}`,
               }}
             >
-              <NpcDetail character={character} />
+              <NpcDetailPanel character={character} worldConfig={worldConfig} />
             </div>
           </motion.div>
         )}
@@ -549,6 +557,7 @@ function GroupHeader({ icon, label, count }: GroupHeaderProps) {
  */
 export function NpcList() {
   const npcs = useNpcCharacters();
+  const worldConfig = useRuntimeWorldConfig();
 
   const { activeNpcs, offSceneNpcs } = useMemo(() => {
     const active: Character[] = [];
@@ -577,7 +586,7 @@ export function NpcList() {
         style={{
           background: `linear-gradient(90deg, transparent, ${colorAlpha(
             "primary",
-            0.2
+            0.2,
           )}, transparent)`,
         }}
       />
@@ -588,7 +597,12 @@ export function NpcList() {
           <GroupHeader icon="⬡" label="在场 NPC" count={activeNpcs.length} />
           <div className="space-y-2">
             {activeNpcs.map((npc, i) => (
-              <NpcListItem key={npc.id} character={npc} index={i} />
+              <NpcListItem
+                key={npc.id}
+                character={npc}
+                index={i}
+                worldConfig={worldConfig}
+              />
             ))}
           </div>
         </div>
@@ -600,7 +614,13 @@ export function NpcList() {
           <GroupHeader icon="⬡" label="离场 NPC" count={offSceneNpcs.length} />
           <div className="space-y-2">
             {offSceneNpcs.map((npc, i) => (
-              <NpcListItem key={npc.id} character={npc} index={i} isOffScene />
+              <NpcListItem
+                key={npc.id}
+                character={npc}
+                index={i}
+                isOffScene
+                worldConfig={worldConfig}
+              />
             ))}
           </div>
         </div>

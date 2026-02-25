@@ -97,12 +97,14 @@ interface InventorySectionProps {
   worldConfig: WorldConfig;
   /** 动画序号，与 CharacterPanel 中其他 Section 的 custom 值衔接 */
   animationIndex?: number;
+  readonly?: boolean;
 }
 
 export function InventorySection({
   characterId,
   worldConfig,
   animationIndex = 4,
+  readonly = false,
 }: InventorySectionProps) {
   const items = useInventoryStore((s) => s.items[characterId] ?? EMPTY_ITEMS);
   const equipSlotDefinitions =
@@ -429,7 +431,7 @@ export function InventorySection({
                     )}
 
                     {/* 操作按钮 */}
-                    {hasActions && (
+                    {!readonly && hasActions && (
                       <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                         {canEquip && (
                           <button

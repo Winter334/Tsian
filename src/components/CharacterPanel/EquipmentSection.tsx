@@ -50,6 +50,7 @@ interface EquipmentSectionProps {
   worldConfig: WorldConfig;
   /** 动画序号，与 CharacterPanel 中其他 Section 的 custom 值衔接 */
   animationIndex?: number;
+  readonly?: boolean;
 }
 
 function getCategoryIcon(category: ItemCategory) {
@@ -149,6 +150,7 @@ export function EquipmentSection({
   characterId,
   worldConfig,
   animationIndex = 4,
+  readonly = false,
 }: EquipmentSectionProps) {
   const items = useInventoryStore((s) => s.items[characterId] ?? EMPTY_ITEMS);
   const slotDefinitions =
@@ -362,26 +364,28 @@ export function EquipmentSection({
                                 </p>
                               </div>
 
-                              <button
-                                type="button"
-                                className={ACTION_BUTTON_CLASS_NAME}
-                                style={{
-                                  background: colorAlpha("secondary", 0.12),
-                                  color: color("secondary"),
-                                  border: `1px solid ${colorAlpha("secondary", 0.24)}`,
-                                }}
-                                onClick={() => {
-                                  void handleUnequipItem(item);
-                                }}
-                                disabled={isSubmitting}
-                              >
-                                <Shield className="w-3 h-3" />
-                                <span>
-                                  {isSubmittingCurrentItem
-                                    ? "处理中..."
-                                    : "卸下"}
-                                </span>
-                              </button>
+                              {!readonly && (
+                                <button
+                                  type="button"
+                                  className={ACTION_BUTTON_CLASS_NAME}
+                                  style={{
+                                    background: colorAlpha("secondary", 0.12),
+                                    color: color("secondary"),
+                                    border: `1px solid ${colorAlpha("secondary", 0.24)}`,
+                                  }}
+                                  onClick={() => {
+                                    void handleUnequipItem(item);
+                                  }}
+                                  disabled={isSubmitting}
+                                >
+                                  <Shield className="w-3 h-3" />
+                                  <span>
+                                    {isSubmittingCurrentItem
+                                      ? "处理中..."
+                                      : "卸下"}
+                                  </span>
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
