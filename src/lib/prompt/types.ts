@@ -221,6 +221,8 @@ export interface VariableContext {
     description?: string;
     personality?: string;
     appearance?: string;
+    age?: number;
+    gender?: string;
     attributes?: Record<string, unknown>;
     talentIds?: string[];
     tags?: Record<string, unknown>;

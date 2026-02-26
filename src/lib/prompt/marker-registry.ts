@@ -950,6 +950,14 @@ function renderCharacterDescription(context: VariableContext): string {
       const levelText = npc.level !== undefined ? ` (Lv.${npc.level})` : "";
       lines.push(`${index + 1}. ${npc.name}${levelText}`);
 
+      if (npc.gender?.trim()) {
+        lines.push(`   性别: ${npc.gender.trim()}`);
+      }
+
+      if (npc.age != null) {
+        lines.push(`   年龄: ${npc.age}`);
+      }
+
       if (npc.appearance?.trim()) {
         lines.push(`   外貌: ${npc.appearance.trim()}`);
       }
