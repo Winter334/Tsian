@@ -64,6 +64,11 @@ export * from "./ai-status";
 export * from "./pipeline-contract";
 
 /**
+ * Pipeline 黑板类型
+ */
+export * from "./pipeline-blackboard";
+
+/**
  * 轻量管线（Direct Pipeline）类型
  */
 export * from "./direct-action";

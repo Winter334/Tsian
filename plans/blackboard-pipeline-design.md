@@ -1295,6 +1295,45 @@ src/domain/types/pipeline-blackboard.ts  → PipelineBlackboard（Phase B 创建
 
 **验证**：每个 Agent 编写对应的单元测试，确保输入→输出的行为与原 Phase 一致。
 
+#### Phase B 实施记录
+
+> **实施状态**：✅ 已完成
+> **实施日期**：2026-02-26
+
+**实际实现与设计差异**：
+
+| #   | 设计文档                                                                         | 实际实现                                                                                                                                         | 原因                                                                                                                                                |
+| --- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | `PipelineBlackboard` 包含所有业务字段（§4.1），放在 `src/core/pipeline/types.ts` | 单独定义在 `src/domain/types/pipeline-blackboard.ts`，继承 Phase A 的泛型 `BlackboardBase`                                                       | 延续 Phase A 的分层决策（`core/` 不依赖业务类型），`PipelineBlackboard` 属于领域层                                                                  |
+| D2  | `entityAccessor` 字段类型为具体 `MapEntityAccessor` 或宽接口                     | 使用 `EntityAccessor` 接口，但扩展接口添加了 `getAllFields`/`getAllEntityIds`/`getTagsWithMetadata`/`getEntityData`/`setEntity`/`hasEntity` 方法 | 保持 domain 层不依赖 modules 层实现，同时满足各 Agent 对可变方法的需求                                                                              |
+| D3  | 辅助函数直接在各 Agent 文件中使用                                                | 提取到独立文件 `src/modules/game/services/pipeline-helpers.ts`，各 Agent 共享导入                                                                | 避免代码重复，11 个辅助函数（`buildGameStateSnapshot`、`buildEntityEffects` 等）在多个 Agent 间复用                                                 |
+| D4  | §5.6 PostProcessor Agent 为 `optional: true`                                     | 改为 `optional: false`，内部用 try-catch 包裹后处理逻辑                                                                                          | 确保 `onNarrativeComplete` 回调始终触发（optional Agent 被编排器跳过时回调会丢失），内部容错等效于 optional 语义                                    |
+| D5  | §5.7 Finalizer Agent 仅 `requires: ['entityAccessor']`                           | 改为 `requires: ['entityAccessor', 'resultFrame', 'narrativeText']`                                                                              | 修复拓扑排序下可能早于 Engine/Narrator 执行的 bug，确保采集时点在所有状态变更完成之后                                                               |
+| D6  | §5.4 Engine Agent 中 `buildEntityAccessor()` 函数                                | 不存在该函数，Phase 0 使用 `MapEntityAccessor` 无参构造 + `setEntity()` 逐个注入                                                                 | 设计文档的示例代码与实际代码不一致，以实际代码为准                                                                                                  |
+| D7  | 原 `executePipeline()` 的 DelayedCommitManager buffer/discard/commit             | 未添加对应 Agent，由管线错误传播机制天然覆盖                                                                                                     | DelayedCommitManager 当前实现仅做状态机标记无实际 side effect，管线中 Narrator 失败→终止→不产出 finalEntityStates→调用方不回写，等效于 discard 语义 |
+| D8  | 工厂函数名 `createPipeline()`                                                    | 改为 `createGamePipeline()`                                                                                                                      | 避免与未来通用 `createPipeline` 冲突，明确表达是游戏管线的工厂                                                                                      |
+
+**新增文件清单**：
+
+| 文件                                            | 职责                                       |
+| ----------------------------------------------- | ------------------------------------------ |
+| `src/domain/types/pipeline-blackboard.ts`       | `PipelineBlackboard` 接口定义              |
+| `src/modules/game/services/pipeline-helpers.ts` | 管线辅助函数（从 `irnr-pipeline.ts` 提取） |
+| `src/modules/game/agents/entity-accessor.ts`    | EntityAccessor Agent（Phase 0）            |
+| `src/modules/game/agents/parser.ts`             | Parser Agent（Phase 1）                    |
+| `src/modules/game/agents/engine.ts`             | Engine Agent（Phase 2a + 2b）              |
+| `src/modules/game/agents/narrator.ts`           | Narrator Agent（Phase 4）                  |
+| `src/modules/game/agents/post-processor.ts`     | PostProcessor Agent（Phase 4.5）           |
+| `src/modules/game/agents/finalizer.ts`          | Finalizer Agent（Phase 5）                 |
+| `src/modules/game/agents/index.ts`              | 聚合导出 + `createGamePipeline()` 工厂函数 |
+
+**修改文件清单**：
+
+| 文件                         | 变更                                          |
+| ---------------------------- | --------------------------------------------- |
+| `src/domain/types/entity.ts` | 扩展 `EntityAccessor` 接口，添加 6 个可变方法 |
+| `src/domain/types/index.ts`  | 添加 `pipeline-blackboard` 导出               |
+
 ### Phase C：管线集成（切换入口）
 
 目标：用 `createPipeline().execute()` 替换 `executePipeline()` 调用，完成架构切换。

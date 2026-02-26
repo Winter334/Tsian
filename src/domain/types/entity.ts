@@ -29,7 +29,7 @@ export interface EntityData {
 /**
  * 实体访问器接口
  *
- * 为规则引擎和执行服务提供统一的只读实体访问能力。
+ * 为规则引擎和执行服务提供统一的实体访问能力。
  */
 export interface EntityAccessor {
   /** 读取实体属性值 */
@@ -48,15 +48,24 @@ export interface EntityAccessor {
   getTags?(entityId: string): string[];
 
   /** 获取实体所有字段（用于动态属性注入） */
-  getAllFields?(
+  getAllFields(
     entityId: string,
   ): Record<string, number | string | boolean> | undefined;
 
   /** 获取所有实体 ID */
-  getAllEntityIds?(): string[];
+  getAllEntityIds(): string[];
 
   /** 获取实体标签及元数据 */
-  getTagsWithMetadata?(entityId: string): Map<string, TagMetadata>;
+  getTagsWithMetadata(entityId: string): Map<string, TagMetadata>;
+
+  /** 获取实体数据引用（用于动态扩展） */
+  getEntityData(entityId: string): EntityData | undefined;
+
+  /** 添加或更新实体 */
+  setEntity(data: EntityData): void;
+
+  /** 检查实体是否存在 */
+  hasEntity(entityId: string): boolean;
 
   /** 获取角色的物品实例列表（可选） */
   getItems?(entityId: string): readonly ItemInstance[];
