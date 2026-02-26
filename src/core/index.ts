@@ -43,3 +43,12 @@ export type { ServiceToken } from "./services";
 
 // 存储层
 export { checkStorageQuota, opfs, settings } from "./storage";
+
+// 管线编排
+export { PipelineError, PipelineOrchestrator } from "./pipeline";
+export type {
+  AgentDescriptor,
+  AgentTraceEntry,
+  BlackboardBase,
+  BlackboardInput,
+} from "./pipeline";
