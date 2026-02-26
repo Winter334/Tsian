@@ -18,7 +18,6 @@ import type {
 } from "@/core/command-bus";
 import { IRNR_PIPELINE_SERVICE_TOKEN } from "@/core/services/tokens";
 import { yjsManager } from "@/core/yjs";
-import { MemoryCommands } from "@/domain/commands";
 import type {
   ClearConversationPayload,
   CreateConversationPayload,
@@ -38,9 +37,7 @@ import { createConversation } from "@/domain/entities/conversation";
 import { createMessage } from "@/domain/entities/message";
 import { ChatEvents } from "@/domain/events/chat";
 import type { IrnrPipelineResult } from "@/domain/types";
-import { createAiExecutor } from "@/lib/ai/executor";
 import { resolveAIConfig } from "@/lib/ai/resolve-config";
-import { postProcessForPersist } from "@/lib/post-process";
 import { buildVariableContext, usePresetStore } from "@/lib/prompt";
 import { getLastDisplayName } from "@/lib/user-identity";
 import {
@@ -250,186 +247,89 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
         userInput: content,
       });
 
-      // 6. 检查是否有 parser 预设（决定是否走 IRNR 流程）
-      const parserPreset = await presetStore.getPresetForPurpose("parser");
-      const parserPresetId = presetStore.activePresetByPurpose.parser;
-      const hasParserPreset = Boolean(parserPresetId && parserPreset);
+      // parser 预设可选——无预设时管线 Parser Agent 自动写入空 ruleScript
+      const parserPreset =
+        (await presetStore.getPresetForPurpose("parser")) ?? undefined;
 
-      if (hasParserPreset && parserPreset) {
-        // ── IRNR 流程 ──────────────────────────────────────
-        const irnrPipelineService = services.get(IRNR_PIPELINE_SERVICE_TOKEN);
-        if (!irnrPipelineService) {
-          throw new Error("IRNR Pipeline Service 未注册");
-        }
+      // ── IRNR 管线流程（统一路径） ──────────────────────────
+      const irnrPipelineService = services.get(IRNR_PIPELINE_SERVICE_TOKEN);
+      if (!irnrPipelineService) {
+        throw new Error("IRNR Pipeline Service 未注册");
+      }
 
-        const irnrInput = {
-          commandId: context.commandId,
-          userInput: content,
-          aiConfig,
-          narrativePreset,
-          parserPreset,
-          baseVariableContext: variableContext,
-          actorId: playerCharacterId,
-          entities: soloIrnrEntities,
-          onNarrativeChunk: (chunk: string) => {
-            session!.appendChunk(chunk);
-          },
-          conversationId,
-          messageId: assistantMessage.id,
-          messageIndex: assistantMessageIndex,
-        };
+      const irnrInput = {
+        commandId: context.commandId,
+        userInput: content,
+        aiConfig,
+        narrativePreset,
+        parserPreset,
+        baseVariableContext: variableContext,
+        actorId: playerCharacterId,
+        entities: soloIrnrEntities,
+        onNarrativeChunk: (chunk: string) => {
+          session!.appendChunk(chunk);
+        },
+        conversationId,
+        messageId: assistantMessage.id,
+        messageIndex: assistantMessageIndex,
+      };
 
-        const irnrResult: IrnrPipelineResult =
-          await irnrPipelineService.runSolo(irnrInput);
+      const irnrResult: IrnrPipelineResult =
+        await irnrPipelineService.runSolo(irnrInput);
 
-        if (!irnrResult.success) {
-          const errorMessage = irnrResult.error ?? "IRNR 流程失败";
-          session.fail(errorMessage);
-          return { success: false, error: errorMessage };
-        }
+      if (!irnrResult.success) {
+        const errorMessage = irnrResult.error ?? "IRNR 流程失败";
+        session.fail(errorMessage);
+        return { success: false, error: errorMessage };
+      }
 
-        // Solo IRNR：回写实体最终状态到当前存档（Upsert）
-        if (
-          irnrResult.finalEntityStates &&
-          irnrResult.finalEntityStates.length > 0
-        ) {
-          // 优先复用已有 repo，否则重新创建
-          let writeRepo = gameStateRepo;
-          if (!writeRepo) {
-            const currentSaveForWriteback = yjsManager.getCurrentSave();
-            const rootDoc = yjsManager.getDoc();
-            if (currentSaveForWriteback && rootDoc) {
-              const charactersMap = currentSaveForWriteback.get("characters");
-              if (
-                charactersMap &&
-                typeof charactersMap === "object" &&
-                "size" in charactersMap
-              ) {
-                writeRepo = createGameStateRepository(
-                  charactersMap as Y.Map<Y.Map<unknown>>,
-                  rootDoc,
-                );
-              }
-            }
-          }
-
-          if (writeRepo) {
-            writeRepo.upsertFromEntityStates(
-              irnrResult.finalEntityStates,
-              irnrResult.createdNpcs,
-            );
-          }
-        }
-
-        // 消费结构化变更（物品/技能 → Inventory 命令）
-        if (irnrResult.resultFrame?.structuralChanges) {
-          await applyStructuralChanges(
-            irnrResult.resultFrame.structuralChanges,
-            commandBus,
-          );
-        }
-
-        const finalContent = irnrResult.narrativeText ?? "";
-        session.complete(
-          finalContent,
-          irnrResult.resultFrame
-            ? { resultFrame: irnrResult.resultFrame }
-            : undefined,
-        );
-      } else {
-        // ── 直连 AI 流程（无 parser 预设） ─────────────────
-        // 提示用户 IRNR 未启用（可见提醒，非静默回退）
-        const irnrWarning =
-          "⚠️ 当前未启用 IRNR 规则结算（未配置 Parser 预设），以下内容为直连叙事生成。";
-
-        console.warn(
-          "[Chat] 未配置 Parser 预设，IRNR 规则引擎未启用。请在预设设置中配置 Parser 预设以启用规则结算功能。",
-        );
-
-        repository.updateMessage(conversationId, assistantMessage.id, {
-          content: `${irnrWarning}\n\n`,
-          status: "streaming",
-        });
-
-        eventBus.emit(
-          eventBus.createEvent(ChatEvents.STREAM_CHUNK, {
-            messageId: assistantMessage.id,
-            chunk: `${irnrWarning}\n\n`,
-          }),
-          { correlationId: context.commandId },
-        );
-
-        const executor = createAiExecutor(aiConfig);
-
-        const result = await executor.execute({
-          preset: narrativePreset,
-          variableContext,
-          // appendMessages 不再使用，用户输入通过 {{user_input}} 变量注入
-          onChunk: (chunk) => {
-            session!.appendChunk(chunk);
-          },
-          onRetry: (attempt, maxAttempts, _error) => {
-            eventBus.emit(
-              eventBus.createEvent(ChatEvents.STREAM_ERROR, {
-                messageId: assistantMessage.id,
-                error: `正在重试 (${attempt}/${maxAttempts})...`,
-              }),
-              { correlationId: context.commandId },
-            );
-          },
-        });
-
-        if (!result.success) {
-          const errorMessage = result.error?.message ?? "Unknown error";
-          session!.fail(errorMessage);
-          return { success: false, error: errorMessage };
-        }
-
-        const finalContent = result.content ?? "";
-        let narrative = finalContent;
-
-        try {
-          const activePreset = await usePresetStore
-            .getState()
-            .getPresetForPurpose("narrative");
-          const postProcessResult = postProcessForPersist(
-            finalContent,
-            activePreset?.postProcessRules,
-          );
-          narrative = postProcessResult.text;
-
-          const miniSummaryParts = postProcessResult.extracted["miniSummary"];
-          if (miniSummaryParts && miniSummaryParts.length > 0) {
-            const miniSummary = miniSummaryParts.join("\n");
-            const dispatchResult = await commandBus.dispatch({
-              type: MemoryCommands.ADD_MINI_SUMMARY,
-              payload: {
-                conversationId,
-                messageId: assistantMessage.id,
-                messageIndex: assistantMessageIndex,
-                content: miniSummary,
-              },
-            });
-
-            if (!dispatchResult.success) {
-              console.warn(
-                `[Chat] 写入小总结失败: ${dispatchResult.error ?? "未知错误"}`,
+      // Solo IRNR：回写实体最终状态到当前存档（Upsert）
+      if (
+        irnrResult.finalEntityStates &&
+        irnrResult.finalEntityStates.length > 0
+      ) {
+        let writeRepo = gameStateRepo;
+        if (!writeRepo) {
+          const currentSaveForWriteback = yjsManager.getCurrentSave();
+          const rootDoc = yjsManager.getDoc();
+          if (currentSaveForWriteback && rootDoc) {
+            const charactersMap = currentSaveForWriteback.get("characters");
+            if (
+              charactersMap &&
+              typeof charactersMap === "object" &&
+              "size" in charactersMap
+            ) {
+              writeRepo = createGameStateRepository(
+                charactersMap as Y.Map<Y.Map<unknown>>,
+                rootDoc,
               );
             }
           }
-
-          if (postProcessResult.warnings.length > 0) {
-            console.warn("[Chat] 后处理警告:", postProcessResult.warnings);
-          }
-        } catch (error) {
-          console.warn(
-            "[Chat] Narrative 后处理失败，回退到原始内容:",
-            error instanceof Error ? error.message : error,
-          );
         }
 
-        session!.complete(narrative);
+        if (writeRepo) {
+          writeRepo.upsertFromEntityStates(
+            irnrResult.finalEntityStates,
+            irnrResult.createdNpcs,
+          );
+        }
       }
+
+      // 消费结构化变更（物品/技能 → Inventory 命令）
+      if (irnrResult.resultFrame?.structuralChanges) {
+        await applyStructuralChanges(
+          irnrResult.resultFrame.structuralChanges,
+          commandBus,
+        );
+      }
+
+      const finalContent = irnrResult.narrativeText ?? "";
+      session.complete(
+        finalContent,
+        irnrResult.resultFrame
+          ? { resultFrame: irnrResult.resultFrame }
+          : undefined,
+      );
     }
 
     return { success: true };

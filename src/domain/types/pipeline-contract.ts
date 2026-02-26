@@ -27,8 +27,8 @@ export interface IrnrPipelineInputBase {
   aiConfig: AIConfig;
   /** narrative 预设（叙事 AI） */
   narrativePreset: Preset;
-  /** parser 预设（解析 AI） */
-  parserPreset: Preset;
+  /** parser 预设（解析 AI，可选——无预设时 Parser Agent 写入空 ruleScript） */
+  parserPreset?: Preset;
   /** 变量上下文基础（pipeline 会注入 gameState / resultFrame） */
   baseVariableContext: VariableContext;
   /** 实体数据（玩家角色等） */
@@ -72,8 +72,6 @@ export interface MultiplayerIrnrInput extends IrnrPipelineInputBase {
 export interface IrnrPipelineResult {
   success: boolean;
   error?: string;
-  /** 解析阶段是否缺少 parser 预设 */
-  missingParserPreset?: boolean;
   ruleScript?: RuleScript;
   resultFrame?: ResultFrame;
   narrativeText?: string;

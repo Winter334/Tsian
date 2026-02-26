@@ -1351,6 +1351,53 @@ src/domain/types/pipeline-blackboard.ts  → PipelineBlackboard（Phase B 创建
 - 端到端测试：联机模式完整流程
 - 验证 `_trace` 输出正确记录了每个 Agent 的执行状态
 
+#### Phase C 实施记录
+
+> **实施状态**：✅ 已完成
+> **实施日期**：2026-02-26
+
+**实际实现与设计差异**：
+
+| #   | 设计文档                                                                     | 实际实现                                                                                  | 原因                                                                                                                        |
+| --- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| D1  | §6.2 中 `runSolo`/`runMultiplayer` 各自独立构建黑板输入                      | 提取通用 `buildBlackboardInput()` 函数，两者共享调用                                      | 消除代码重复，`SoloIrnrInput` 和 `MultiplayerIrnrInput` 的黑板映射逻辑完全相同（仅 `roomId` 通过 `'roomId' in input` 判断） |
+| D2  | §6.2 中结果映射和错误处理内联在 `runSolo` 方法体内                           | 提取 `mapBlackboardToResult()` 和 `handlePipelineError()` 两个独立函数                    | 消除 `runSolo`/`runMultiplayer` 的重复逻辑，保持单一职责                                                                    |
+| D3  | §6.2 中 `messageLocation` 仅以 `conversationId` 存在为条件构建，使用非空断言 | 改为同时检查 `conversationId`、`messageId`、`messageIndex` 三者均非空才构建，移除非空断言 | 审查发现：仅检查 `conversationId` 会在缺少 `messageId` 时导致无效数据写入 post-processor Agent                              |
+| D4  | §6.2 中字段名 `input.userInput` 映射为 `playerInput`                         | 实际实现一致                                                                              | 输入契约使用 `userInput`，黑板使用 `playerInput`，这是有意的命名映射                                                        |
+| D5  | `IrnrPipelineResult.missingParserPreset` 字段                                | 当前阶段未处理该字段（`mapBlackboardToResult` 和 `handlePipelineError` 均未设置）         | 该字段属于旧"直连路径"标识，将在 Phase D（直连路径统一）中处理                                                              |
+
+**文件变更清单**：
+
+| 文件                                         | 变更类型 | 说明                                                              |
+| -------------------------------------------- | -------- | ----------------------------------------------------------------- |
+| `src/modules/game/services/irnr-pipeline.ts` | 重写     | 删除 `executePipeline()` 大函数 + 11 个辅助函数，新增管线集成代码 |
+
+**删除的代码**：
+
+| 删除项                        | 原因                                         |
+| ----------------------------- | -------------------------------------------- |
+| `executePipeline()` 大函数    | 被 `createGamePipeline().execute()` 编排替代 |
+| `parseRuleScriptFromResponse` | 已迁移到 `pipeline-helpers.ts`               |
+| `sanitizeNpcAttributes`       | 已迁移到 `pipeline-helpers.ts`               |
+| `applyValueChangesToAccessor` | 已迁移到 `pipeline-helpers.ts`               |
+| `applyTagChangesToAccessor`   | 已迁移到 `pipeline-helpers.ts`               |
+| `filterTagsForPersistence`    | 已迁移到 `pipeline-helpers.ts`               |
+| `buildTalentIdsByEntityId`    | 已迁移到 `pipeline-helpers.ts`               |
+| `buildGameStateSnapshot`      | 已迁移到 `pipeline-helpers.ts`               |
+| `buildEntityEffects`          | 已迁移到 `pipeline-helpers.ts`               |
+| `buildInventoryData`          | 已迁移到 `pipeline-helpers.ts`               |
+| `mergeAllResultFrames`        | 已迁移到 `pipeline-helpers.ts`               |
+| `toEntityInfo`                | 已迁移到 `pipeline-helpers.ts`               |
+| 30+ 不再需要的 import 语句    | Agent 内部自行导入，服务层不再直接使用       |
+
+**新增函数**：
+
+| 函数                      | 职责                                                              |
+| ------------------------- | ----------------------------------------------------------------- |
+| `buildBlackboardInput()`  | 将 `SoloIrnrInput`/`MultiplayerIrnrInput` 映射为黑板输入          |
+| `mapBlackboardToResult()` | 将 `PipelineBlackboard` 产出映射为 `IrnrPipelineResult`           |
+| `handlePipelineError()`   | 将 `PipelineError` 转换为 `IrnrPipelineResult { success: false }` |
+
 ### Phase D：直连路径统一（消除分支代码）
 
 目标：将 Chat Handler 中"有 Parser 预设走 IRNR，无 Parser 走直连"的分支代码统一为管线。
@@ -1364,6 +1411,46 @@ src/domain/types/pipeline-blackboard.ts  → PipelineBlackboard（Phase B 创建
 **说明**：当前 `sendMessageHandler` 在行 256-258 有一个 `if (hasParserPreset)` 分支。统一后，所有场景都走管线：
 - 有 Parser 预设：EntityAccessor → Parser → Engine → Narrator → PostProcessor → Finalizer
 - 无 Parser 预设：EntityAccessor → Parser（写入空 ruleScript）→ Engine（产出空 resultFrame）→ Narrator → PostProcessor → Finalizer
+
+#### Phase D 实施记录
+
+> **实施状态**：✅ 已完成
+> **实施日期**：2026-02-26
+
+**实际实现与设计差异**：
+
+| #   | 设计文档                                                                                            | 实际实现                                      | 原因                                                                                                             |
+| --- | --------------------------------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| D1  | D.1 步骤：Parser Agent 内部处理"无 Parser 预设"场景                                                 | 已在 Phase B.2 中完成，无需额外修改           | Parser Agent 第 21-23 行已有 `if (!bb.presets.parser)` 兜底逻辑，写入空 `{ version: 2, actions: [] }`            |
+| D2  | `IrnrPipelineInputBase.parserPreset: Preset`（必填）                                                | 改为 `parserPreset?: Preset`（可选）          | 统一后不再保证调用方有 parser 预设，需要允许缺失                                                                 |
+| D3  | `IrnrPipelineResult.missingParserPreset?: boolean` 字段存在                                         | 已移除该字段                                  | 统一后无 parser 预设是正常模式，不再需要特别标记的异常状态                                                       |
+| D4  | 直连路径中有 `⚠️ 当前未启用 IRNR 规则结算` 警告文本注入                                              | 已随直连路径一起移除                          | 统一后所有路径走管线，无需区分性警告                                                                             |
+| D5  | 直连路径中 `createAiExecutor` 提供 `onRetry` 回调发布 `STREAM_ERROR` 事件                           | 未在 Narrator Agent 中补充 `onRetry`          | Narrator Agent 依赖 `createAiExecutor` 内部默认重试机制，保持 Agent 实现简洁一致                                 |
+| D6  | `getPresetForPurpose("parser")` 包含 parser→narrative 回退逻辑，无 parser 预设时返回 narrative 预设 | 移除回退逻辑，无 parser 预设时直接返回 `null` | 统一走管线后，Parser Agent 已有内建空预设兜底逻辑，回退会导致用 narrative 模板调 Parser AI → RuleScript 解析失败 |
+
+**文件变更清单**：
+
+| 文件                                    | 变更类型 | 说明                                                            |
+| --------------------------------------- | -------- | --------------------------------------------------------------- |
+| `src/domain/types/pipeline-contract.ts` | 修改     | `parserPreset` 改为可选；移除 `missingParserPreset` 字段        |
+| `src/modules/chat/commands/handlers.ts` | 修改     | 删除直连 AI 路径（~90 行），移除 if-else 分支，统一走 IRNR 管线 |
+| `src/lib/prompt/store.ts`               | 修改     | 移除 `getPresetForPurpose` 中 parser→narrative 回退逻辑         |
+
+**删除的代码**：
+
+| 删除项                           | 原因                                                                          |
+| -------------------------------- | ----------------------------------------------------------------------------- |
+| `hasParserPreset` 分支判定变量   | 不再需要区分有无 parser 预设                                                  |
+| 直连 AI 路径 else 分支（~90 行） | 被统一的 IRNR 管线路径替代                                                    |
+| IRNR 警告文本注入逻辑            | 统一后无需警告                                                                |
+| `createAiExecutor` import        | 仅直连路径使用，已无引用                                                      |
+| `postProcessForPersist` import   | 仅直连路径使用，已无引用（管线中由 PostProcessor Agent 处理）                 |
+| `MemoryCommands` import          | 仅直连路径的手动小总结写入使用，已无引用（管线中由 PostProcessor Agent 处理） |
+| `missingParserPreset` 类型字段   | 统一后无意义                                                                  |
+
+**备注**：
+
+联机模块 `src/modules/room/commands/ai-handlers.ts` 中仍存在类似的 `hasParserPreset` 分支逻辑，可作为后续统一任务处理。
 
 ### Phase E：Director Agent 集成（远期）
 

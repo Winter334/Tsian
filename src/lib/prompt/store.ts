@@ -325,10 +325,6 @@ export const usePresetStore = create<PresetStoreState>()(
         }
       }
 
-      if (purpose === "parser") {
-        return get().getPresetForPurpose("narrative");
-      }
-
       return null;
     },
 
