@@ -72,6 +72,8 @@ export const narratorAgent: AgentDescriptor<PipelineBlackboard> = {
       );
     }
 
+    bb._agentRawOutputs ??= {};
+    bb._agentRawOutputs.narrator = narrativeText;
     bb.narrativeText = narrativeText;
   },
 };

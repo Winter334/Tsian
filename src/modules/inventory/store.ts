@@ -68,7 +68,7 @@ export const useInventoryStore = create<InventoryState>()(
 
         if (existingIndex !== -1) {
           if (import.meta.env.DEV) {
-            console.warn(
+            console.debug(
               `[InventoryStore] _addItem: 检测到重复 instanceId "${item.instanceId}"，执行替换而非追加`,
             );
           }
@@ -157,7 +157,7 @@ export const useInventoryStore = create<InventoryState>()(
 
         if (existingIndex !== -1) {
           if (import.meta.env.DEV) {
-            console.warn(
+            console.debug(
               `[InventoryStore] _addSkill: 检测到重复 instanceId "${skill.instanceId}"，执行替换而非追加`,
             );
           }

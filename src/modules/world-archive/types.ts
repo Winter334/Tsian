@@ -23,19 +23,6 @@ export interface EntityRelationship {
   description: string;
 }
 
-// === 演变日志 ===
-export interface EvolutionEntry {
-  turn: number;
-  type:
-    | "state_change"
-    | "relationship_change"
-    | "presence_change"
-    | "milestone";
-  description: string;
-  cause?: string;
-  timestamp: number;
-}
-
 // === 叙事实体（核心） ===
 export interface NarrativeEntity {
   id: string;
@@ -49,7 +36,6 @@ export interface NarrativeEntity {
   gameEntityId?: string;
   relationships: EntityRelationship[];
   tags: string[];
-  evolutionLog: EvolutionEntry[];
   createdAt: number;
   updatedAt: number;
 }
@@ -72,13 +58,6 @@ export type ArchiveUpdate =
       type: "add_relationship";
       entityId: string;
       relationship: EntityRelationship;
-    }
-  | {
-      type: "log_evolution";
-      entityId: string;
-      evolutionType: EvolutionEntry["type"];
-      description: string;
-      cause?: string;
     };
 
 // === 档案快照（注入到黑板） ===

@@ -19,6 +19,7 @@ import type { ArchiveEntityForContext } from "@/lib/prompt/types";
 import { getRuntimeWorldConfig } from "@/lib/world/resolve-config";
 import { createGamePipeline } from "@/modules/game/agents";
 import { useWorldArchiveStore } from "@/modules/world-archive/store";
+import { useAiOutputLogStore, type AiOutputSource } from "@/stores";
 
 // ─── 输入/输出类型（从 domain 层 re-export，保持向后兼容） ───
 
@@ -123,9 +124,56 @@ function mapBlackboardToResult(bb: PipelineBlackboard): IrnrPipelineResult {
   };
 }
 
+const AI_OUTPUT_SOURCE_SET: ReadonlySet<AiOutputSource> = new Set([
+  "director",
+  "parser",
+  "narrator",
+  "summarizer",
+]);
+
+function isAiOutputSource(source: string): source is AiOutputSource {
+  return AI_OUTPUT_SOURCE_SET.has(source as AiOutputSource);
+}
+
+/**
+ * 从管线黑板中采集各 AI Agent 的原始输出，写入 AiOutputLogStore
+ */
+function collectAiOutputs(bb: Partial<PipelineBlackboard>): void {
+  const rawOutputs = bb._agentRawOutputs;
+  if (!rawOutputs) {
+    return;
+  }
+
+  const store = useAiOutputLogStore.getState();
+  const turnNumber = bb.turnNumber ?? 0;
+  const trace = bb._trace ?? [];
+  const timestamp = Date.now();
+
+  for (const [agentId, rawOutput] of Object.entries(rawOutputs)) {
+    if (!isAiOutputSource(agentId)) {
+      continue;
+    }
+
+    const traceEntry = trace.find((entry) => entry.agentId === agentId);
+
+    store.appendEntry({
+      turn: turnNumber,
+      source: agentId,
+      rawOutput,
+      duration: traceEntry
+        ? traceEntry.completedAt - traceEntry.startedAt
+        : undefined,
+      success: traceEntry?.success ?? true,
+      error: traceEntry?.error,
+      timestamp,
+    });
+  }
+}
+
 function handlePipelineError(error: unknown): IrnrPipelineResult {
   if (error instanceof PipelineError) {
     const bb = error.blackboard as Partial<PipelineBlackboard>;
+    collectAiOutputs(bb);
     return {
       success: false,
       error: error.message,
@@ -144,6 +192,7 @@ class IrnrPipelineServiceImpl implements IrnrPipelineServiceContract {
 
     try {
       const bb = await pipeline.execute(blackboardInput);
+      collectAiOutputs(bb);
       return mapBlackboardToResult(bb);
     } catch (error) {
       return handlePipelineError(error);
@@ -158,6 +207,7 @@ class IrnrPipelineServiceImpl implements IrnrPipelineServiceContract {
 
     try {
       const bb = await pipeline.execute(blackboardInput);
+      collectAiOutputs(bb);
       return mapBlackboardToResult(bb);
     } catch (error) {
       return handlePipelineError(error);

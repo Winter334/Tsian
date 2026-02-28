@@ -51,7 +51,6 @@ export type {
   EntityArchetype,
   EntityPresence,
   EntityRelationship,
-  EvolutionEntry,
   NarrativeEntity,
 } from "./types";
 export {

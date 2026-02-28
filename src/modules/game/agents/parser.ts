@@ -74,6 +74,8 @@ export const parserAgent: AgentDescriptor<PipelineBlackboard> = {
     }
 
     const parserRawContent = parserResult.content ?? parserResponse;
+    bb._agentRawOutputs ??= {};
+    bb._agentRawOutputs.parser = parserRawContent;
     console.info("[IRNR Pipeline] Parser AI 返回内容:", parserRawContent);
 
     const parsed = parseRuleScriptFromResponse(parserRawContent);

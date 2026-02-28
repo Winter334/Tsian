@@ -57,8 +57,12 @@ import {
 import { SaveEvents } from "@/domain/events/save";
 import { postProcessForPersist } from "@/lib/post-process";
 import { usePresetStore } from "@/lib/prompt";
+import { computeFullStats } from "@/lib/rules/stats-pipeline";
 import { getUniqueTag } from "@/lib/user-identity";
-import { resolveWorldConfig } from "@/lib/world/resolve-config";
+import {
+  getRuntimeWorldConfig,
+  resolveWorldConfig,
+} from "@/lib/world/resolve-config";
 import { worldConfigToYMap } from "@/lib/world/world-config-codec";
 import {
   applyCharacterUpdates,
@@ -2537,9 +2541,53 @@ export async function createCharacterHandler(
       };
     }
 
+    const runtimeWorldConfig = getRuntimeWorldConfig();
+    const fullStats = computeFullStats({
+      baseAttributes: characterData.attributes ?? {},
+      primaryAttributes: runtimeWorldConfig.primaryAttributes,
+      derivedStats: runtimeWorldConfig.derivedStats,
+    });
+
+    const mergedAttributes: Record<string, unknown> = {
+      ...(characterData.attributes ?? {}),
+    };
+
+    for (const stat of runtimeWorldConfig.derivedStats) {
+      if (!stat.isResource) continue;
+
+      const maxField = stat.maxField;
+      const computedCurrent = fullStats[stat.key];
+      const computedMax =
+        typeof maxField === "string" ? fullStats[maxField] : undefined;
+
+      const resolvedCurrent =
+        typeof computedCurrent === "number" && Number.isFinite(computedCurrent)
+          ? computedCurrent
+          : typeof computedMax === "number" && Number.isFinite(computedMax)
+            ? computedMax
+            : undefined;
+
+      if (
+        mergedAttributes[stat.key] === undefined &&
+        typeof resolvedCurrent === "number"
+      ) {
+        mergedAttributes[stat.key] = resolvedCurrent;
+      }
+
+      if (
+        typeof maxField === "string" &&
+        mergedAttributes[maxField] === undefined &&
+        typeof computedMax === "number" &&
+        Number.isFinite(computedMax)
+      ) {
+        mergedAttributes[maxField] = computedMax;
+      }
+    }
+
     // 创建角色实体
     const character = createCharacter({
       ...characterData,
+      attributes: mergedAttributes,
       creatorUniqueTag: uniqueTag,
       operatorUserId: userId,
       operatorUniqueTag: uniqueTag,

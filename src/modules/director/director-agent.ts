@@ -269,6 +269,8 @@ export const directorAgent: AgentDescriptor<PipelineBlackboard> = {
     }
 
     const rawContent = result.content ?? responseText;
+    bb._agentRawOutputs ??= {};
+    bb._agentRawOutputs.director = rawContent;
     const parsed = parseDirectorOutput(rawContent);
 
     const archiveStore = useWorldArchiveStore.getState();

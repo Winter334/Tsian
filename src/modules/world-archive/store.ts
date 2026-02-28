@@ -15,7 +15,6 @@ import type {
   EntityArchetype,
   EntityPresence,
   EntityRelationship,
-  EvolutionEntry,
   NarrativeEntity,
 } from "./types";
 
@@ -36,9 +35,13 @@ export interface WorldArchiveState {
   updateEntityPresence(id: string, newPresence: EntityPresence): void;
   updateEssence(id: string, newEssence: string): void;
   addRelationship(id: string, relationship: EntityRelationship): void;
-  appendEvolutionEntry(
+  updateEntityName(id: string, newName: string): void;
+  updateTags(id: string, newTags: string[]): void;
+  removeRelationship(id: string, targetEntityId: string): void;
+  updateRelationship(
     id: string,
-    entry: Omit<EvolutionEntry, "timestamp">,
+    targetEntityId: string,
+    updates: Partial<EntityRelationship>,
   ): void;
   removeEntity(id: string): void;
 
@@ -60,22 +63,11 @@ function cloneRelationship(
   };
 }
 
-function cloneEvolutionEntry(entry: EvolutionEntry): EvolutionEntry {
-  return {
-    turn: entry.turn,
-    type: entry.type,
-    description: entry.description,
-    cause: entry.cause,
-    timestamp: entry.timestamp,
-  };
-}
-
 function cloneEntity(entity: NarrativeEntity): NarrativeEntity {
   return {
     ...entity,
     relationships: entity.relationships.map(cloneRelationship),
     tags: [...entity.tags],
-    evolutionLog: entity.evolutionLog.map(cloneEvolutionEntry),
   };
 }
 
@@ -117,7 +109,6 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
         id: generateSortableId(),
         relationships: data.relationships.map(cloneRelationship),
         tags: [...data.tags],
-        evolutionLog: data.evolutionLog.map(cloneEvolutionEntry),
         createdAt: now,
         updatedAt: now,
       };
@@ -177,19 +168,64 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
       });
     },
 
-    appendEvolutionEntry: (id, entry) => {
+    updateEntityName: (id, newName) => {
+      set((state) => {
+        const entity = state.entities[id];
+        if (!entity || entity.name === newName) {
+          return;
+        }
+
+        entity.name = newName;
+        entity.updatedAt = Date.now();
+      });
+    },
+
+    updateTags: (id, newTags) => {
       set((state) => {
         const entity = state.entities[id];
         if (!entity) {
           return;
         }
 
-        const nextEntry: EvolutionEntry = {
-          ...entry,
-          timestamp: Date.now(),
-        };
+        entity.tags = [...newTags];
+        entity.updatedAt = Date.now();
+      });
+    },
 
-        entity.evolutionLog.push(nextEntry);
+    removeRelationship: (id, targetEntityId) => {
+      set((state) => {
+        const entity = state.entities[id];
+        if (!entity) {
+          return;
+        }
+
+        const relationshipIndex = entity.relationships.findIndex(
+          (relationship) => relationship.targetEntityId === targetEntityId,
+        );
+        if (relationshipIndex === -1) {
+          return;
+        }
+
+        entity.relationships.splice(relationshipIndex, 1);
+        entity.updatedAt = Date.now();
+      });
+    },
+
+    updateRelationship: (id, targetEntityId, updates) => {
+      set((state) => {
+        const entity = state.entities[id];
+        if (!entity) {
+          return;
+        }
+
+        const relationship = entity.relationships.find((item) => {
+          return item.targetEntityId === targetEntityId;
+        });
+        if (!relationship) {
+          return;
+        }
+
+        Object.assign(relationship, updates);
         entity.updatedAt = Date.now();
       });
     },
@@ -236,7 +272,6 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
                 gameEntityId: update.gameEntityId,
                 relationships: [],
                 tags: update.tags ? [...update.tags] : [],
-                evolutionLog: [],
                 createdAt: now,
                 updatedAt: now,
               };
@@ -301,25 +336,6 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
 
               entity.relationships.push(cloneRelationship(update.relationship));
               entity.lastActiveTurn = currentTurn;
-              entity.updatedAt = Date.now();
-              break;
-            }
-
-            case "log_evolution": {
-              const entity = state.entities[update.entityId];
-              if (!entity) {
-                break;
-              }
-
-              const nextEntry: EvolutionEntry = {
-                turn: currentTurn,
-                type: update.evolutionType,
-                description: update.description,
-                cause: update.cause,
-                timestamp: Date.now(),
-              };
-
-              entity.evolutionLog.push(nextEntry);
               entity.updatedAt = Date.now();
               break;
             }

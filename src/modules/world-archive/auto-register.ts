@@ -29,8 +29,6 @@ export function autoRegisterNpcs(
     }
 
     const essence = buildInitialEssence(npc);
-    const now = Date.now();
-
     const nextEntity: Omit<NarrativeEntity, "id" | "createdAt" | "updatedAt"> =
       {
         archetype: "character",
@@ -43,14 +41,6 @@ export function autoRegisterNpcs(
         gameEntityId: npc.id,
         relationships: [],
         tags: [],
-        evolutionLog: [
-          {
-            turn: currentTurn,
-            type: "milestone",
-            description: `${npc.name} 首次登场`,
-            timestamp: now,
-          },
-        ],
       };
 
     const createdEntity = store.createEntity(nextEntity);
@@ -88,26 +78,12 @@ function refreshExistingEntity(
     return null;
   }
 
-  const nextEvolutionLog = shouldActivate
-    ? [
-        ...entity.evolutionLog,
-        {
-          turn: currentTurn,
-          type: "milestone" as const,
-          description: `${entity.name} 重新登场`,
-          cause: "NPC 再次 spawn，自动激活档案",
-          timestamp: now,
-        },
-      ]
-    : entity.evolutionLog;
-
   const nextEntity: NarrativeEntity = {
     ...entity,
     name: entity.name || npc.name,
     essence: nextEssence,
     presence: shouldActivate ? "active" : entity.presence,
     lastActiveTurn: currentTurn,
-    evolutionLog: nextEvolutionLog,
     updatedAt: now,
   };
 

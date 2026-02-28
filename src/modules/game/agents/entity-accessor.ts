@@ -44,6 +44,32 @@ export const entityAccessorAgent: AgentDescriptor<PipelineBlackboard> = {
       const entity = entityAccessor.getEntityData(entityId);
       if (!entity || entity.type !== "character") continue;
 
+      const resourceDefaults = buildDefaultEntityFromWorldConfig(
+        entityId,
+        bb.worldConfig,
+      );
+
+      for (const stat of bb.worldConfig.derivedStats) {
+        if (!stat.isResource) continue;
+
+        if (entity.fields[stat.key] === undefined) {
+          const fallbackValue = resourceDefaults.fields[stat.key];
+          if (fallbackValue !== undefined) {
+            entity.fields[stat.key] = fallbackValue;
+          }
+        }
+
+        if (
+          typeof stat.maxField === "string" &&
+          entity.fields[stat.maxField] === undefined
+        ) {
+          const fallbackMax = resourceDefaults.fields[stat.maxField];
+          if (fallbackMax !== undefined) {
+            entity.fields[stat.maxField] = fallbackMax;
+          }
+        }
+      }
+
       const talentIds = talentIdsByEntityId.get(entityId) ?? [];
       if (talentIds.length > 0) {
         applyTalentsToEntity(entity, talentIds, bb.worldConfig);

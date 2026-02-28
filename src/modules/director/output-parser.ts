@@ -386,52 +386,31 @@ function pushStateChange(
   updates: ArchiveUpdate[],
   entityId: string,
   newState: string,
-  currentTurn: number,
+  _currentTurn: number,
 ): void {
   updates.push({ type: "update_state", entityId, newState });
-  updates.push({
-    type: "log_evolution",
-    entityId,
-    evolutionType: "state_change",
-    description: newState,
-    cause: `导演推演（回合 ${currentTurn}）`,
-  });
 }
 
 function pushPresenceChange(
   updates: ArchiveUpdate[],
   entityId: string,
   newPresence: EntityPresence,
-  description: string,
-  currentTurn: number,
+  _description: string,
+  _currentTurn: number,
 ): void {
   updates.push({ type: "update_presence", entityId, newPresence });
-  updates.push({
-    type: "log_evolution",
-    entityId,
-    evolutionType: "presence_change",
-    description: description || `存在状态变更为 ${newPresence}`,
-    cause: `导演推演（回合 ${currentTurn}）`,
-  });
 }
 
 function pushRelationshipChange(
   updates: ArchiveUpdate[],
   entityId: string,
   relationship: EntityRelationship,
-  currentTurn: number,
+  _currentTurn: number,
 ): void {
   updates.push({
     type: "add_relationship",
     entityId,
     relationship,
-  });
-  updates.push({
-    type: "log_evolution",
-    entityId,
-    evolutionType: "relationship_change",
-    description: relationship.description,
-    cause: `导演推演（回合 ${currentTurn}）`,
   });
 }
 

@@ -1,8 +1,8 @@
 # 世界档案系统与导演 AI 统一设计方案
 
-> **文档状态**：架构决策已确认，待实施
+> **文档状态**：Phase A 已实施，Phase B 已确认简化方案
 > **创建日期**：2026-02
-> **审阅日期**：2026-02-27
+> **审阅日期**：2026-02-28
 > **前置文档**：
 > - [director-ai-memory-system-design.md](director-ai-memory-system-design.md)（原 Director AI 概念设计）
 > - [memory-system-design.md](memory-system-design.md)（分段记忆系统，已实施）
@@ -17,16 +17,19 @@
 
 ## 1. 设计决策摘要
 
-| 决策项             | 方案                                                                |
-| ------------------ | ------------------------------------------------------------------- |
-| 系统定位           | 世界档案 + 导演 AI 作为不可分割的整体，是构建动态世界的核心基础设施 |
-| 导演 AI 角色       | **编剧/DM**——为整台戏提供剧本指导，不接管其他 AI 的执行工作         |
-| 推演职能归属       | 从 Parser AI 和正文 AI 收回推演职能，集中到导演 AI                  |
-| 管道流程变化       | 最小变化——导演 AI 作为前置阶段注入指导信息，不改变现有管道结构      |
-| 导演输出格式       | 简练的自然语言指导，不输出 RuleScript                               |
-| 降级策略           | 不支持关闭导演 AI——动态世界是项目核心卖点                           |
-| 实体类型范围       | 先聚焦核心（NPC、事件），保留扩展性，日后按需增加                   |
-| 世界档案与现有系统 | 不替代 Character/Lorebook/Memory，而是填补它们之间的空白层          |
+| 决策项             | 方案                                                                   |
+| ------------------ | ---------------------------------------------------------------------- |
+| 系统定位           | 世界档案 + 导演 AI 作为不可分割的整体，是构建动态世界的核心基础设施    |
+| 导演 AI 角色       | **编剧/DM**——为整台戏提供剧本指导，不接管其他 AI 的执行工作            |
+| 推演职能归属       | 从 Parser AI 和正文 AI 收回推演职能，集中到导演 AI                     |
+| 管道流程变化       | 最小变化——导演 AI 作为前置阶段注入指导信息，不改变现有管道结构         |
+| 导演输出格式       | 简练的自然语言指导，不输出 RuleScript                                  |
+| 降级策略           | 不支持关闭导演 AI——动态世界是项目核心卖点                              |
+| 实体类型范围       | 先聚焦核心（NPC、事件），保留扩展性，日后按需增加                      |
+| 世界档案与现有系统 | 不替代 Character/Lorebook/Memory，而是填补它们之间的空白层             |
+| 初始化策略         | **无专属初始化**——导演 AI 从第一轮开始正常工作，大纲/NPC/伏笔自然涌现  |
+| NPC 创建策略       | NPC 按需创建，固定 NPC 通过世界书/预设系统注入，不预注册               |
+| 大纲粒度           | 只规划近期方向（currentArc），不规划结局，plannedArcs 在游戏中动态生成 |
 
 ---
 
@@ -757,21 +760,51 @@ planted ──→ hinted ──→ hinted ──→ revealed
    └──→ abandoned                     └──→ [完结]
 ```
 
-### 6.3 大纲初始化
+### 6.3 大纲与伏笔的自然涌现（无专属初始化）
 
-游戏开始时，导演 AI 基于以下信息生成初始大纲：
+> **设计决策**：不设置专门的初始化阶段。导演 AI 从第一轮开始正常运行，大纲、NPC 档案和伏笔在游戏进程中自然涌现。
+
+**冷启动时的导演 AI 上下文**：
 
 ```
-输入：
-  - 玩家角色信息（种族 / 背景 / 性格 / 外貌）
-  - 世界观设定（WorldConfig）
-  - 开局场景设定（scenario）
-
-输出：
-  - 初始 StoryArc（第一章大纲）
-  - 初始世界档案（开局关键 NPC 的 NarrativeEntity）
-  - 初始伏笔（开局埋下的种子）
+首轮导演 AI 上下文：
+  ┌─ 世界档案 = 空（尚无叙事实体）
+  ├─ 剧情大纲 = "（尚无剧情大纲）"
+  ├─ 伏笔库 = 空
+  ├─ 分段记忆 = 空
+  ├─ 但可用的信息：
+  │   ├─ 预设 scenario（剧情梗概）
+  │   ├─ 世界书常驻条目（世界背景设定）
+  │   ├─ 玩家角色信息（种族 / 背景 / 性格 / 外貌）
+  │   └─ WorldConfig 摘要（世界名称 + 关键机制概述）
+  └─ 玩家首条行动
 ```
+
+**导演 AI 第一轮的正常工作**：
+
+1. 基于上述上下文进行常规思维链推演
+2. 在 `<outline_updates>` 中自然地构建首个 `currentArc`
+3. 在 `<archive_updates>` 中按需创建首批 NPC 的 `NarrativeEntity`
+4. 如果叙事需要，在 `<outline_updates>` 中植入首批伏笔
+
+**NPC 创建策略**：
+
+- **固定/预设 NPC**：通过世界书条目和预设系统注入上下文，导演 AI 阅读后了解其存在
+- **动态 NPC**：导演 AI 判断需要时，通过 `<archive_updates>` 创建 NarrativeEntity + 在 `<plot_directives>` 中指导 Parser AI spawn
+- NPC 不需要"预注册"——其信息在导演 AI 决定其登场时自然生成
+
+**大纲粒度**：
+
+- 只规划 `currentArc`（当前弧线方向 + 2~3 个近期里程碑）
+- `plannedArcs` 初始为空，在游戏进行中由导演 AI 动态生成
+- 不规划结局——大纲是"导演的工作笔记"，不是完整剧本
+- 远期重要剧情节点通过世界书和预设注入，而非在大纲中硬编码
+
+**伏笔策略**：
+
+- 伏笔随剧情发展由导演 AI 有机植入，不开局预设
+- 导演 AI 在每轮的 `<outline_updates>` 中可新增/暗示/揭示伏笔
+- 与"逐步暗示而非突然揭示"的策略一致
 
 ---
 
@@ -1106,7 +1139,6 @@ src/modules/director/
 ├── output-parser.ts            # 解析导演 AI 的 XML 输出
 ├── director-agent.ts           # 黑板管道 Agent 实现
 ├── context-builder.ts          # 构建导演 AI 的 VariableContext
-├── initialization.ts           # 大纲初始化逻辑
 └── presets/
     └── default-director.ts     # 默认导演预设
 ```
@@ -1115,45 +1147,56 @@ src/modules/director/
 
 ## 11. 分阶段实施
 
-### Phase A：世界档案基础 + 导演 AI 核心
+### Phase A：世界档案基础 + 导演 AI 核心 ✅ 已完成
 
 > 这是一个不可分割的基础阶段。
 
-- [ ] `NarrativeEntity` / `EntityArchetype` / `EntityPresence` 类型定义
-- [ ] `WorldArchiveStore` 实现（Zustand）
-- [ ] `WorldArchiveRepository` 实现（Yjs 持久化）
-- [ ] NPC spawn 时自动建档（`auto-register.ts`）
-- [ ] `worldArchive` Marker 注册 + 渲染逻辑
-- [ ] `computeArchiveData()` — 按 Presence 分层注入计算
-- [ ] `PlotOutline` / `Foreshadow` 类型定义
-- [ ] `DirectorStore` 实现
-- [ ] `DirectorRepository` 实现（Yjs 持久化）
-- [ ] 导演 AI 预设设计（定制思维链 prompt）
-- [ ] `parseDirectorOutput()` — XML 标签解析
-- [ ] `directorAgent` 实现（黑板管道 Agent）
-- [ ] `buildDirectorContext()` — 导演 AI 上下文构建
-- [ ] `applyArchiveUpdates()` — 管线结束后回写世界档案
-- [ ] 扩展 `PresetPurpose`：添加 `"director"`
-- [ ] 修改 Parser 预设：注入 `plotDirectives`，移除推演指引
-- [ ] 修改 Narrator 预设：注入 `narrativeHints`，调整涌现指引
-- [ ] `PipelineBlackboard` 扩展：`archiveSnapshot`、`plotDirectives`、`narrativeHints`、`archiveUpdates` 字段
-- [ ] Presence ↔ Character.status 同步逻辑
+- [x] `NarrativeEntity` / `EntityArchetype` / `EntityPresence` 类型定义
+- [x] `WorldArchiveStore` 实现（Zustand）
+- [x] `WorldArchiveRepository` 实现（Yjs 持久化）
+- [x] NPC spawn 时自动建档（`auto-register.ts`）
+- [x] `worldArchive` Marker 注册 + 渲染逻辑
+- [x] `computeArchiveData()` — 按 Presence 分层注入计算
+- [x] `PlotOutline` / `Foreshadow` 类型定义
+- [x] `DirectorStore` 实现
+- [x] `DirectorRepository` 实现（Yjs 持久化）
+- [x] 导演 AI 预设设计（定制思维链 prompt）
+- [x] `parseDirectorOutput()` — XML 标签解析
+- [x] `directorAgent` 实现（黑板管道 Agent）
+- [x] `buildDirectorContext()` — 导演 AI 上下文构建
+- [x] `applyArchiveUpdates()` — 管线结束后回写世界档案
+- [x] 扩展 `PresetPurpose`：添加 `"director"`
+- [x] 修改 Parser 预设：注入 `plotDirectives`，移除推演指引
+- [x] 修改 Narrator 预设：注入 `narrativeHints`，调整涌现指引
+- [x] `PipelineBlackboard` 扩展：`archiveSnapshot`、`plotDirectives`、`narrativeHints`、`archiveUpdates` 字段
+- [x] Presence ↔ Character.status 同步逻辑
 
-### Phase B：剧情大纲初始化
+### Phase B：提示词优化（全部为预设/prompt 调整，不涉及功能代码）
 
-- [ ] 开局信息收集 → 导演 AI 生成初始大纲
-- [ ] 初始世界档案生成（开局关键 NPC）
-- [ ] 初始伏笔埋设
+> **设计变更**：原计划为专属的初始化阶段（开局生成大纲/NPC/伏笔），经讨论确认简化为提示词层面的调整。
+> 导演 AI 从第一轮开始正常运行，大纲、NPC 和伏笔在游戏过程中自然涌现，不需要专属的初始化流程。
+> 固定 NPC 和远期重要剧情节点通过世界书和预设系统注入。
 
-### Phase C：增强与优化
+**冷启动引导**：
 
-- [ ] 大纲偏离检测与自动修订
-- [ ] 伏笔铺垫策略（逐步暗示而非突然揭示）
-- [ ] 世界事件的间接影响渲染
+- [ ] 导演系统提示词增加冷启动引导（当大纲为空时，指导导演 AI 构建首个 StoryArc）
+- [ ] 导演系统提示词增加 NPC 按需创建指引（在 `archive_updates` 中创建 + 在 `plot_directives` 中指导 spawn）
+- [ ] 导演系统提示词增加伏笔自然植入指引（随剧情发展有机涌现，而非集中预设）
+- [ ] 导演系统提示词增加大纲粒度指引（只规划近期方向，不规划结局）
+
+**推演增强**：
+
+- [ ] 大纲偏离检测与自动修订（在导演思维链中增加偏离评估步骤）
+- [ ] 伏笔铺垫策略优化（在导演 prompt 中强化逐步暗示的指引）
+- [ ] 世界事件的间接影响渲染（在导演 prompt 中增加跨场景事件影响的推演指引）
+
+### Phase C：功能开发
+
 - [ ] 演变日志裁剪（压缩早期条目）
 - [ ] 世界档案管理 UI（用户可查看/编辑档案）
 - [ ] 导演决策日志可视化
 - [ ] 新增实体类别（faction、location 等）
+- [ ] 导演 AI 专属管理功能（远期，用于更灵活地管理大纲、NPC、伏笔等）
 
 ---
 
@@ -1171,12 +1214,16 @@ src/modules/director/
 
 > 以下决策经评审讨论后确认，不再视为待讨论事项。
 
-| 决策项                 | 决策                                 | 理由                                                                                                            |
-| ---------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| 导演 AI 必选性         | `optional: false`（不可关闭）        | 推演职能集中化后，缺少导演 AI 等于世界停摆，其他 AI 看似正常实则无法推进剧情。fail-fast 优于 silent degradation |
-| XML 输出解析策略       | **fail-fast**——解析失败直接终止管线  | 与必选性一致：导演输出格式错误意味着整轮推演不可靠，静默跳过只会制造"正常假象"，增加问题排查难度                |
-| 实体引用方式           | 支持 ID 模糊匹配（名称→ID 反查）     | 导演 AI 可能用名称而非精确 ID 引用实体，`parseDirectorOutput()` 应查询世界档案做名称反查                        |
-| Presence ↔ Status 同步 | `applyArchiveUpdates()` 中原子性同步 | 避免异步同步导致的不一致问题（导演认为 NPC 在场但游戏数据层标记为离场）                                         |
+| 决策项                 | 决策                                   | 理由                                                                                                            |
+| ---------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 导演 AI 必选性         | `optional: false`（不可关闭）          | 推演职能集中化后，缺少导演 AI 等于世界停摆，其他 AI 看似正常实则无法推进剧情。fail-fast 优于 silent degradation |
+| XML 输出解析策略       | **fail-fast**——解析失败直接终止管线    | 与必选性一致：导演输出格式错误意味着整轮推演不可靠，静默跳过只会制造"正常假象"，增加问题排查难度                |
+| 实体引用方式           | 支持 ID 模糊匹配（名称→ID 反查）       | 导演 AI 可能用名称而非精确 ID 引用实体，`parseDirectorOutput()` 应查询世界档案做名称反查                        |
+| Presence ↔ Status 同步 | `applyArchiveUpdates()` 中原子性同步   | 避免异步同步导致的不一致问题（导演认为 NPC 在场但游戏数据层标记为离场）                                         |
+| 无专属初始化阶段       | 导演 AI 从第一轮正常运行，无开局初始化 | 大纲/NPC/伏笔自然涌现更灵活；固定内容通过世界书/预设注入；减少系统复杂度                                        |
+| NPC 按需创建           | 不预注册 NPC，登场时才创建实体         | 充分利用世界书和预设系统注入固定 NPC 上下文；动态 NPC 由导演 AI 判断时机后自然创建                              |
+| 大纲粒度               | 只规划 currentArc 近期方向，不规划结局 | 玩家驱动的 TRPG 不应有预设结局；大纲是"导演工作笔记"而非完整剧本；plannedArcs 在游戏中动态生成                  |
+| 伏笔自然植入           | 伏笔随剧情有机涌现，不开局批量预设     | 更符合叙事节奏；避免信息不足时生成低质量伏笔；导演 AI 在每轮推演中可按需植入                                    |
 
 ### 13.2 风险评估
 
