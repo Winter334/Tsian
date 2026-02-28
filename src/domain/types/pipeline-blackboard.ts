@@ -10,6 +10,7 @@ import type {
   EntityData,
   EntityFinalState,
 } from "./entity";
+import type { PipelineArchiveSnapshot } from "./pipeline-contract";
 import type { ResultFrame } from "./result-frame";
 import type { RuleScript } from "./rule-script";
 
@@ -25,15 +26,19 @@ export interface PipelineBlackboard extends BlackboardBase {
   readonly commandId: string;
   readonly playerInput: string;
   readonly aiConfig: AIConfig;
+  readonly directorAiConfig?: AIConfig;
   readonly baseVariableContext: VariableContext;
   readonly entities?: EntityData[];
   readonly worldConfig: WorldConfig;
   readonly actorId: string;
   readonly targetId?: string;
   readonly roomId?: string;
+  readonly turnNumber: number;
+  readonly archiveSnapshot?: PipelineArchiveSnapshot;
   readonly presets: {
     readonly parser?: Preset;
     readonly narrative: Preset;
+    readonly director?: Preset;
   };
   readonly callbacks: {
     readonly onNarrativeChunk?: (chunk: string) => void;
@@ -52,6 +57,14 @@ export interface PipelineBlackboard extends BlackboardBase {
   ruleScript?: RuleScript;
   resultFrame?: ResultFrame;
   createdNpcs?: CreatedNpcData[];
+
+  /** 剧情指导（导演 AI → Parser AI） */
+  plotDirectives?: string;
+  /** 叙事提示（导演 AI → Narrator AI） */
+  narrativeHints?: string;
+  /** 世界档案更新指令（实际类型为 ArchiveUpdate[]，此处避免 domain 依赖 modules） */
+  archiveUpdates?: unknown[];
+
   narrativeText?: string;
   cleanNarrative?: string;
   miniSummary?: string;

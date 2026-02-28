@@ -10,7 +10,12 @@ import type { Message as AIMessage } from "@/lib/ai/types";
 import { collectWorldInfoContentSync } from "@/lib/lorebook";
 import type { WorldConfig } from "@/lib/world";
 import { DEFAULT_WORLD_CONFIG, resolveDimensionSelections } from "@/lib/world";
-import type { CharacterInfo, PromptBlock, VariableContext } from "./types";
+import type {
+  ArchiveEntityForContext,
+  CharacterInfo,
+  PromptBlock,
+  VariableContext,
+} from "./types";
 
 // ─── 接口定义 ─────────────────────────────────────────────
 
@@ -1194,6 +1199,52 @@ function renderScenario(context: VariableContext): string {
   return context.scenario ?? "";
 }
 
+function formatEntityFull(entity: ArchiveEntityForContext): string {
+  const parts = [
+    `[${entity.name}]`,
+    entity.essence,
+    `当前状态：${entity.currentState}`,
+  ];
+
+  if (entity.relationships.length > 0) {
+    parts.push(
+      `关系：${entity.relationships
+        .map((relationship) => relationship.description)
+        .join("；")}`,
+    );
+  }
+
+  return parts.join("\n");
+}
+
+function formatEntitySummary(entity: ArchiveEntityForContext): string {
+  const stateSummary = `${entity.currentState.split(/[。！？]/)[0]}。`;
+  return `[${entity.name}] ${entity.essence.slice(0, 60)}… — ${stateSummary}`;
+}
+
+function renderWorldArchive(context: VariableContext): string {
+  const archiveData = context.archiveData;
+  if (!archiveData) return "";
+
+  const sections: string[] = [];
+
+  if (archiveData.active.length > 0) {
+    sections.push("【当前场景中的重要存在】");
+    for (const entity of archiveData.active) {
+      sections.push(formatEntityFull(entity));
+    }
+  }
+
+  if (archiveData.nearby.length > 0) {
+    sections.push("【附近 / 相关的存在】");
+    for (const entity of archiveData.nearby) {
+      sections.push(formatEntitySummary(entity));
+    }
+  }
+
+  return sections.join("\n\n");
+}
+
 /**
  * 渲染回合信息
  *
@@ -1304,10 +1355,31 @@ const MARKER_REGISTRY = [
     defaultRole: "system" as const,
   },
   {
+    id: "worldArchive",
+    displayName: "世界档案",
+    description: "注入当前相关的叙事实体信息（按 Presence 分层）",
+    render: renderWorldArchive,
+    defaultRole: "system" as const,
+  },
+  {
     id: "scenario",
     displayName: "剧情梗概",
     description: "注入当前剧情梗概",
     render: renderScenario,
+    defaultRole: "system" as const,
+  },
+  {
+    id: "plotDirectives",
+    displayName: "剧情指导",
+    description: "导演 AI 输出的剧情指导（注入 Parser AI）",
+    render: (context: VariableContext) => context.plotDirectives ?? "",
+    defaultRole: "system" as const,
+  },
+  {
+    id: "narrativeHints",
+    displayName: "叙事提示",
+    description: "导演 AI 输出的叙事提示（注入 Narrator AI）",
+    render: (context: VariableContext) => context.narrativeHints ?? "",
     defaultRole: "system" as const,
   },
   {
@@ -1344,7 +1416,10 @@ export const MARKER_IDS = [
   "resultFrame",
   "operationDefs",
   "worldInfo",
+  "worldArchive",
   "scenario",
+  "plotDirectives",
+  "narrativeHints",
   "turnInfo",
   "memorySummary",
 ] as const;

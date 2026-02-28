@@ -11,6 +11,7 @@ import {
   parseRuleScriptFromResponse,
   toEntityInfo,
 } from "@/modules/game/services/pipeline-helpers";
+import { computeArchiveData } from "@/modules/world-archive";
 
 export const parserAgent: AgentDescriptor<PipelineBlackboard> = {
   id: "parser",
@@ -31,9 +32,17 @@ export const parserAgent: AgentDescriptor<PipelineBlackboard> = {
     const parserExecutor = createAiExecutor(bb.aiConfig);
 
     const inventoryData = buildInventoryData(entityAccessor, bb.aliasMap);
+    const archiveData: VariableContext["archiveData"] = bb.archiveSnapshot
+      ? {
+          active: bb.archiveSnapshot.active,
+          nearby: bb.archiveSnapshot.nearby,
+        }
+      : computeArchiveData();
+
     const parserContext: VariableContext = {
       ...bb.baseVariableContext,
       worldConfig: bb.worldConfig,
+      archiveData,
       gameState:
         bb.baseVariableContext.gameState ??
         buildGameStateSnapshot(entityAccessor, bb.aliasMap),
@@ -43,6 +52,7 @@ export const parserAgent: AgentDescriptor<PipelineBlackboard> = {
         entities: bb.entities?.map(toEntityInfo),
       }),
       inventoryData,
+      plotDirectives: bb.plotDirectives,
     };
 
     let parserResponse = "";

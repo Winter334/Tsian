@@ -34,7 +34,13 @@ export function PresetPanelHeader({ panel }: PresetPanelHeaderProps) {
   const workspace = useWorkspace();
   const purpose = panel.preset.purpose ?? "narrative";
   const purposeLabel =
-    purpose === "parser" ? "解析" : purpose === "summarizer" ? "总结" : "叙事";
+    purpose === "parser"
+      ? "解析"
+      : purpose === "summarizer"
+        ? "总结"
+        : purpose === "director"
+          ? "导演"
+          : "叙事";
   const isActive = workspace.activePresetByPurpose[purpose] === panel.presetId;
 
   // 名称编辑状态

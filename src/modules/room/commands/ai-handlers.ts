@@ -39,6 +39,9 @@ import { buildVariableContext, usePresetStore } from "@/lib/prompt";
 import { createGameStateRepository } from "@/modules/game/repository/game-state-repository";
 import { applyStructuralChanges } from "@/modules/game/services/structural-change-consumer";
 import { prepareMemoryData } from "@/modules/memory/memory-injector";
+import { applyArchiveUpdatesAndSync } from "@/modules/world-archive/apply-updates";
+import { autoRegisterNpcs } from "@/modules/world-archive/auto-register";
+import type { ArchiveUpdate } from "@/modules/world-archive/types";
 import { useSettingsStore } from "@/stores/settings";
 import * as Y from "yjs";
 
@@ -398,6 +401,15 @@ export async function processAiTurnHandler(
 
     // 11. 检查是否有 parser 预设（决定是否走 IRNR 流程）
     const parserPreset = await presetStore.getPresetForPurpose("parser");
+    const directorPreset =
+      (await presetStore.getPresetForPurpose("director")) ?? undefined;
+    const directorAiConfig = directorPreset
+      ? getHostAiConfig({
+          name: directorPreset.name,
+          aiProfileId: directorPreset.aiProfileId,
+          aiSettings: directorPreset.aiSettings,
+        })
+      : undefined;
     const parserPresetId = presetStore.activePresetByPurpose.parser;
     const hasParserPreset = Boolean(parserPresetId && parserPreset);
 
@@ -429,6 +441,8 @@ export async function processAiTurnHandler(
         aiConfig,
         narrativePreset,
         parserPreset,
+        directorPreset,
+        directorAiConfig: directorAiConfig ?? undefined,
         baseVariableContext: variableContext,
         entities,
         actorId: firstPlayerCharacterId, // D1 fix: 显式传入行动者实体 ID
@@ -446,6 +460,7 @@ export async function processAiTurnHandler(
           tags: Map<string, import("@/domain/types").TagMetadata>;
         }>;
         createdNpcs?: CreatedNpcData[];
+        archiveUpdates?: unknown[];
       };
 
       if (irnrResult.success) {
@@ -470,6 +485,19 @@ export async function processAiTurnHandler(
           await applyStructuralChanges(
             irnrResult.resultFrame.structuralChanges,
             commandBus,
+          );
+        }
+
+        // --- 世界档案：NPC 自动建档 ---
+        if (irnrResult.createdNpcs && irnrResult.createdNpcs.length > 0) {
+          autoRegisterNpcs(irnrResult.createdNpcs, turnNumber);
+        }
+
+        // --- 世界档案：应用导演 AI 的档案更新 ---
+        if (irnrResult.archiveUpdates && irnrResult.archiveUpdates.length > 0) {
+          applyArchiveUpdatesAndSync(
+            irnrResult.archiveUpdates as ArchiveUpdate[],
+            turnNumber,
           );
         }
 
@@ -586,9 +614,20 @@ export async function processAiTurnHandler(
       const executor = createAiExecutor(aiConfig);
       activeExecutors.set(executorKey, executor);
 
+      const directNarrativeContext = {
+        ...variableContext,
+        narrativeHints:
+          variableContext.narrativeHints ??
+          [
+            "[导演提示缺省补丁] 当前为无 Parser 预设直连叙事路径。",
+            "请在推进剧情时维持与当前场景、角色动机和回合行动的一致性。",
+            "可适度铺垫伏笔，但不要断言未经规则结算的机械结果。",
+          ].join("\n"),
+      };
+
       const result = await executor.execute({
         preset: narrativePreset,
-        variableContext,
+        variableContext: directNarrativeContext,
         onChunk: (chunk) => {
           aiResponseText.insert(aiResponseText.length, chunk);
         },

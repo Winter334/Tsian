@@ -374,6 +374,11 @@ function PresetLibraryDropdown({
                       label="总结"
                       onClick={() => onPurposeFilterChange("summarizer")}
                     />
+                    <FilterButton
+                      active={purposeFilter === "director"}
+                      label="导演"
+                      onClick={() => onPurposeFilterChange("director")}
+                    />
                   </div>
                 </div>
 
@@ -393,6 +398,8 @@ function PresetLibraryDropdown({
                       preset.id === activePresetByPurpose.parser;
                     const isSummarizerActive =
                       preset.id === activePresetByPurpose.summarizer;
+                    const isDirectorActive =
+                      preset.id === activePresetByPurpose.director;
 
                     return (
                       <button
@@ -446,7 +453,9 @@ function PresetLibraryDropdown({
                               ? "解析"
                               : preset.purpose === "summarizer"
                                 ? "总结"
-                                : "叙事"}
+                                : preset.purpose === "director"
+                                  ? "导演"
+                                  : "叙事"}
                           </span>
                           {isNarrativeActive && (
                             <span
@@ -479,6 +488,17 @@ function PresetLibraryDropdown({
                               }}
                             >
                               总结激活
+                            </span>
+                          )}
+                          {isDirectorActive && (
+                            <span
+                              className="px-1.5 py-0.5 text-[10px] rounded"
+                              style={{
+                                background: colorAlpha("success", 0.2),
+                                color: color("success"),
+                              }}
+                            >
+                              导演激活
                             </span>
                           )}
                           {isOpened && (

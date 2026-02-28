@@ -48,6 +48,7 @@ const PURPOSE_OPTIONS: Array<{ value: PresetPurpose; label: string }> = [
   { value: "narrative", label: "叙事" },
   { value: "parser", label: "解析" },
   { value: "summarizer", label: "总结" },
+  { value: "director", label: "导演" },
 ];
 
 // ===== 组件 =====

@@ -8,6 +8,7 @@
  */
 
 import { defaultPreset } from "./presets/default";
+import { defaultDirectorPreset } from "./presets/default-director";
 import { defaultParserPreset } from "./presets/default-parser";
 import { defaultSummarizerPreset } from "./presets/default-summarizer";
 import type { Preset, PresetPurpose } from "./types";
@@ -20,6 +21,7 @@ export function getDefaultPresetForPurpose(
 ): Preset {
   if (purpose === "parser") return defaultParserPreset;
   if (purpose === "summarizer") return defaultSummarizerPreset;
+  if (purpose === "director") return defaultDirectorPreset;
   return defaultPreset;
 }
 

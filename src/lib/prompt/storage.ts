@@ -147,7 +147,8 @@ class PresetStorageImpl implements PresetStorage {
       const purpose: PresetPurpose =
         purposeRaw === "parser" ||
         purposeRaw === "narrative" ||
-        purposeRaw === "summarizer"
+        purposeRaw === "summarizer" ||
+        purposeRaw === "director"
           ? purposeRaw
           : "narrative";
 
@@ -211,6 +212,7 @@ class PresetStorageImpl implements PresetStorage {
         narrative: null,
         parser: null,
         summarizer: null,
+        director: null,
       },
     );
   }
@@ -310,7 +312,7 @@ class PresetStorageImpl implements PresetStorage {
           let changed = false;
           const nextActive = { ...activeByPurpose };
 
-          (["narrative", "parser", "summarizer"] as const).forEach(
+          (["narrative", "parser", "summarizer", "director"] as const).forEach(
             (purpose) => {
               if (nextActive[purpose] === id) {
                 nextActive[purpose] = null;

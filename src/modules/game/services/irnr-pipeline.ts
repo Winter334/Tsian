@@ -11,11 +11,14 @@ import type {
   IrnrPipelineResult,
   IrnrPipelineServiceContract,
   MultiplayerIrnrInput,
+  PipelineArchiveSnapshot,
   PipelineBlackboard,
   SoloIrnrInput,
 } from "@/domain/types";
+import type { ArchiveEntityForContext } from "@/lib/prompt/types";
 import { getRuntimeWorldConfig } from "@/lib/world/resolve-config";
 import { createGamePipeline } from "@/modules/game/agents";
+import { useWorldArchiveStore } from "@/modules/world-archive/store";
 
 // ─── 输入/输出类型（从 domain 层 re-export，保持向后兼容） ───
 
@@ -27,6 +30,49 @@ export type {
   SoloIrnrInput,
 };
 
+function toArchiveContextEntity(entity: {
+  id: string;
+  name: string;
+  archetype: string;
+  essence: string;
+  currentState: string;
+  relationships: Array<{
+    targetEntityId: string;
+    type: string;
+    description: string;
+  }>;
+  tags: string[];
+}): ArchiveEntityForContext {
+  return {
+    id: entity.id,
+    name: entity.name,
+    archetype: entity.archetype,
+    essence: entity.essence,
+    currentState: entity.currentState,
+    relationships: entity.relationships.map((relationship) => ({
+      targetEntityId: relationship.targetEntityId,
+      type: relationship.type,
+      description: relationship.description,
+    })),
+    tags: [...entity.tags],
+  };
+}
+
+function buildArchiveSnapshotFromStore(): PipelineArchiveSnapshot {
+  const archiveStore = useWorldArchiveStore.getState();
+  return {
+    active: archiveStore
+      .getEntitiesByPresence("active")
+      .map(toArchiveContextEntity),
+    nearby: archiveStore
+      .getEntitiesByPresence("nearby")
+      .map(toArchiveContextEntity),
+    dormant: archiveStore
+      .getEntitiesByPresence("dormant")
+      .map(toArchiveContextEntity),
+  };
+}
+
 function buildBlackboardInput(
   input: SoloIrnrInput | MultiplayerIrnrInput,
 ): BlackboardInput<PipelineBlackboard> {
@@ -34,15 +80,19 @@ function buildBlackboardInput(
     commandId: input.commandId,
     playerInput: input.userInput,
     aiConfig: input.aiConfig,
+    directorAiConfig: input.directorAiConfig,
     baseVariableContext: input.baseVariableContext,
     entities: input.entities,
     worldConfig: input.worldConfig ?? getRuntimeWorldConfig(),
     actorId: input.actorId ?? "",
     targetId: input.targetId,
     roomId: "roomId" in input ? input.roomId : undefined,
+    turnNumber: input.turnNumber ?? input.messageIndex ?? 0,
+    archiveSnapshot: input.archiveSnapshot ?? buildArchiveSnapshotFromStore(),
     presets: {
       parser: input.parserPreset,
       narrative: input.narrativePreset,
+      director: input.directorPreset,
     },
     callbacks: {
       onNarrativeChunk: input.onNarrativeChunk,
@@ -69,6 +119,7 @@ function mapBlackboardToResult(bb: PipelineBlackboard): IrnrPipelineResult {
     narrativeText: bb.cleanNarrative ?? bb.narrativeText,
     finalEntityStates: bb.finalEntityStates,
     createdNpcs: bb.createdNpcs,
+    archiveUpdates: bb.archiveUpdates,
   };
 }
 

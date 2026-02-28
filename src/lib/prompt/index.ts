@@ -34,6 +34,7 @@ export { createMessageAssembler, messageAssembler } from "./assembler";
 
 // 默认预设
 export { defaultPreset } from "./presets/default";
+export { defaultDirectorPreset } from "./presets/default-director";
 export { defaultParserPreset } from "./presets/default-parser";
 export { defaultSummarizerPreset } from "./presets/default-summarizer";
 

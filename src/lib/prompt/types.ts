@@ -18,7 +18,7 @@ export type MarkerType = (typeof MARKER_IDS)[number];
 /**
  * 预设用途
  */
-export type PresetPurpose = "narrative" | "parser" | "summarizer";
+export type PresetPurpose = "narrative" | "parser" | "summarizer" | "director";
 
 /**
  * 游戏状态快照（IRNR）
@@ -169,8 +169,22 @@ export interface TurnInfo {
 }
 
 /**
- * 变量上下文
+ * 世界档案注入上下文（避免跨层依赖 modules）
  */
+export interface ArchiveEntityForContext {
+  id: string;
+  name: string;
+  archetype: string;
+  essence: string;
+  currentState: string;
+  relationships: Array<{
+    targetEntityId: string;
+    type: string;
+    description: string;
+  }>;
+  tags: string[];
+}
+
 export interface VariableContext {
   /** 模式 */
   mode: "solo" | "multiplayer";
@@ -265,6 +279,21 @@ export interface VariableContext {
 
   /** 手动记忆列表（供 {{memory:xxx}} 变量渲染） */
   manualMemories?: ManualMemory[];
+
+  /** 世界档案数据（由 worldArchive Marker 渲染） */
+  archiveData?: {
+    active: ArchiveEntityForContext[];
+    nearby: ArchiveEntityForContext[];
+  };
+
+  /** 导演 AI 的剧情指导（注入 Parser AI） */
+  plotDirectives?: string;
+
+  /** 导演 AI 的叙事提示（注入 Narrator AI） */
+  narrativeHints?: string;
+
+  /** 自定义变量（可通过 {{key}} 在提示词中显式引用） */
+  customVariables?: Record<string, string>;
 }
 
 /**

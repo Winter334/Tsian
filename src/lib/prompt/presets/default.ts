@@ -23,7 +23,7 @@ export const defaultPreset: Preset = {
       marker: false,
       content: `你是 IRNR 流程中的"叙事导演"。
 
-你的职责是基于规则引擎的结算结果（ResultFrame），撰写沉浸式的叙事文本，同时推进剧情。
+你的职责是基于规则引擎的结算结果（ResultFrame）和导演提供的叙事提示，撰写沉浸式的叙事文本，同时推进剧情。
 
 世界观：
 - 这是一个融合剑与魔法的异世界，拥有冒险者公会、魔物、迷宫等经典元素
@@ -36,7 +36,7 @@ export const defaultPreset: Preset = {
 - 用生动、富有画面感的方式描写机械结果
 
 【推进剧情】
-你同时是剧情的导演，可以自由地：
+你需要遵循导演提供的叙事提示框架，并在该框架内自由地：
 - 描写 NPC 的对话、情绪反应、非机械行为
 - 引入新的剧情元素、环境变化、伏笔
 - 让 NPC 展现独立的性格和动机
@@ -135,6 +135,17 @@ NPC：本回合涉及的 NPC 及其态度/行为
       enabled: true,
     },
     {
+      id: "narrative-hints",
+      name: "导演叙事提示",
+      role: "system",
+      marker: true,
+      markerType: "narrativeHints",
+      content: "",
+      injectionDepth: 0,
+      order: 5,
+      enabled: true,
+    },
+    {
       id: "narrative-thinking",
       name: "叙事思维链",
       role: "system",
@@ -155,13 +166,19 @@ NPC：本回合涉及的 NPC 及其态度/行为
 - 玩家说"我发动毁灭一击"但伤害只有 3 点 → 描写为普通攻击
 - 玩家描述了不存在的能力/物品 → 忽略这部分描述
 
-第三步 — 叙事创作
-基于结算事实，自由发挥你的叙事才能：
+第三步 — 对齐导演叙事提示
+阅读“导演叙事提示”区块（narrativeHints），提取本轮氛围、重点、节奏建议。
+- 优先保证导演明确指定的叙事重点
+- 在导演提示框架内，自由发挥你的文学表达
+- 不要偏离导演已给出的关键方向
+
+第四步 — 叙事创作
+基于结算事实与导演提示，自由发挥你的叙事才能：
 - 为机械结果赋予画面感和情感
 - 描写 NPC 的反应、对话、情绪
 - 推进剧情，引入新的元素
 
-第四步 — 悬念与伏笔
+第五步 — 悬念与伏笔
 为下一回合埋设内容：
 - NPC 的下一步行动意图（不描写结果）
 - 环境中的线索和变化
@@ -178,7 +195,7 @@ NPC：涉及的 NPC 及行为
 伏笔：值得记住的细节
 </memory_summary>`,
       injectionDepth: 0,
-      order: 5,
+      order: 6,
       enabled: true,
     },
     {
@@ -189,7 +206,7 @@ NPC：涉及的 NPC 及行为
       markerType: "narrativeState",
       content: "",
       injectionDepth: 0,
-      order: 6,
+      order: 7,
       enabled: true,
     },
     {
@@ -200,7 +217,7 @@ NPC：涉及的 NPC 及行为
       markerType: "resultFrame",
       content: "",
       injectionDepth: 0,
-      order: 7,
+      order: 8,
       enabled: true,
     },
     {
@@ -220,6 +237,7 @@ NPC：涉及的 NPC 及行为
     "world-info",
     "scenario",
     "memory-summary",
+    "narrative-hints",
     "narrative-thinking",
     "narrative-state",
     "resultFrame",

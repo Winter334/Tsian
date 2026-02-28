@@ -40,8 +40,8 @@ function createMinimalContext(
 // ─── 测试 ───────────────────────────────────────────────────
 
 describe("MARKER_IDS", () => {
-  it("包含 10 个 id", () => {
-    expect(MARKER_IDS).toHaveLength(10);
+  it("包含 13 个 id", () => {
+    expect(MARKER_IDS).toHaveLength(13);
   });
 
   it("包含所有预期的 id", () => {
@@ -53,7 +53,10 @@ describe("MARKER_IDS", () => {
       "resultFrame",
       "operationDefs",
       "worldInfo",
+      "worldArchive",
       "scenario",
+      "plotDirectives",
+      "narrativeHints",
       "turnInfo",
       "memorySummary",
     ];
@@ -111,7 +114,7 @@ describe("findMarkerByIdOrAlias", () => {
 describe("getAllMarkers", () => {
   it("返回所有注册项", () => {
     const all = getAllMarkers();
-    expect(all).toHaveLength(10);
+    expect(all).toHaveLength(13);
   });
 
   it("返回的数组包含所有 MARKER_IDS 中的 id", () => {

@@ -2,7 +2,7 @@
  * 默认解析预设（Parser）
  *
  * 用于将玩家输入解析为结构化规则脚本（RuleScript）。
- * 三职责定义：解构上轮叙事 + 解析玩家意图 + 反应推演。
+ * 三职责定义：解构上轮叙事 + 解析玩家意图 + 执行导演指令。
  */
 
 import type { Preset } from "../types";
@@ -54,11 +54,12 @@ export const defaultParserPreset: Preset = {
 - 剧情导致的属性调整（升级、重置、剧情修正）→ set
 - 纯叙事或纯对话输入 → actions 为空
 
-【职责三：反应推演】
-基于玩家本轮行动，推演在场实体（NPC/怪物）的直接反应（仅机械行为）：
-- 只推演"因为玩家做了 X，所以对方立即 Y"的直接因果
-- 不要创造与玩家行动无关的独立行为
+【职责三：执行导演指令】
+读取“导演剧情指导”区块，逐条将导演给出的 NPC 反应、世界事件影响、建议检定等自然语言，翻译为可执行的 RuleScript：
+- 优先处理导演明确指定的机械结果与检定建议
+- 不要自行补充与导演指导无关的独立推演
 - NPC 对话、情绪反应由正文 AI 描写，不在 actions 中处理
+- 若本轮没有导演指导，则该职责可为空
 
 核心语法原则：
 - NPC/怪物的行动与玩家完全同构，使用相同操作语法，不存在“NPC 专用操作”
@@ -86,7 +87,7 @@ export const defaultParserPreset: Preset = {
 }
 3) 只能使用 operationDefinitions 中定义的操作
 4) 当信息不足无法执行时，返回最小安全脚本（actions 为空）
-5) actions 中先放解构结果，再放玩家意图，最后放反应推演
+5) actions 中先放解构结果，再放玩家意图，最后放导演指令执行结果
 
 组合示例（仅示意结构，参数细节以 operationDefinitions 为准）：
 示例 A：近战攻击（check 成功后造成伤害）
@@ -186,6 +187,17 @@ export const defaultParserPreset: Preset = {
       enabled: true,
     },
     {
+      id: "plot-directives",
+      name: "导演剧情指导",
+      role: "system",
+      marker: true,
+      markerType: "plotDirectives",
+      content: "",
+      injectionDepth: 0,
+      order: 3,
+      enabled: true,
+    },
+    {
       id: "character-sheet",
       name: "角色数据表",
       role: "system",
@@ -193,7 +205,7 @@ export const defaultParserPreset: Preset = {
       markerType: "characterSheet",
       content: "",
       injectionDepth: 0,
-      order: 3,
+      order: 4,
       enabled: true,
     },
     {
@@ -227,7 +239,7 @@ export const defaultParserPreset: Preset = {
 - 引用 NPC 时使用角色数据表中的引用 ID（通常是 NPC 名称）
 - 引用属性字段时使用变量名（如 str, hp, mp）`,
       injectionDepth: 0,
-      order: 4,
+      order: 5,
       enabled: true,
     },
     {
@@ -246,7 +258,7 @@ export const defaultParserPreset: Preset = {
         compressionThreshold: 8,
       },
       injectionDepth: 0,
-      order: 5,
+      order: 6,
     },
     {
       id: "user-input",
@@ -263,6 +275,7 @@ export const defaultParserPreset: Preset = {
     "parser-system-role",
     "operation-defs",
     "dm-thinking",
+    "plot-directives",
     "character-sheet",
     "anti-repeat-output-rules",
     "memory-summary",

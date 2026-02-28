@@ -81,7 +81,13 @@ class DefaultVariableResolver implements VariableResolver {
         return value;
       }
 
-      // 尝试解析自定义变量
+      // 尝试解析 context.customVariables（运行时注入）
+      const contextCustom = context.customVariables?.[trimmed];
+      if (typeof contextCustom === "string") {
+        return contextCustom;
+      }
+
+      // 尝试解析自定义变量注册器
       const customResolver = this.customVariables.get(trimmed);
       if (customResolver) {
         try {

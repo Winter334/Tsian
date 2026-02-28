@@ -10,6 +10,7 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { defaultPreset } from "./presets/default";
+import { defaultDirectorPreset } from "./presets/default-director";
 import { defaultParserPreset } from "./presets/default-parser";
 import { defaultSummarizerPreset } from "./presets/default-summarizer";
 import type { PresetIndex } from "./storage";
@@ -24,6 +25,7 @@ const DEFAULT_ACTIVE_PRESET_BY_PURPOSE: ActivePresetByPurpose = {
   narrative: null,
   parser: null,
   summarizer: null,
+  director: null,
 };
 
 /**
@@ -148,13 +150,16 @@ export const usePresetStore = create<PresetStoreState>()(
         // 2. 加载索引
         let index = presetStorage.getPresetIndex();
 
-        // 3. 确保至少存在一个 narrative/parser/summarizer 预设
+        // 3. 确保至少存在一个 narrative/parser/summarizer/director 预设
         const hasNarrativePreset = index.some(
           (item) => item.purpose === "narrative",
         );
         const hasParserPreset = index.some((item) => item.purpose === "parser");
         const hasSummarizerPreset = index.some(
           (item) => item.purpose === "summarizer",
+        );
+        const hasDirectorPreset = index.some(
+          (item) => item.purpose === "director",
         );
 
         if (!hasNarrativePreset) {
@@ -169,6 +174,11 @@ export const usePresetStore = create<PresetStoreState>()(
 
         if (!hasSummarizerPreset) {
           await presetStorage.savePreset(defaultSummarizerPreset);
+          index = presetStorage.getPresetIndex();
+        }
+
+        if (!hasDirectorPreset) {
+          await presetStorage.savePreset(defaultDirectorPreset);
           index = presetStorage.getPresetIndex();
         }
 
@@ -228,7 +238,15 @@ export const usePresetStore = create<PresetStoreState>()(
         summarizerPreset = await loadPreset(nextActiveByPurpose.summarizer);
       }
 
-      // 4) 持久化归一化结果
+      // 4) 处理 director 激活（允许为空）
+      let directorPreset = await loadPreset(nextActiveByPurpose.director);
+      if (!directorPreset) {
+        nextActiveByPurpose.director =
+          index.find((item) => item.purpose === "director")?.id ?? null;
+        directorPreset = await loadPreset(nextActiveByPurpose.director);
+      }
+
+      // 5) 持久化归一化结果
       presetStorage.setActivePresetByPurpose(nextActiveByPurpose);
 
       if (!narrativePreset) {
@@ -420,6 +438,16 @@ export const usePresetStore = create<PresetStoreState>()(
             )?.id ?? null;
         }
 
+        // 若当前激活 director 改成了非 director，则清空/回退 director 激活
+        if (
+          nextActiveByPurpose.director === id &&
+          updatedPurpose !== "director"
+        ) {
+          nextActiveByPurpose.director =
+            index.find((item) => item.purpose === "director" && item.id !== id)
+              ?.id ?? null;
+        }
+
         let nextActivePreset = current.activePreset;
         let nextActivePresetId = current.activePresetId;
 
@@ -481,6 +509,11 @@ export const usePresetStore = create<PresetStoreState>()(
         if (nextActiveByPurpose.summarizer === id) {
           nextActiveByPurpose.summarizer =
             index.find((item) => item.purpose === "summarizer")?.id ?? null;
+        }
+
+        if (nextActiveByPurpose.director === id) {
+          nextActiveByPurpose.director =
+            index.find((item) => item.purpose === "director")?.id ?? null;
         }
 
         presetStorage.setActivePresetByPurpose(nextActiveByPurpose);

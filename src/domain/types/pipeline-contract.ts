@@ -6,7 +6,11 @@
  */
 
 import type { AIConfig } from "@/lib/ai/types";
-import type { Preset, VariableContext } from "@/lib/prompt/types";
+import type {
+  ArchiveEntityForContext,
+  Preset,
+  VariableContext,
+} from "@/lib/prompt/types";
 import type { WorldConfig } from "@/lib/world";
 
 import type { CreatedNpcData, EntityData, EntityFinalState } from "./entity";
@@ -14,6 +18,12 @@ import type { ResultFrame } from "./result-frame";
 import type { RuleScript } from "./rule-script";
 
 // ─── 输入类型 ─────────────────────────────────────────────
+
+export interface PipelineArchiveSnapshot {
+  active: ArchiveEntityForContext[];
+  nearby: ArchiveEntityForContext[];
+  dormant: ArchiveEntityForContext[];
+}
 
 /**
  * IRNR Pipeline 输入基础字段
@@ -23,12 +33,16 @@ import type { RuleScript } from "./rule-script";
 export interface IrnrPipelineInputBase {
   commandId: string;
   userInput: string;
-  /** AI 配置 */
+  /** narrative/parser 共用 AI 配置 */
   aiConfig: AIConfig;
+  /** director 独立 AI 配置（可选，缺失时回退 aiConfig） */
+  directorAiConfig?: AIConfig;
   /** narrative 预设（叙事 AI） */
   narrativePreset: Preset;
   /** parser 预设（解析 AI，可选——无预设时 Parser Agent 写入空 ruleScript） */
   parserPreset?: Preset;
+  /** 导演 AI 预设（可选） */
+  directorPreset?: Preset;
   /** 变量上下文基础（pipeline 会注入 gameState / resultFrame） */
   baseVariableContext: VariableContext;
   /** 实体数据（玩家角色等） */
@@ -39,6 +53,10 @@ export interface IrnrPipelineInputBase {
   actorId?: string;
   /** target 实体 ID */
   targetId?: string;
+  /** 回合号（单人模式可选；联机模式应与 turnNumber 一致） */
+  turnNumber?: number;
+  /** 世界档案快照（管线启动前冻结，可选） */
+  archiveSnapshot?: PipelineArchiveSnapshot;
   /** 流式叙事回调 */
   onNarrativeChunk?: (chunk: string) => void;
   /** 叙事完成回调 */
@@ -84,6 +102,8 @@ export interface IrnrPipelineResult {
   finalEntityStates?: EntityFinalState[];
   /** 本次执行中动态创建的 NPC 列表 */
   createdNpcs?: CreatedNpcData[];
+  /** 导演 AI 的档案更新（调用方按需解析为 ArchiveUpdate[]） */
+  archiveUpdates?: unknown[];
 }
 
 // ─── 服务契约 ─────────────────────────────────────────────

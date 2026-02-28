@@ -4,6 +4,7 @@
 > **前置文档**：[director-ai-memory-system-design.md](director-ai-memory-system-design.md)（Director AI 四层协作架构）
 > **替代范围**：本文替代 `executePipeline()` 的硬编码管线实现，不影响 Director AI 的功能设计。
 > **术语说明**：本文中的"Agent"指管线执行节点，不等于"AI 智能体"。部分 Agent 内部调用 LLM，部分是纯计算/数据处理。
+> **对齐注记（2026-02）**：Director Agent 的 `optional` 标记已由 [world-archive-and-director-ai-design.md](world-archive-and-director-ai-design.md) 覆盖——导演 AI 为必选（`optional: false`），不支持关闭。本文 §5.2 中的 `optional: true` 和"渐进增强"注释以新文档为准。
 
 ---
 
@@ -414,7 +415,7 @@ class PipelineError extends Error {
 | Agent          | 执行类型  | 对应 Phase  | 是否可选 | 说明                                     |
 | -------------- | --------- | ----------- | -------- | ---------------------------------------- |
 | EntityAccessor | 🔧 纯计算  | Phase 0     | 否       | 从 Yjs 读取实体，注入天赋/装备效果       |
-| Director       | 🤖 AI 调用 | 新增        | **是**   | LLM 调用，剧情规划（远期）               |
+| Director       | 🤖 AI 调用 | 新增        | **否** ⚠️ | LLM 调用，世界推演与剧情编排（见对齐注记）|
 | Parser         | 🤖 AI 调用 | Phase 1     | 否       | LLM 调用，解析用户输入→RuleScript        |
 | Engine         | 🔧 纯计算  | Phase 2a+2b | 否       | TriggerPipeline + RulesEngine 确定性执行 |
 | Narrator       | 🤖 AI 调用 | Phase 4     | 否       | LLM 调用，基于 ResultFrame 生成叙事      |
@@ -460,6 +461,8 @@ const entityAccessorAgent: AgentDescriptor = {
 ```
 
 ### 5.2 Director Agent（可选，远期）
+
+> ⚠️ **对齐注记**：以下代码中的 `optional: true` 已过时。根据 [world-archive-and-director-ai-design.md](world-archive-and-director-ai-design.md)，导演 AI 为必选 Agent（`optional: false`），不支持关闭。`produces` 也应扩展为 `['plotDirectives', 'narrativeHints', 'archiveUpdates']`。实施时以新文档为准。
 
 ```typescript
 const directorAgent: AgentDescriptor = {

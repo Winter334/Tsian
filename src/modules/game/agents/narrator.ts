@@ -8,10 +8,7 @@ import {
   buildGameStateSnapshot,
   buildInventoryData,
 } from "@/modules/game/services/pipeline-helpers";
-
-type BlackboardWithNarrativeHints = PipelineBlackboard & {
-  narrativeHints?: unknown;
-};
+import { computeArchiveData } from "@/modules/world-archive";
 
 export const narratorAgent: AgentDescriptor<PipelineBlackboard> = {
   id: "narrator",
@@ -37,22 +34,24 @@ export const narratorAgent: AgentDescriptor<PipelineBlackboard> = {
     const narrativeExecutor = createAiExecutor(bb.aiConfig);
 
     const narrativeInventoryData = buildInventoryData(entityAccessor, aliasMap);
+    const archiveData: VariableContext["archiveData"] = bb.archiveSnapshot
+      ? {
+          active: bb.archiveSnapshot.active,
+          nearby: bb.archiveSnapshot.nearby,
+        }
+      : computeArchiveData();
+
     const narrativeContext: VariableContext = {
       ...bb.baseVariableContext,
       worldConfig: bb.worldConfig,
+      archiveData,
       resultFrame,
       gameState: buildGameStateSnapshot(entityAccessor, aliasMap),
       entityEffects: buildEntityEffects(entityAccessor, aliasMap),
       entityDisplayNames: aliasMap.displayNames,
       inventoryData: narrativeInventoryData,
+      narrativeHints: bb.narrativeHints,
     };
-
-    const narrativeHints = (bb as BlackboardWithNarrativeHints).narrativeHints;
-    if (narrativeHints !== undefined) {
-      (
-        narrativeContext as unknown as { narrativeHints?: unknown }
-      ).narrativeHints = narrativeHints;
-    }
 
     let narrativeText = "";
     const narrativeResult = await narrativeExecutor.execute({

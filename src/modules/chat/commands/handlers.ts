@@ -47,6 +47,9 @@ import {
 import type { EntityData } from "@/modules/game/services/entity-accessor";
 import { applyStructuralChanges } from "@/modules/game/services/structural-change-consumer";
 import { prepareMemoryData } from "@/modules/memory/memory-injector";
+import { applyArchiveUpdatesAndSync } from "@/modules/world-archive/apply-updates";
+import { autoRegisterNpcs } from "@/modules/world-archive/auto-register";
+import type { ArchiveUpdate } from "@/modules/world-archive/types";
 import { useSettingsStore } from "@/stores/settings";
 import * as Y from "yjs";
 import { getChatRepository } from "../repository/factory";
@@ -250,6 +253,29 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
       // parser 预设可选——无预设时管线 Parser Agent 自动写入空 ruleScript
       const parserPreset =
         (await presetStore.getPresetForPurpose("parser")) ?? undefined;
+      const directorPreset =
+        (await presetStore.getPresetForPurpose("director")) ?? undefined;
+      const directorPresetProfileId = directorPreset?.aiProfileId;
+      const boundDirectorProfile = directorPresetProfileId
+        ? settingsStore.getProfileById(directorPresetProfileId)
+        : undefined;
+      const directorProfile = directorPreset
+        ? settingsStore.getProfileOrFallback(directorPresetProfileId)
+        : undefined;
+
+      if (
+        directorPreset &&
+        (!directorPresetProfileId || !boundDirectorProfile)
+      ) {
+        console.warn(
+          `[Director AI] 预设"${directorPreset.name}"未绑定 AI Profile，使用"${directorProfile?.name ?? "默认配置"}"作为兜底`,
+        );
+      }
+
+      const directorAiConfig =
+        directorProfile && directorProfile.apiKey.trim() !== ""
+          ? resolveAIConfig(directorProfile, directorPreset?.aiSettings)
+          : undefined;
 
       // ── IRNR 管线流程（统一路径） ──────────────────────────
       const irnrPipelineService = services.get(IRNR_PIPELINE_SERVICE_TOKEN);
@@ -261,10 +287,13 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
         commandId: context.commandId,
         userInput: content,
         aiConfig,
+        directorAiConfig,
         narrativePreset,
         parserPreset,
+        directorPreset,
         baseVariableContext: variableContext,
         actorId: playerCharacterId,
+        turnNumber: assistantMessageIndex,
         entities: soloIrnrEntities,
         onNarrativeChunk: (chunk: string) => {
           session!.appendChunk(chunk);
@@ -320,6 +349,21 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
         await applyStructuralChanges(
           irnrResult.resultFrame.structuralChanges,
           commandBus,
+        );
+      }
+
+      // --- 世界档案：NPC 自动建档 ---
+      if (irnrResult.createdNpcs && irnrResult.createdNpcs.length > 0) {
+        const currentTurn = assistantMessageIndex;
+        autoRegisterNpcs(irnrResult.createdNpcs, currentTurn);
+      }
+
+      // --- 世界档案：应用导演 AI 的档案更新 ---
+      if (irnrResult.archiveUpdates && irnrResult.archiveUpdates.length > 0) {
+        const currentTurn = assistantMessageIndex;
+        applyArchiveUpdatesAndSync(
+          irnrResult.archiveUpdates as ArchiveUpdate[],
+          currentTurn,
         );
       }
 

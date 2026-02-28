@@ -13,11 +13,16 @@ import { registerChatModule, unregisterChatModule } from "./chat";
 import { registerCheckpointModule } from "./checkpoint";
 import { setupConditionalModules } from "./conditional";
 import { registerDataModule, unregisterDataModule } from "./data";
+import { registerDirectorModule, unregisterDirectorModule } from "./director";
 import { registerGameModule, unregisterGameModule } from "./game";
 import { unregisterInventoryModule } from "./inventory";
 import { registerMemoryModule, unregisterMemoryModule } from "./memory";
 import { registerRoomModule } from "./room";
 import { registerSaveModule, unregisterSaveModule } from "./save";
+import {
+  registerWorldArchiveModule,
+  unregisterWorldArchiveModule,
+} from "./world-archive";
 
 let cleanupConditionalModules: (() => void) | null = null;
 
@@ -33,6 +38,10 @@ export async function registerAllModules(): Promise<void> {
   await registerChatModule();
   await registerMemoryModule();
   await registerDataModule(); // Data 模块（导出/导入功能）
+
+  // Phase 1.5: 世界档案 + 导演
+  await registerWorldArchiveModule();
+  await registerDirectorModule();
 
   // Phase 2: IRNR 模块
   await registerGameModule();
@@ -64,10 +73,12 @@ export async function unregisterAllModules(): Promise<void> {
   if (registry.hasModule("lyra.inventory")) {
     await unregisterInventoryModule();
   }
+  await unregisterGameModule();
+  await unregisterDirectorModule();
+  await unregisterWorldArchiveModule();
   await unregisterDataModule();
   await unregisterMemoryModule();
   await unregisterChatModule();
-  await unregisterGameModule();
   await unregisterSaveModule();
 }
 
@@ -75,8 +86,10 @@ export async function unregisterAllModules(): Promise<void> {
 export * from "./chat";
 export * from "./checkpoint";
 export * from "./data";
+export * from "./director";
 export * from "./game";
 export * from "./inventory";
 export * from "./memory";
 export * from "./room";
 export * from "./save";
+export * from "./world-archive";
