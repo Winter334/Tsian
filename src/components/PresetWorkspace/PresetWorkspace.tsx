@@ -144,21 +144,35 @@ export function PresetWorkspace({ open, onOpenChange }: PresetWorkspaceProps) {
         return;
       }
 
-      // Escape: 关闭工作区（仅当没有编辑弹窗打开时）
-      // 注意：BlockEditorDialog 使用 Dialog 组件，其 Escape 处理由 dialog.tsx 的全局监听器处理
-      // 这里只处理没有编辑弹窗时的情况
-      if (e.key === "Escape" && !workspaceState.editingBlock) {
-        e.preventDefault();
-        handleCloseRequest();
+      // Escape：仅在无子层弹窗时关闭工作区，避免抢占 Dialog 栈
+      if (e.key !== "Escape" || e.defaultPrevented) {
         return;
       }
+
+      const hasChildDialogOpen =
+        !!editingBlockData || showCloseConfirm || importExportMode !== "closed";
+
+      if (hasChildDialogOpen) {
+        // 子层弹窗（块编辑 / 关闭确认 / 导入导出）打开时，交给最上层弹窗处理
+        return;
+      }
+
+      e.preventDefault();
+      handleCloseRequest();
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open, workspaceState, handleCloseRequest]);
+  }, [
+    open,
+    workspaceState,
+    handleCloseRequest,
+    editingBlockData,
+    showCloseConfirm,
+    importExportMode,
+  ]);
 
   return (
     <WorkspaceContext.Provider value={workspaceState}>

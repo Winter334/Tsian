@@ -97,7 +97,7 @@ function releaseBodyScrollLock(): void {
 }
 
 function handleGlobalEscape(event: KeyboardEvent): void {
-  if (event.key !== "Escape") {
+  if (event.key !== "Escape" || event.defaultPrevented) {
     return;
   }
 

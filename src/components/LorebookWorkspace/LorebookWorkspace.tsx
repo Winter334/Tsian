@@ -52,7 +52,7 @@ function useIsDesktop(): boolean {
       return () => mql.removeEventListener("change", callback);
     },
     () => window.matchMedia(`(min-width: ${LG_BREAKPOINT}px)`).matches,
-    () => true // SSR 回退值：默认桌面端
+    () => true, // SSR 回退值：默认桌面端
   );
 }
 
@@ -155,22 +155,22 @@ export function LorebookWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Escape 快捷键：编辑器/全局设置打开时交由其自身处理，否则关闭工作区
+  // Escape 快捷键：仅在无子层弹窗时关闭工作区，避免抢占 Dialog 栈
   useEffect(() => {
     if (!open) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-
-        if (workspace.editingEntryId || globalSettingsOpen) {
-          // 编辑器或全局设置弹窗打开时，Escape 由内部弹层处理
-          // 不在此处关闭工作区
-          return;
-        }
-
-        handleClose();
+      if (e.key !== "Escape" || e.defaultPrevented) {
+        return;
       }
+
+      if (workspace.editingEntryId || globalSettingsOpen) {
+        // 子层（条目编辑器 / 全局设置）打开时，交由最上层弹窗处理
+        return;
+      }
+
+      e.preventDefault();
+      handleClose();
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -193,14 +193,14 @@ export function LorebookWorkspace({
             className={cn(
               "fixed inset-4 z-50",
               "flex flex-col",
-              "overflow-hidden"
+              "overflow-hidden",
             )}
             style={{
               background: colorAlpha("bgBase", 0.95),
               borderRadius: borders.radius.lg,
               border: `${borders.width.medium} solid ${colorAlpha(
                 "primary",
-                0.4
+                0.4,
               )}`,
               backdropFilter: "blur(20px)",
               WebkitBackdropFilter: "blur(20px)",

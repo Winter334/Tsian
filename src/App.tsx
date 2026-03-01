@@ -34,6 +34,7 @@ import { savePortrait } from "./lib/portrait/storage";
 import { usePresetStore } from "./lib/prompt";
 import { getLastDisplayName, getOrCreateUserId } from "./lib/user-identity";
 // 通过顶层模块入口导入，确保松耦合
+import { ArchiveManagerDialog } from "./components/ArchiveManager";
 import { GameHUD } from "./components/GameHUD";
 import { GameHub } from "./components/layout/GameHub";
 import {
@@ -124,6 +125,7 @@ function AppContent() {
   const [memoryManagerOpen, setMemoryManagerOpen] = useState(false);
   const [checkpointPanelOpen, setCheckpointPanelOpen] = useState(false);
   const [roomInfoOpen, setRoomInfoOpen] = useState(false);
+  const [archiveManagerOpen, setArchiveManagerOpen] = useState(false);
   const [selectedMultiplayerSave, setSelectedMultiplayerSave] =
     useState<SaveSlotInfo | null>(null);
 
@@ -437,6 +439,10 @@ function AppContent() {
     setRoomInfoOpen(true);
   };
 
+  const handleOpenWorldArchive = () => {
+    setArchiveManagerOpen(true);
+  };
+
   // 从存档管理加载存档后进入 Hub
   const handleLoadSave = () => {
     setAppState("hub");
@@ -519,6 +525,7 @@ function AppContent() {
                     onCheckpoint={handleOpenCheckpoint}
                     onMemory={handleOpenMemory}
                     onRoomInfo={handleOpenRoomInfo}
+                    onWorldArchive={handleOpenWorldArchive}
                   />
                 </motion.div>
               )}
@@ -535,6 +542,7 @@ function AppContent() {
                   <GameHUD
                     onReturnToHub={handleReturnToHub}
                     onOpenCharacterPanel={handleOpenCharacterPanel}
+                    onOpenArchiveManager={handleOpenWorldArchive}
                   >
                     <GameView className="h-full" />
                   </GameHUD>
@@ -570,6 +578,11 @@ function AppContent() {
           onOpenChange={setSaveManagerOpen}
           onLoadSave={handleLoadSave}
           onMultiplayerSave={handleMultiplayerSave}
+        />
+
+        <ArchiveManagerDialog
+          open={archiveManagerOpen}
+          onOpenChange={setArchiveManagerOpen}
         />
 
         {/* 角色面板对话框 */}

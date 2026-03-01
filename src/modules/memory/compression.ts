@@ -17,6 +17,7 @@ import { aiManager } from "@/lib/ai/manager";
 import { resolveAIConfig } from "@/lib/ai/resolve-config";
 import type { Message } from "@/lib/ai/types";
 import { usePresetStore } from "@/lib/prompt";
+import { useAiOutputLogStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings";
 import { parseMemoryMarkerConfig } from "./memory-injector";
 import { useMemoryStore } from "./store";
@@ -103,6 +104,50 @@ function buildSummarizerUserMessage(
   ].join("\n");
 }
 
+function getSummarizerTurn(miniSummaries: MiniSummary[]): number {
+  if (miniSummaries.length === 0) {
+    return 0;
+  }
+
+  return miniSummaries[miniSummaries.length - 1].messageIndex;
+}
+
+function getNextSequenceIndexForTurn(turn: number): number {
+  const entries = useAiOutputLogStore.getState().entries;
+  let maxSequenceIndex = -1;
+
+  for (const entry of entries) {
+    if (entry.turn !== turn) {
+      continue;
+    }
+
+    if (entry.sequenceIndex > maxSequenceIndex) {
+      maxSequenceIndex = entry.sequenceIndex;
+    }
+  }
+
+  return maxSequenceIndex + 1;
+}
+
+function appendSummarizerAiOutput(entry: {
+  turn: number;
+  rawOutput: string;
+  success: boolean;
+  duration?: number;
+  error?: string;
+}): void {
+  useAiOutputLogStore.getState().appendEntry({
+    turn: entry.turn,
+    source: "summarizer",
+    sequenceIndex: getNextSequenceIndexForTurn(entry.turn),
+    rawOutput: entry.rawOutput,
+    duration: entry.duration,
+    success: entry.success,
+    error: entry.error,
+    timestamp: Date.now(),
+  });
+}
+
 /**
  * 检查并触发压缩
  *
@@ -185,20 +230,48 @@ export async function checkAndTriggerCompression(
     ];
 
     let compressedContent = "";
+    const summarizerTurn = getSummarizerTurn(toCompress);
+    const startedAt = performance.now();
 
     try {
       const response = await aiManager.chat(config, messages);
-      compressedContent = response.content.trim();
+      const duration = performance.now() - startedAt;
+      const rawOutput = response.content ?? "";
+      compressedContent = rawOutput.trim();
+
+      if (!compressedContent) {
+        const warning = "Summarizer 返回空内容，已跳过本次压缩。";
+        console.warn(`[MemoryCompression] ${warning}`);
+        appendSummarizerAiOutput({
+          turn: summarizerTurn,
+          rawOutput: rawOutput || "[summarizer] Summarizer 返回空内容",
+          success: false,
+          duration,
+          error: warning,
+        });
+        emitCompressionFailedToast(conversationId, warning);
+        return;
+      }
+
+      appendSummarizerAiOutput({
+        turn: summarizerTurn,
+        rawOutput,
+        success: true,
+        duration,
+      });
     } catch (error) {
       const warning = "记忆压缩失败，已跳过本次压缩。";
+      const duration = performance.now() - startedAt;
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       console.warn("[MemoryCompression] AI compression failed:", error);
-      emitCompressionFailedToast(conversationId, warning);
-      return;
-    }
-
-    if (!compressedContent) {
-      const warning = "Summarizer 返回空内容，已跳过本次压缩。";
-      console.warn(`[MemoryCompression] ${warning}`);
+      appendSummarizerAiOutput({
+        turn: summarizerTurn,
+        rawOutput: "[summarizer] 执行失败，未产出原始输出",
+        success: false,
+        duration,
+        error: errorMessage,
+      });
       emitCompressionFailedToast(conversationId, warning);
       return;
     }

@@ -2,16 +2,18 @@ import { motion } from "framer-motion";
 import { Menu } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
+import { AiInsightDialog } from "@/components/AiInsight";
 import { animation, colorAlpha } from "@/styles/tokens";
 
 import { HubReturnButton } from "./HubReturnButton";
 import { LeftSidebar } from "./LeftSidebar";
-import { RightSidebar } from "./RightSidebar";
+import { RightSidebar, type RightSidebarTab } from "./RightSidebar";
 import { SidebarDrawer } from "./SidebarDrawer";
 
 interface GameHUDProps {
   onReturnToHub: () => void;
   onOpenCharacterPanel: () => void;
+  onOpenArchiveManager: () => void;
   children: ReactNode;
 }
 
@@ -50,7 +52,7 @@ function MobileSidebarButton({
       whileHover={{ scale: 1.04 }}
       whileTap={{ scale: 0.96 }}
       transition={{ duration: animation.duration.fast }}
-      aria-label={side === "left" ? "打开角色状态" : "打开场景角色"}
+      aria-label={side === "left" ? "打开角色状态" : "打开右侧功能栏"}
     >
       <Menu className="w-4 h-4" />
     </motion.button>
@@ -60,10 +62,14 @@ function MobileSidebarButton({
 export function GameHUD({
   onReturnToHub,
   onOpenCharacterPanel,
+  onOpenArchiveManager,
   children,
 }: GameHUDProps) {
   const [leftOpen, setLeftOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
+  const [rightSidebarActiveTab, setRightSidebarActiveTab] =
+    useState<RightSidebarTab>("scene");
+  const [aiInsightOpen, setAiInsightOpen] = useState(false);
 
   return (
     <div className="relative h-dvh flex">
@@ -98,7 +104,12 @@ export function GameHUD({
           open={rightOpen}
           onClose={() => setRightOpen(false)}
         >
-          <RightSidebar />
+          <RightSidebar
+            activeTab={rightSidebarActiveTab}
+            onActiveTabChange={setRightSidebarActiveTab}
+            onOpenAiInsight={() => setAiInsightOpen(true)}
+            onOpenArchiveManager={onOpenArchiveManager}
+          />
         </SidebarDrawer>
       </main>
 
@@ -109,8 +120,15 @@ export function GameHUD({
           background: colorAlpha("bgElevated", 0.8),
         }}
       >
-        <RightSidebar />
+        <RightSidebar
+          activeTab={rightSidebarActiveTab}
+          onActiveTabChange={setRightSidebarActiveTab}
+          onOpenAiInsight={() => setAiInsightOpen(true)}
+          onOpenArchiveManager={onOpenArchiveManager}
+        />
       </aside>
+
+      <AiInsightDialog open={aiInsightOpen} onOpenChange={setAiInsightOpen} />
     </div>
   );
 }

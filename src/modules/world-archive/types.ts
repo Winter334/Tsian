@@ -18,10 +18,15 @@ export type EntityPresence = "active" | "nearby" | "dormant" | "resolved";
 
 // === 关系 ===
 export interface EntityRelationship {
+  id: string;
   targetEntityId: string;
   type: string;
   description: string;
 }
+
+export type EntityRelationshipInput = Omit<EntityRelationship, "id"> & {
+  id?: string;
+};
 
 // === 叙事实体（核心） ===
 export interface NarrativeEntity {
@@ -57,7 +62,7 @@ export type ArchiveUpdate =
   | {
       type: "add_relationship";
       entityId: string;
-      relationship: EntityRelationship;
+      relationship: EntityRelationshipInput;
     };
 
 // === 档案快照（注入到黑板） ===

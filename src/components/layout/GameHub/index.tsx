@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import {
+  Archive,
   BookOpen,
   Brain,
   FolderOpen,
@@ -26,6 +27,7 @@ interface GameHubProps {
   onCheckpoint: () => void;
   onMemory: () => void;
   onRoomInfo: () => void;
+  onWorldArchive: () => void;
 }
 
 const containerVariants = {
@@ -67,6 +69,7 @@ export function GameHub({
   onCheckpoint,
   onMemory,
   onRoomInfo,
+  onWorldArchive,
 }: GameHubProps) {
   return (
     <div className="relative w-full h-dvh overflow-hidden">
@@ -148,6 +151,13 @@ export function GameHub({
             label="存档"
             sublabel="SAVES"
             onClick={onSaveManager}
+          />
+          <HubFeatureIcon
+            position="inline"
+            icon={Archive}
+            label="世界档案"
+            sublabel="ARCHIVE"
+            onClick={onWorldArchive}
           />
           <HubFeatureIcon
             position="inline"

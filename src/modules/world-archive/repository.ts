@@ -77,6 +77,15 @@ export class WorldArchiveRepository {
     return entities;
   }
 
+  observeEntities(observer: (event: Y.YMapEvent<string>) => void): () => void {
+    const entitiesMap = this.getEntitiesMap();
+    entitiesMap.observe(observer);
+
+    return () => {
+      entitiesMap.unobserve(observer);
+    };
+  }
+
   saveEntity(entity: NarrativeEntity): void {
     const entitiesMap = this.getEntitiesMap();
     entitiesMap.set(entity.id, JSON.stringify(entity));

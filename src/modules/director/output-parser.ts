@@ -2,7 +2,7 @@ import type {
   ArchiveUpdate,
   EntityArchetype,
   EntityPresence,
-  EntityRelationship,
+  EntityRelationshipInput,
 } from "@/modules/world-archive/types";
 import type { DirectorOutput, Foreshadow, Milestone, StoryArc } from "./types";
 
@@ -404,7 +404,7 @@ function pushPresenceChange(
 function pushRelationshipChange(
   updates: ArchiveUpdate[],
   entityId: string,
-  relationship: EntityRelationship,
+  relationship: EntityRelationshipInput,
   _currentTurn: number,
 ): void {
   updates.push({
@@ -476,7 +476,7 @@ function resolvePresence(token: string): EntityPresence | null {
 function tryParseRelationship(
   description: string,
   entityLookup: (nameOrId: string) => string | undefined,
-): EntityRelationship | null {
+): EntityRelationshipInput | null {
   const establishMatch = description.match(
     /与\s*([^\s，。；;：:()（）]+)(?:[（(]([^)）]+)[）)])?\s*建立了\s*([^，。；;：:]+?)\s*关系/u,
   );

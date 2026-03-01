@@ -33,6 +33,10 @@ import {
   CheckpointCommands,
   type RestoreCheckpointPayload,
 } from "@/domain/commands/checkpoint";
+import {
+  WorldArchiveCommands,
+  type SyncPipelineArchiveChangesPayload,
+} from "@/domain/commands/world-archive";
 import { createConversation } from "@/domain/entities/conversation";
 import { createMessage } from "@/domain/entities/message";
 import { ChatEvents } from "@/domain/events/chat";
@@ -47,9 +51,6 @@ import {
 import type { EntityData } from "@/modules/game/services/entity-accessor";
 import { applyStructuralChanges } from "@/modules/game/services/structural-change-consumer";
 import { prepareMemoryData } from "@/modules/memory/memory-injector";
-import { applyArchiveUpdatesAndSync } from "@/modules/world-archive/apply-updates";
-import { autoRegisterNpcs } from "@/modules/world-archive/auto-register";
-import type { ArchiveUpdate } from "@/modules/world-archive/types";
 import { useSettingsStore } from "@/stores/settings";
 import * as Y from "yjs";
 import { getChatRepository } from "../repository/factory";
@@ -352,19 +353,33 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
         );
       }
 
-      // --- 世界档案：NPC 自动建档 ---
-      if (irnrResult.createdNpcs && irnrResult.createdNpcs.length > 0) {
-        const currentTurn = assistantMessageIndex;
-        autoRegisterNpcs(irnrResult.createdNpcs, currentTurn);
-      }
+      // --- 世界档案：通过命令链路同步 NPC 自动建档 + 导演档案更新 ---
+      const archiveCommandPayload: SyncPipelineArchiveChangesPayload = {
+        currentTurn: assistantMessageIndex,
+        createdNpcs: irnrResult.createdNpcs,
+        archiveUpdates: irnrResult.archiveUpdates,
+      };
 
-      // --- 世界档案：应用导演 AI 的档案更新 ---
-      if (irnrResult.archiveUpdates && irnrResult.archiveUpdates.length > 0) {
-        const currentTurn = assistantMessageIndex;
-        applyArchiveUpdatesAndSync(
-          irnrResult.archiveUpdates as ArchiveUpdate[],
-          currentTurn,
+      if (
+        (archiveCommandPayload.createdNpcs?.length ?? 0) > 0 ||
+        (archiveCommandPayload.archiveUpdates?.length ?? 0) > 0
+      ) {
+        const archiveSyncResult = await commandBus.dispatch<
+          SyncPipelineArchiveChangesPayload,
+          void
+        >(
+          {
+            type: WorldArchiveCommands.SYNC_PIPELINE_CHANGES,
+            payload: archiveCommandPayload,
+          },
+          { correlationId: context.commandId },
         );
+
+        if (!archiveSyncResult.success) {
+          console.warn(
+            `[WorldArchive] 命令链路同步失败：${archiveSyncResult.error ?? "unknown"}`,
+          );
+        }
       }
 
       const finalContent = irnrResult.narrativeText ?? "";

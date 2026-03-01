@@ -15,6 +15,7 @@ import type {
   EntityArchetype,
   EntityPresence,
   EntityRelationship,
+  EntityRelationshipInput,
   NarrativeEntity,
 } from "./types";
 
@@ -29,19 +30,24 @@ export interface WorldArchiveState {
 
   // 写入方法（仅由 Handler/SyncBridge 调用）
   createEntity(
-    data: Omit<NarrativeEntity, "id" | "createdAt" | "updatedAt">,
+    data: Omit<
+      NarrativeEntity,
+      "id" | "createdAt" | "updatedAt" | "relationships"
+    > & {
+      relationships: EntityRelationshipInput[];
+    },
   ): NarrativeEntity;
   updateEntityState(id: string, newState: string): void;
   updateEntityPresence(id: string, newPresence: EntityPresence): void;
   updateEssence(id: string, newEssence: string): void;
-  addRelationship(id: string, relationship: EntityRelationship): void;
+  addRelationship(id: string, relationship: EntityRelationshipInput): void;
   updateEntityName(id: string, newName: string): void;
   updateTags(id: string, newTags: string[]): void;
-  removeRelationship(id: string, targetEntityId: string): void;
+  removeRelationship(id: string, relationshipId: string): void;
   updateRelationship(
     id: string,
-    targetEntityId: string,
-    updates: Partial<EntityRelationship>,
+    relationshipId: string,
+    updates: Partial<Omit<EntityRelationship, "id">>,
   ): void;
   removeEntity(id: string): void;
 
@@ -54,9 +60,10 @@ export interface WorldArchiveState {
 }
 
 function cloneRelationship(
-  relationship: EntityRelationship,
+  relationship: EntityRelationshipInput,
 ): EntityRelationship {
   return {
+    id: relationship.id?.trim() || generateSortableId(),
     targetEntityId: relationship.targetEntityId,
     type: relationship.type,
     description: relationship.description,
@@ -139,6 +146,16 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
           return;
         }
 
+        if (entity.gameEntityId) {
+          const synced = syncCharacterStatus(entity.gameEntityId, newPresence);
+          if (!synced) {
+            console.warn(
+              `[WorldArchive] Presence 更新被拒绝：Character 同步失败（entityId=${id}, gameEntityId=${entity.gameEntityId}）`,
+            );
+            return;
+          }
+        }
+
         entity.presence = newPresence;
         entity.updatedAt = Date.now();
       });
@@ -160,6 +177,13 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
       set((state) => {
         const entity = state.entities[id];
         if (!entity) {
+          return;
+        }
+
+        const hasDuplicateTarget = entity.relationships.some((item) => {
+          return item.targetEntityId === relationship.targetEntityId;
+        });
+        if (hasDuplicateTarget) {
           return;
         }
 
@@ -192,7 +216,7 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
       });
     },
 
-    removeRelationship: (id, targetEntityId) => {
+    removeRelationship: (id, relationshipId) => {
       set((state) => {
         const entity = state.entities[id];
         if (!entity) {
@@ -200,7 +224,7 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
         }
 
         const relationshipIndex = entity.relationships.findIndex(
-          (relationship) => relationship.targetEntityId === targetEntityId,
+          (relationship) => relationship.id === relationshipId,
         );
         if (relationshipIndex === -1) {
           return;
@@ -211,7 +235,7 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
       });
     },
 
-    updateRelationship: (id, targetEntityId, updates) => {
+    updateRelationship: (id, relationshipId, updates) => {
       set((state) => {
         const entity = state.entities[id];
         if (!entity) {
@@ -219,9 +243,21 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
         }
 
         const relationship = entity.relationships.find((item) => {
-          return item.targetEntityId === targetEntityId;
+          return item.id === relationshipId;
         });
         if (!relationship) {
+          return;
+        }
+
+        const nextTargetEntityId =
+          updates.targetEntityId ?? relationship.targetEntityId;
+        const hasDuplicateTarget = entity.relationships.some((item) => {
+          return (
+            item.id !== relationshipId &&
+            item.targetEntityId === nextTargetEntityId
+          );
+        });
+        if (hasDuplicateTarget) {
           return;
         }
 
@@ -334,7 +370,15 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
                 break;
               }
 
-              entity.relationships.push(cloneRelationship(update.relationship));
+              const nextRelationship = cloneRelationship(update.relationship);
+              const hasDuplicateTarget = entity.relationships.some((item) => {
+                return item.targetEntityId === nextRelationship.targetEntityId;
+              });
+              if (hasDuplicateTarget) {
+                break;
+              }
+
+              entity.relationships.push(nextRelationship);
               entity.lastActiveTurn = currentTurn;
               entity.updatedAt = Date.now();
               break;

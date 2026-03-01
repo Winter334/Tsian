@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useId, useSyncExternalStore, type ReactNode } from "react";
 
 import { animation, colorAlpha } from "@/styles/tokens";
 import { X } from "lucide-react";
@@ -9,6 +9,73 @@ interface SidebarDrawerProps {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
+}
+
+const OPEN_DRAWER_STACK: string[] = [];
+const DRAWER_REGISTRY = new Map<string, () => void>();
+
+let drawerEscapeListenerAttached = false;
+
+function getTopDrawerId(): string | undefined {
+  return OPEN_DRAWER_STACK[OPEN_DRAWER_STACK.length - 1];
+}
+
+function removeDrawerFromStack(drawerId: string): void {
+  const index = OPEN_DRAWER_STACK.lastIndexOf(drawerId);
+  if (index >= 0) {
+    OPEN_DRAWER_STACK.splice(index, 1);
+  }
+}
+
+function handleDrawerEscape(event: KeyboardEvent): void {
+  if (event.key !== "Escape") {
+    return;
+  }
+
+  const topDrawerId = getTopDrawerId();
+  if (!topDrawerId) {
+    return;
+  }
+
+  queueMicrotask(() => {
+    if (event.defaultPrevented) {
+      return;
+    }
+
+    const latestTopDrawerId = getTopDrawerId();
+    if (!latestTopDrawerId || latestTopDrawerId !== topDrawerId) {
+      return;
+    }
+
+    const closeDrawer = DRAWER_REGISTRY.get(latestTopDrawerId);
+    if (!closeDrawer) {
+      return;
+    }
+
+    event.preventDefault();
+    closeDrawer();
+  });
+}
+
+function syncDrawerEscapeListener(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const hasOpenDrawer = OPEN_DRAWER_STACK.length > 0;
+
+  if (hasOpenDrawer) {
+    if (!drawerEscapeListenerAttached) {
+      window.addEventListener("keydown", handleDrawerEscape);
+      drawerEscapeListenerAttached = true;
+    }
+    return;
+  }
+
+  if (drawerEscapeListenerAttached) {
+    window.removeEventListener("keydown", handleDrawerEscape);
+    drawerEscapeListenerAttached = false;
+  }
 }
 
 function useIsMobile(): boolean {
@@ -40,19 +107,24 @@ export function SidebarDrawer({
   children,
 }: SidebarDrawerProps) {
   const isMobile = useIsMobile();
+  const drawerId = useId();
 
   useEffect(() => {
-    if (!open || !isMobile) return;
+    if (!open || !isMobile) {
+      return;
+    }
 
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
+    DRAWER_REGISTRY.set(drawerId, onClose);
+    removeDrawerFromStack(drawerId);
+    OPEN_DRAWER_STACK.push(drawerId);
+    syncDrawerEscapeListener();
+
+    return () => {
+      removeDrawerFromStack(drawerId);
+      DRAWER_REGISTRY.delete(drawerId);
+      syncDrawerEscapeListener();
     };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isMobile, open, onClose]);
+  }, [drawerId, isMobile, onClose, open]);
 
   if (!isMobile) return null;
 
@@ -96,7 +168,7 @@ export function SidebarDrawer({
             transition={{ duration: animation.duration.slow }}
             role="dialog"
             aria-modal="true"
-            aria-label={side === "left" ? "角色状态侧栏" : "场景角色侧栏"}
+            aria-label={side === "left" ? "角色状态侧栏" : "右侧功能栏侧栏"}
           >
             <motion.button
               type="button"

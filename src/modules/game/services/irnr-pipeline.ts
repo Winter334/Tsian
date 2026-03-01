@@ -135,45 +135,112 @@ function isAiOutputSource(source: string): source is AiOutputSource {
   return AI_OUTPUT_SOURCE_SET.has(source as AiOutputSource);
 }
 
-/**
- * 从管线黑板中采集各 AI Agent 的原始输出，写入 AiOutputLogStore
- */
-function collectAiOutputs(bb: Partial<PipelineBlackboard>): void {
-  const rawOutputs = bb._agentRawOutputs;
-  if (!rawOutputs) {
-    return;
+function getFallbackRawOutput(input: {
+  source: AiOutputSource;
+  success: boolean;
+  rawOutput?: string;
+}): string {
+  const trimmed = input.rawOutput?.trim();
+  if (trimmed) {
+    return input.rawOutput ?? "";
   }
 
+  return input.success
+    ? `[${input.source}] 原始输出缺失`
+    : `[${input.source}] 执行失败，未产出原始输出`;
+}
+
+/**
+ * 从管线黑板中采集各 AI Agent 的输出，写入 AiOutputLogStore。
+ *
+ * - 成功/失败都入库（失败不依赖 rawOutput）
+ * - sequenceIndex 以 _trace 顺序为准
+ */
+function collectAiOutputs(
+  bb: Partial<PipelineBlackboard>,
+  failedAgent?: { agentId: string; error: string },
+): void {
   const store = useAiOutputLogStore.getState();
   const turnNumber = bb.turnNumber ?? 0;
   const trace = bb._trace ?? [];
+  const rawOutputs = bb._agentRawOutputs ?? {};
   const timestamp = Date.now();
 
-  for (const [agentId, rawOutput] of Object.entries(rawOutputs)) {
-    if (!isAiOutputSource(agentId)) {
-      continue;
+  const collectedSources = new Set<AiOutputSource>();
+
+  trace.forEach((traceEntry, sequenceIndex) => {
+    if (!isAiOutputSource(traceEntry.agentId)) {
+      return;
     }
 
-    const traceEntry = trace.find((entry) => entry.agentId === agentId);
+    const source = traceEntry.agentId;
+    const rawOutput = getFallbackRawOutput({
+      source,
+      success: traceEntry.success,
+      rawOutput: rawOutputs[source],
+    });
+
+    store.appendEntry({
+      turn: turnNumber,
+      source,
+      sequenceIndex,
+      rawOutput,
+      duration: traceEntry.completedAt - traceEntry.startedAt,
+      success: traceEntry.success,
+      error: traceEntry.error,
+      timestamp,
+    });
+
+    collectedSources.add(source);
+  });
+
+  let additionalSequenceIndex = trace.length;
+  for (const [agentId, rawOutput] of Object.entries(rawOutputs)) {
+    if (!isAiOutputSource(agentId) || collectedSources.has(agentId)) {
+      continue;
+    }
 
     store.appendEntry({
       turn: turnNumber,
       source: agentId,
-      rawOutput,
-      duration: traceEntry
-        ? traceEntry.completedAt - traceEntry.startedAt
-        : undefined,
-      success: traceEntry?.success ?? true,
-      error: traceEntry?.error,
+      sequenceIndex: additionalSequenceIndex,
+      rawOutput: getFallbackRawOutput({
+        source: agentId,
+        success: true,
+        rawOutput,
+      }),
+      success: true,
       timestamp,
     });
+
+    collectedSources.add(agentId);
+    additionalSequenceIndex += 1;
+  }
+
+  if (failedAgent && isAiOutputSource(failedAgent.agentId)) {
+    const failedSource = failedAgent.agentId;
+    if (!collectedSources.has(failedSource)) {
+      store.appendEntry({
+        turn: turnNumber,
+        source: failedSource,
+        sequenceIndex: additionalSequenceIndex,
+        rawOutput: getFallbackRawOutput({
+          source: failedSource,
+          success: false,
+          rawOutput: rawOutputs[failedSource],
+        }),
+        success: false,
+        error: failedAgent.error,
+        timestamp,
+      });
+    }
   }
 }
 
 function handlePipelineError(error: unknown): IrnrPipelineResult {
   if (error instanceof PipelineError) {
     const bb = error.blackboard as Partial<PipelineBlackboard>;
-    collectAiOutputs(bb);
+    collectAiOutputs(bb, { agentId: error.agentId, error: error.message });
     return {
       success: false,
       error: error.message,

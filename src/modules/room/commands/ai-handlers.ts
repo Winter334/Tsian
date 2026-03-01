@@ -24,6 +24,10 @@ import type {
   Member,
   PlayerAction,
 } from "@/core/yjs/room/types";
+import {
+  SyncPipelineArchiveChangesPayload,
+  WorldArchiveCommands,
+} from "@/domain";
 import type {
   CancelAiTurnPayload,
   ProcessAiTurnPayload,
@@ -34,14 +38,11 @@ import type { CreatedNpcData } from "@/domain/types";
 import { type ResultFrame } from "@/domain/types";
 import { createAiExecutor, type AiExecutor } from "@/lib/ai/executor";
 import { resolveAIConfig } from "@/lib/ai/resolve-config";
-import type { AIConfig, AdvancedSettings } from "@/lib/ai/types";
+import type { AdvancedSettings, AIConfig } from "@/lib/ai/types";
 import { buildVariableContext, usePresetStore } from "@/lib/prompt";
 import { createGameStateRepository } from "@/modules/game/repository/game-state-repository";
 import { applyStructuralChanges } from "@/modules/game/services/structural-change-consumer";
 import { prepareMemoryData } from "@/modules/memory/memory-injector";
-import { applyArchiveUpdatesAndSync } from "@/modules/world-archive/apply-updates";
-import { autoRegisterNpcs } from "@/modules/world-archive/auto-register";
-import type { ArchiveUpdate } from "@/modules/world-archive/types";
 import { useSettingsStore } from "@/stores/settings";
 import * as Y from "yjs";
 
@@ -198,7 +199,7 @@ function getHostAiConfig(preset?: {
  */
 export async function processAiTurnHandler(
   payload: ProcessAiTurnPayload,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> {
   const { roomId, turnNumber, userId } = payload;
   const executorKey = getExecutorKey(roomId, turnNumber);
@@ -479,26 +480,43 @@ export async function processAiTurnHandler(
           );
         }
 
+        const { commandBus } = await import("@/core");
+
         // 消费结构化变更（物品/技能 → Inventory 命令）
         if (irnrResult.resultFrame?.structuralChanges) {
-          const { commandBus } = await import("@/core");
           await applyStructuralChanges(
             irnrResult.resultFrame.structuralChanges,
             commandBus,
           );
         }
 
-        // --- 世界档案：NPC 自动建档 ---
-        if (irnrResult.createdNpcs && irnrResult.createdNpcs.length > 0) {
-          autoRegisterNpcs(irnrResult.createdNpcs, turnNumber);
-        }
+        // --- 世界档案：通过命令链路同步 NPC 自动建档 + 导演档案更新 ---
+        const archiveCommandPayload: SyncPipelineArchiveChangesPayload = {
+          currentTurn: turnNumber,
+          createdNpcs: irnrResult.createdNpcs,
+          archiveUpdates: irnrResult.archiveUpdates,
+        };
 
-        // --- 世界档案：应用导演 AI 的档案更新 ---
-        if (irnrResult.archiveUpdates && irnrResult.archiveUpdates.length > 0) {
-          applyArchiveUpdatesAndSync(
-            irnrResult.archiveUpdates as ArchiveUpdate[],
-            turnNumber,
+        if (
+          (archiveCommandPayload.createdNpcs?.length ?? 0) > 0 ||
+          (archiveCommandPayload.archiveUpdates?.length ?? 0) > 0
+        ) {
+          const archiveSyncResult = await commandBus.dispatch<
+            SyncPipelineArchiveChangesPayload,
+            void
+          >(
+            {
+              type: WorldArchiveCommands.SYNC_PIPELINE_CHANGES,
+              payload: archiveCommandPayload,
+            },
+            { correlationId: context.commandId },
           );
+
+          if (!archiveSyncResult.success) {
+            console.warn(
+              `[WorldArchive] 命令链路同步失败：${archiveSyncResult.error ?? "unknown"}`,
+            );
+          }
         }
 
         // === NPC 自动归档检查 ===

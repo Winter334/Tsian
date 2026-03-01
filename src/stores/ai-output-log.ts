@@ -16,6 +16,8 @@ export interface AiOutputEntry {
   turn: number;
   /** AI 来源 */
   source: AiOutputSource;
+  /** 回合内执行序号（从 0 开始，越小越早） */
+  sequenceIndex: number;
   /** AI 原始输出（完整文本） */
   rawOutput: string;
   /** 耗时（ms） */

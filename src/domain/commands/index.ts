@@ -9,3 +9,4 @@ export * from "./inventory";
 export { MemoryCommands } from "./memory";
 export * from "./room";
 export * from "./save";
+export * from "./world-archive";
