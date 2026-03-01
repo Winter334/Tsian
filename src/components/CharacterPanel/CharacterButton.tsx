@@ -10,7 +10,7 @@ import { UserCircle } from "lucide-react";
 
 import { animation, colorAlpha } from "@/styles/tokens";
 
-import { usePlayerCharacter } from ".";
+import { usePlayerCharacter } from "./usePlayerCharacter";
 
 interface CharacterButtonProps {
   /** 点击回调 */

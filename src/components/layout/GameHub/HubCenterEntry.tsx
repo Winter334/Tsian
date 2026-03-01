@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 
-import { usePlayerCharacter } from "@/components/CharacterPanel";
+import { usePlayerCharacter } from "@/components/CharacterPanel/usePlayerCharacter";
 import {
   animation,
   color,

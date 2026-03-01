@@ -13,6 +13,7 @@
 import type { Easing } from "framer-motion";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  Activity,
   Package,
   Shield,
   Sparkles,
@@ -24,17 +25,15 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Dialog, DialogContent } from "@/components/ui";
-import { yjsManager } from "@/core/yjs";
 import type { Character } from "@/domain/entities/character";
 import { useCharacterFullStats } from "@/hooks/useCharacterFullStats";
 import { useRuntimeWorldConfig } from "@/hooks/useRuntimeWorldConfig";
 import type { TalentConfig, WorldConfig } from "@/lib/world/types";
 import { resolveDimensionSelections } from "@/lib/world/types";
 import { useCurrentSaveId } from "@/modules";
-import { yMapToCharacter } from "@/modules/game/repository";
 import { color, colorAlpha, glow } from "@/styles/tokens";
 import { CharacterPortraitPanel } from "./CharacterPortraitPanel";
 import { CharacterRadarChart } from "./CharacterRadarChart";
@@ -42,12 +41,15 @@ import { EquipmentSection } from "./EquipmentSection";
 import { InventorySection } from "./InventorySection";
 import { NpcList } from "./NpcList";
 import { SkillSection } from "./SkillSection";
+import { StatusSection } from "./StatusSection";
+import { usePlayerCharacter } from "./usePlayerCharacter";
 
 // ── 标签类型与配置 ──
 
 type CharacterPanelTabKey =
   | "overview"
   | "talents"
+  | "status"
   | "skills"
   | "inventory"
   | "equipment"
@@ -62,6 +64,7 @@ interface TabItem {
 const TAB_ITEMS: TabItem[] = [
   { key: "overview", label: "基础信息", icon: User },
   { key: "talents", label: "天赋", icon: Sparkles },
+  { key: "status", label: "状态", icon: Activity },
   { key: "skills", label: "技能", icon: Zap },
   {
     key: "inventory",
@@ -175,75 +178,6 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
       </span>
     </div>
   );
-}
-
-// ── Hook: 从 Yjs 读取玩家角色 ──
-
-/**
- * 从当前存档读取第一个 player 角色
- * 参考 chat handler 中的数据获取方式
- */
-function usePlayerCharacter(): Character | null {
-  const [character, setCharacter] = useState<Character | null>(null);
-  const currentSaveId = useCurrentSaveId();
-
-  const readCharacter = useCallback(() => {
-    const currentSave = yjsManager.getCurrentSave();
-    if (!currentSave) {
-      setCharacter(null);
-      return;
-    }
-
-    const charactersMap = currentSave.get("characters") as
-      | import("yjs").Map<import("yjs").Map<unknown>>
-      | undefined;
-
-    if (charactersMap && charactersMap.size > 0) {
-      let playerChar: Character | null = null;
-      charactersMap.forEach((charMap) => {
-        const char = yMapToCharacter(charMap);
-        if ((char.controlType ?? "player") === "player" && !playerChar) {
-          playerChar = char;
-        }
-      });
-
-      setCharacter(playerChar);
-      return;
-    }
-
-    setCharacter(null);
-  }, []);
-
-  useEffect(() => {
-    // 初始读取（覆盖 currentSaveId 从 null 变为有效值的场景）
-    readCharacter();
-
-    const currentSave = yjsManager.getCurrentSave();
-    if (!currentSave) return;
-
-    const saveHandler = () => readCharacter();
-    currentSave.observe(saveHandler);
-
-    const charactersMap = currentSave.get("characters") as
-      | import("yjs").Map<import("yjs").Map<unknown>>
-      | undefined;
-
-    if (charactersMap) {
-      const mapHandler = () => readCharacter();
-      charactersMap.observeDeep(mapHandler);
-
-      return () => {
-        charactersMap.unobserveDeep(mapHandler);
-        currentSave.unobserve(saveHandler);
-      };
-    }
-
-    return () => {
-      currentSave.unobserve(saveHandler);
-    };
-  }, [readCharacter, currentSaveId]);
-
-  return character;
 }
 
 // ── 标签导航 ──
@@ -645,6 +579,8 @@ function renderActiveTabContent(
       return (
         <TalentsTabContent character={character} worldConfig={worldConfig} />
       );
+    case "status":
+      return <StatusSection character={character} worldConfig={worldConfig} />;
     case "skills":
       return <SkillSection characterId={character.id} animationIndex={0} />;
     case "inventory":
@@ -756,4 +692,3 @@ export function CharacterPanelDialog({
 }
 
 export { CharacterButton } from "./CharacterButton";
-export { usePlayerCharacter };

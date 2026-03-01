@@ -1,7 +1,7 @@
 import { Eye, Heart, ScrollText, User } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { usePlayerCharacter } from "@/components/CharacterPanel";
+import { usePlayerCharacter } from "@/components/CharacterPanel/usePlayerCharacter";
 import { useCharacterFullStats } from "@/hooks/useCharacterFullStats";
 import { usePortrait } from "@/lib/portrait";
 import { getRuntimeWorldConfig } from "@/lib/world/resolve-config";
@@ -10,6 +10,7 @@ import { useCurrentSaveId } from "@/modules";
 import { color, colorAlpha, glow } from "@/styles/tokens";
 
 import { OperationLogPanel } from "./OperationLogPanel";
+import { SidebarStatusTags } from "./SidebarStatusTags";
 
 interface LeftSidebarProps {
   onOpenCharacterPanel: () => void;
@@ -369,6 +370,7 @@ export function LeftSidebar({ onOpenCharacterPanel }: LeftSidebarProps) {
       </button>
 
       <SidebarResources worldConfig={worldConfig} fullStats={fullStats} />
+      <SidebarStatusTags character={character} worldConfig={worldConfig} />
 
       <SidebarDescription
         appearance={character.appearance}
