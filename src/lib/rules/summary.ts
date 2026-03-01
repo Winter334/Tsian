@@ -11,6 +11,7 @@ import type {
   StructuralChange,
   ValueChange,
 } from "@/domain/types";
+import type { SummaryLine } from "./engine";
 
 // ─── NPC 摘要条目 ─────────────────────────────────────────
 
@@ -36,12 +37,23 @@ export interface MechanicSummaryInput {
   npcSummaryEntries?: readonly NpcSummaryEntry[];
   /** 结构化变更（物品/技能增减） */
   structuralChanges?: readonly StructuralChange[];
+  /** 有序摘要行（优先使用，为空时回退到分类渲染） */
+  summaryLines?: readonly SummaryLine[];
 }
 
 export function generateMechanicSummary(
   input: MechanicSummaryInput,
   entityDisplayNames?: Map<string, string>,
 ): string {
+  // 优先使用有序时间线摘要
+  if (input.summaryLines && input.summaryLines.length > 0) {
+    const result = input.summaryLines
+      .map((line) => (line.indent > 0 ? `  → ${line.text}` : line.text))
+      .join("\n");
+    return result;
+  }
+
+  // ── 回退：分类渲染（向后兼容） ──
   const lines: string[] = [];
 
   // 检定结果

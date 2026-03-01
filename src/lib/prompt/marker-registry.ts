@@ -427,6 +427,12 @@ function splitSummarySentences(summary: string): string[] {
 
   const segments: string[] = [];
   for (const line of lines) {
+    // 保留 → 前缀的子效果行作为独立行（不按句号拆分）
+    if (line.startsWith("→")) {
+      segments.push(line);
+      continue;
+    }
+
     const stripped = line.replace(/^[-•▸]\s*/, "");
     const parts = stripped
       .split(/(?<=[。！？])/)
@@ -1101,7 +1107,11 @@ function renderResultFrame(context: VariableContext): string {
   if (summaryLines.length > 0) {
     lines.push("");
     for (const line of summaryLines) {
-      lines.push(`▸ ${line}`);
+      if (line.startsWith("→")) {
+        lines.push(`  ${line}`);
+      } else {
+        lines.push(`▸ ${line}`);
+      }
     }
   } else {
     const fallbackLines = renderFallbackResultLines(

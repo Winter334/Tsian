@@ -168,6 +168,14 @@ export interface RulesEngine {
   execute(script: RuleScript, context: ExecutionContext): ExecutionResult;
 }
 
+/** 执行摘要行 */
+export interface SummaryLine {
+  /** 格式化的描述文本 */
+  text: string;
+  /** 缩进级别: 0=顶层事件, 1=子效果（check 的 onSuccess/onFailure 产生的效果） */
+  indent: number;
+}
+
 // ─── 内部执行状态 ─────────────────────────────────────────
 
 export interface InternalExecutionState {
@@ -226,6 +234,10 @@ export interface InternalExecutionState {
   structuralChanges: StructuralChange[];
   /** 运行时逐 action 校验错误/警告 */
   validationErrors: ValidationError[];
+  /** 有序摘要行（按执行顺序） */
+  summaryLines: SummaryLine[];
+  /** 当前是否在 check 分支中执行 */
+  insideCheckBranch: boolean;
 }
 
 // ─── Shadow State 辅助函数 ────────────────────────────────
@@ -331,6 +343,44 @@ function getAllFieldsWithShadow(
   return result;
 }
 
+/** 获取实体显示名称 */
+function getEntityDisplayName(
+  entityId: string,
+  context: ExecutionContext,
+  state: InternalExecutionState,
+): string {
+  // 1. 从 aliasMap 查找
+  const displayName = context.aliasMap?.displayNames?.get(entityId);
+  if (displayName) return displayName;
+  // 2. 从本轮创建的 NPC 查找
+  const npc = state.createdNpcs.find((n) => n.id === entityId);
+  if (npc) return npc.name;
+  // 3. 从 shadow 查找 name
+  const name = getValueWithShadow(entityId, "name", context, state);
+  if (typeof name === "string") return name;
+  // 4. 回退
+  return entityId;
+}
+
+/** 获取字段标签 */
+function getFieldLabel(field: string, context: ExecutionContext): string {
+  for (const attr of context.worldConfig.primaryAttributes) {
+    if (attr.key === field) return attr.label;
+  }
+  for (const stat of context.worldConfig.derivedStats) {
+    if (stat.key === field) return stat.label;
+  }
+  return field;
+}
+
+/** 推送摘要行（根据当前是否在 check 分支内自动设置 indent） */
+function pushSummaryLine(state: InternalExecutionState, text: string): void {
+  state.summaryLines.push({
+    text,
+    indent: state.insideCheckBranch ? 1 : 0,
+  });
+}
+
 // ─── 运行时校验辅助 ─────────────────────────────────────────
 
 function ensureRuntimeAliasMap(context: ExecutionContext): EntityAliasMap {
@@ -426,6 +476,10 @@ export class BasicRulesEngine implements RulesEngine {
       structuralChanges: [],
       // 运行时逐 action 校验
       validationErrors: [],
+      // 有序摘要行
+      summaryLines: [],
+      // 当前是否在 check 分支中
+      insideCheckBranch: false,
     };
 
     // 依次执行 actions（逐 action 校验 + 执行）
@@ -464,6 +518,8 @@ export class BasicRulesEngine implements RulesEngine {
           state.structuralChanges.length > 0
             ? state.structuralChanges
             : undefined,
+        summaryLines:
+          state.summaryLines.length > 0 ? state.summaryLines : undefined,
       },
       context.aliasMap?.displayNames,
     );
@@ -942,12 +998,10 @@ function executeCheck(
   }
 
   // 5. 计算修正值
-  const skillMod = getSkillModifier(
-    checkActorId,
-    expandedAction.skill,
-    context,
-    state,
-  );
+  const skillForDisplay = expandedAction.skill || "未指定";
+  const skillMod = expandedAction.skill
+    ? getSkillModifier(checkActorId, expandedAction.skill, context, state)
+    : 0;
   const extraMod =
     expandedAction.modifier !== undefined
       ? resolveValueExpression(expandedAction.modifier, evalCtx)
@@ -963,7 +1017,12 @@ function executeCheck(
 
   for (const mod of passiveMods) {
     if (mod.scope !== "check") continue;
-    if (mod.filter && mod.filter !== expandedAction.skill) continue;
+    if (
+      expandedAction.skill &&
+      mod.filter &&
+      mod.filter !== expandedAction.skill
+    )
+      continue;
 
     const modValue =
       mod.value !== undefined
@@ -1058,8 +1117,8 @@ function executeCheck(
 
   // 7. 构建 CheckResult（使用 v2 扩展字段）
   const check: Check = {
-    name: expandedAction.name ?? expandedAction.skill,
-    skill: expandedAction.skill,
+    name: expandedAction.name ?? skillForDisplay,
+    skill: skillForDisplay,
     roll: rawRoll,
     modifier: totalModifier,
     total: attackerTotal,
@@ -1075,6 +1134,42 @@ function executeCheck(
   };
 
   state.checks.push(check);
+
+  const actorName = getEntityDisplayName(checkActorId, context, state);
+  const skillPart = expandedAction.skill ? `(${expandedAction.skill})` : "";
+  const resultText = success ? "成功" : "失败";
+  const modifierText =
+    totalModifier >= 0 ? `+${totalModifier}` : `${totalModifier}`;
+
+  let checkLine: string;
+  if (dcResolution.type === "opposed") {
+    // 对抗检定格式
+    const opposedModText =
+      (opposedModifier ?? 0) >= 0
+        ? `+${opposedModifier ?? 0}`
+        : `${opposedModifier ?? 0}`;
+    checkLine = `${actorName} 进行「${check.name}」${skillPart}：${rawRoll}${modifierText}=${attackerTotal} vs 对抗(${opposedSkillName ?? "?"}) ${opposedRoll ?? 0}${opposedModText}=${opposedTotal ?? 0}，${resultText}（余量 ${margin >= 0 ? "+" : ""}${margin}）`;
+  } else if (expandedAction.dcTarget) {
+    // 有 dcTarget 的检定
+    const dcTargetName = getEntityDisplayName(
+      resolveEntityId(expandedAction.dcTarget, context, state),
+      context,
+      state,
+    );
+    checkLine = `${actorName} 对 ${dcTargetName} 进行「${check.name}」${skillPart}：${rawRoll}${modifierText}=${attackerTotal} vs DC ${dc}，${resultText}（余量 ${margin >= 0 ? "+" : ""}${margin}）`;
+  } else {
+    checkLine = `${actorName} 进行「${check.name}」${skillPart}：${rawRoll}${modifierText}=${attackerTotal} vs DC ${dc}，${resultText}（余量 ${margin >= 0 ? "+" : ""}${margin}）`;
+  }
+
+  // 特例：无子效果时附加 reason
+  const branchActionsForReason = success
+    ? expandedAction.onSuccess
+    : (expandedAction.onFailure ?? []);
+  if (branchActionsForReason.length === 0 && expandedAction.reason) {
+    checkLine += `。${expandedAction.reason}`;
+  }
+
+  pushSummaryLine(state, checkLine);
 
   // 8. 写入 resultVar（v2 契约：裸变量键）
   if (expandedAction.resultVar) {
@@ -1095,8 +1190,15 @@ function executeCheck(
       ? expandedAction.onSuccess
       : (expandedAction.onFailure ?? []);
 
-    for (const subAction of branchActions) {
-      executeAction(subAction, context, state, actionIndex);
+    const prevInsideCheckBranch = state.insideCheckBranch;
+    state.insideCheckBranch = true;
+
+    try {
+      for (const subAction of branchActions) {
+        executeAction(subAction, context, state, actionIndex);
+      }
+    } finally {
+      state.insideCheckBranch = prevInsideCheckBranch;
     }
   } finally {
     state.currentDepth--;
@@ -1291,6 +1393,16 @@ function executeDamage(
     delta: -finalAmount,
     reason,
   });
+
+  const targetName = getEntityDisplayName(targetId, context, state);
+  const label = getFieldLabel(field, context);
+  const dmgTypeText = action.damageType ? `${action.damageType}` : "";
+  const reasonPart = action.reason ? `（${action.reason}）` : "";
+  const delta = -finalAmount;
+  pushSummaryLine(
+    state,
+    `${targetName} 受到 ${Math.abs(delta)} 点${dmgTypeText}伤害${reasonPart}，${label}：${currentValue} → ${newValue}`,
+  );
 }
 
 /**
@@ -1358,6 +1470,15 @@ function executeHeal(
     delta: newValue - currentValue,
     reason: action.reason ?? "恢复资源",
   });
+
+  const targetName = getEntityDisplayName(targetId, context, state);
+  const label = getFieldLabel(field, context);
+  const reasonPart = action.reason ? `（${action.reason}）` : "";
+  const actualDelta = newValue - currentValue;
+  pushSummaryLine(
+    state,
+    `${targetName} 恢复 ${actualDelta} ${label}${reasonPart}，${label}：${currentValue} → ${newValue}`,
+  );
 }
 
 // cost: 消耗资源值（不触发 on_damage）+ A0: shadow-aware 读写
@@ -1392,6 +1513,14 @@ function executeCost(
     delta: -amount,
     reason: action.reason ?? "消耗资源",
   });
+
+  const actorName = getEntityDisplayName(targetId, context, state);
+  const label = getFieldLabel(field, context);
+  const reasonPart = action.reason ? `（${action.reason}）` : "";
+  pushSummaryLine(
+    state,
+    `${actorName} 消耗 ${amount} ${label}${reasonPart}，${label}：${currentValue} → ${newValue}`,
+  );
 }
 
 function executeRoll(
@@ -1428,6 +1557,7 @@ function executeAddTag(
   state: InternalExecutionState,
 ): void {
   const targetId = resolveEntityId(action.target, context, state);
+
   // A0: shadow-aware 读取
   const hadTag = hasTagWithShadow(targetId, action.tag, context, state);
   const entityType = getEntityTypeOrDefault(context.entities, targetId);
@@ -1467,8 +1597,21 @@ function executeAddTag(
     field: `tags.${action.tag}`,
     oldValue: hadTag,
     newValue: true,
-    reason: action.reason ?? `添加标签 ${action.tag}`,
+    reason: action.reason ?? `获得状态「${metadata.displayName}」`,
   });
+
+  const targetName = getEntityDisplayName(targetId, context, state);
+  const durationPart =
+    metadata.remainingDuration !== undefined
+      ? `（持续${metadata.remainingDuration}回合）`
+      : "";
+  const descPart = metadata.effectDescription
+    ? `：${metadata.effectDescription}`
+    : "";
+  pushSummaryLine(
+    state,
+    `${targetName} 获得状态「${metadata.displayName}」${durationPart}${descPart}`,
+  );
 }
 
 // A0: shadow-aware 标签移除 + C5: 记录移除到 tagChanges
@@ -1478,6 +1621,11 @@ function executeRemoveTag(
   state: InternalExecutionState,
 ): void {
   const targetId = resolveEntityId(action.target, context, state);
+  const predefinedCondition = context.worldConfig.conditions?.find(
+    (c) => c.id === action.tag,
+  );
+  const tagDisplayName = predefinedCondition?.name ?? action.tag;
+
   // A0: shadow-aware 读取
   const hadTag = hasTagWithShadow(targetId, action.tag, context, state);
   const entityType = getEntityTypeOrDefault(context.entities, targetId);
@@ -1498,8 +1646,11 @@ function executeRemoveTag(
     field: `tags.${action.tag}`,
     oldValue: hadTag,
     newValue: false,
-    reason: action.reason ?? `移除标签 ${action.tag}`,
+    reason: action.reason ?? `失去状态「${tagDisplayName}」`,
   });
+
+  const targetName = getEntityDisplayName(targetId, context, state);
+  pushSummaryLine(state, `${targetName} 失去状态「${tagDisplayName}」`);
 }
 
 function executeModifyTag(
@@ -1596,8 +1747,12 @@ function executeBranch(
 
     const branch = isTruthy ? action.then : action.else;
     if (branch) {
+      const summaryCountBefore = state.summaryLines.length;
       for (const subAction of branch) {
         executeAction(subAction, context, state, actionIndex);
+      }
+      if (state.summaryLines.length > summaryCountBefore) {
+        pushSummaryLine(state, `条件判定：${isTruthy ? "成功" : "失败"}`);
       }
     }
   } finally {
@@ -1763,6 +1918,11 @@ function executeSpawn(
     npcName: action.entity.name,
     detail: action.entity.description ?? "",
   });
+
+  const descPart = action.entity.description
+    ? `：${action.entity.description}`
+    : "";
+  pushSummaryLine(state, `NPC「${action.entity.name}」加入场景${descPart}`);
 
   // ── 生成初始物品的 StructuralChanges ──
   if (action.entity.initialItems) {
@@ -2012,6 +2172,15 @@ function executeGrantItem(
     },
     reason: action.reason ?? `获得物品「${action.name}」`,
   });
+
+  const targetName = getEntityDisplayName(targetId, context, state);
+  const qtyText = (action.quantity ?? 1) > 1 ? `×${action.quantity}` : "";
+  const reasonPart = action.reason ? `（${action.reason}）` : "";
+  const descPart = action.description ? `：${action.description}` : "";
+  pushSummaryLine(
+    state,
+    `${targetName} 获得物品「${action.name}」${qtyText}${reasonPart}${descPart}`,
+  );
 }
 
 function executeRemoveItem(
@@ -2275,6 +2444,14 @@ function executeGrantSkill(
     },
     reason: action.reason ?? `习得技能「${action.name}」`,
   });
+
+  const targetName = getEntityDisplayName(targetId, context, state);
+  const reasonPart = action.reason ? `（${action.reason}）` : "";
+  const descPart = action.description ? `：${action.description}` : "";
+  pushSummaryLine(
+    state,
+    `${targetName} 习得技能「${action.name}」(${action.category})${reasonPart}${descPart}`,
+  );
 }
 
 function executeRemoveSkill(
