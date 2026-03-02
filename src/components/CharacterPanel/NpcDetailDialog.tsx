@@ -1,19 +1,16 @@
-/**
- * 角色面板对话框
- *
- * Dialog 薄壳组件，包裹 CharacterDetailPanel 展示角色信息。
- * 无角色时展示空状态。
- */
-
 import { User } from "lucide-react";
 
 import { Dialog, DialogContent } from "@/components/ui";
 import { useRuntimeWorldConfig } from "@/hooks/useRuntimeWorldConfig";
 import { color, colorAlpha } from "@/styles/tokens";
 import { CharacterDetailPanel } from "./CharacterDetailPanel";
-import { usePlayerCharacter } from "./usePlayerCharacter";
+import { useNpcCharacter } from "./useNpcCharacter";
 
-// ── 空状态 ──
+interface NpcDetailDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  characterId: string | null;
+}
 
 function EmptyState() {
   return (
@@ -23,48 +20,35 @@ function EmptyState() {
         style={{ color: colorAlpha("textMuted", 0.4) }}
       />
       <p className="text-sm" style={{ color: color("textMuted") }}>
-        未找到角色数据
+        未找到 NPC 数据
       </p>
       <p
         className="text-xs mt-1"
         style={{ color: colorAlpha("textMuted", 0.6) }}
       >
-        请先创建角色或加载存档
+        请从列表中选择一个 NPC
       </p>
     </div>
   );
 }
 
-// ── 主组件导出 ──
-
-interface CharacterPanelDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-
-/**
- * 角色面板对话框
- *
- * 以 Dialog 形式弹出，展示当前存档中的玩家角色信息。
- * 桌面端约 900px 宽度，左侧竖向标签导航 + 右侧内容区；
- * 小屏顶部横向标签 + 下方内容。
- */
-export function CharacterPanelDialog({
+export function NpcDetailDialog({
   open,
   onOpenChange,
-}: CharacterPanelDialogProps) {
-  const character = usePlayerCharacter();
+  characterId,
+}: NpcDetailDialogProps) {
+  const character = useNpcCharacter(characterId);
   const worldConfig = useRuntimeWorldConfig();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title="⬡ 角色信息" width={900} animateLifecycle>
+      <DialogContent title="⬡ NPC 详情" width={900} animateLifecycle>
         {character ? (
-          /* 用 -m-4 抵消 DialogContent 内部的 p-4 padding，实现全尺寸控制 */
           <div className="-m-4 h-[70vh]">
             <CharacterDetailPanel
               character={character}
               worldConfig={worldConfig}
+              config={{ readonly: true }}
             />
           </div>
         ) : (
@@ -74,5 +58,3 @@ export function CharacterPanelDialog({
     </Dialog>
   );
 }
-
-export { CharacterButton } from "./CharacterButton";

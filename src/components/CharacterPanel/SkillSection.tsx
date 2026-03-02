@@ -6,9 +6,10 @@
  */
 
 import { motion } from "framer-motion";
-import { Shield, Star, Swords, Users, Wand2, Wrench, Zap } from "lucide-react";
+import { Zap } from "lucide-react";
 
 import type { SkillCategory, SkillInstance } from "@/domain/entities/skill";
+import { getCategoryIcon } from "@/lib/ui/category-icons";
 import { useInventoryStore } from "@/modules/inventory/store";
 import { color, colorAlpha, glow } from "@/styles/tokens";
 
@@ -25,24 +26,6 @@ const CATEGORY_LABELS: Record<SkillCategory, string> = {
   craft: "制作",
   misc: "通用",
 };
-
-function getCategoryIcon(category: SkillCategory) {
-  switch (category) {
-    case "combat":
-      return <Swords className="w-3.5 h-3.5" />;
-    case "magic":
-      return <Wand2 className="w-3.5 h-3.5" />;
-    case "survival":
-      return <Shield className="w-3.5 h-3.5" />;
-    case "social":
-      return <Users className="w-3.5 h-3.5" />;
-    case "craft":
-      return <Wrench className="w-3.5 h-3.5" />;
-    case "misc":
-    default:
-      return <Star className="w-3.5 h-3.5" />;
-  }
-}
 
 // ── 动画 ──
 

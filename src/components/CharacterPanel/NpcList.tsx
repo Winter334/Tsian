@@ -1,61 +1,30 @@
 /**
  * NPC 列表组件
  *
- * 在角色面板中展示当前存档的 NPC 列表：
+ * 在右侧场景栏展示当前存档的 NPC 列表：
  * - 按状态分组（在场 active / 离场 off_scene）
- * - 点击展开/收起详细信息
+ * - 卡片展示：头像、姓名、等级、叙事状态摘要
+ * - 点击卡片打开 NPC 详情弹窗
  * - archived / dead 状态不展示
  *
- * 数据从 Yjs 文档中只读获取
+ * 数据从 Yjs 文档与 World Archive Store 只读获取
  */
 
 import type { Easing } from "framer-motion";
-import { AnimatePresence, motion } from "framer-motion";
-import {
-  BookOpen,
-  ChevronDown,
-  Circle,
-  Shield,
-  Sparkles,
-  Star,
-  Swords,
-  Users,
-  Wand2,
-  Wrench,
-} from "lucide-react";
+import { motion } from "framer-motion";
+import { ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { yjsManager } from "@/core/yjs";
 import type { Character } from "@/domain/entities/character";
-import { useCharacterFullStats } from "@/hooks/useCharacterFullStats";
-import { useRuntimeWorldConfig } from "@/hooks/useRuntimeWorldConfig";
-import type { TalentConfig, WorldConfig } from "@/lib/world/types";
-import { resolveDimensionSelections } from "@/lib/world/types";
-import { useCurrentSaveId } from "@/modules";
+import { useCurrentSaveId, useWorldArchiveStore } from "@/modules";
 import { yMapToCharacter } from "@/modules/game/repository";
 import { color, colorAlpha } from "@/styles/tokens";
-import { CharacterRadarChart } from "./CharacterRadarChart";
-import { CharacterResources } from "./CharacterResources";
-import { EquipmentSection } from "./EquipmentSection";
-import { InventorySection } from "./InventorySection";
-import { SkillSection } from "./SkillSection";
+import { NpcDetailDialog } from "./NpcDetailDialog";
 
 // ── 动画 ──
 
 const easeOut: Easing = [0.0, 0.0, 0.2, 1.0];
-
-const expandVariants = {
-  collapsed: {
-    height: 0,
-    opacity: 0,
-    transition: { duration: 0.25, ease: easeOut },
-  },
-  expanded: {
-    height: "auto",
-    opacity: 1,
-    transition: { duration: 0.3, ease: easeOut },
-  },
-};
 
 const listItemVariants = {
   hidden: { opacity: 0, x: -10 },
@@ -70,23 +39,28 @@ const listItemVariants = {
   }),
 };
 
-// ── 工具函数（复用 CharacterPanel 的查找逻辑） ──
+type TokenColorKey = Parameters<typeof color>[0];
 
-function getCategoryIcon(category?: TalentConfig["category"]) {
-  switch (category) {
-    case "combat":
-      return <Swords className="w-3 h-3" />;
-    case "magic":
-      return <Wand2 className="w-3 h-3" />;
-    case "survival":
-      return <Shield className="w-3 h-3" />;
-    case "social":
-      return <Users className="w-3 h-3" />;
-    case "misc":
-      return <Wrench className="w-3 h-3" />;
-    default:
-      return <Star className="w-3 h-3" />;
+const AVATAR_COLOR_KEYS: TokenColorKey[] = [
+  "primary",
+  "secondary",
+  "success",
+  "warning",
+  "error",
+];
+
+function getAvatarColorKey(seed: string): TokenColorKey {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
   }
+
+  return AVATAR_COLOR_KEYS[hash % AVATAR_COLOR_KEYS.length] ?? "primary";
+}
+
+function getCharacterInitial(name: string): string {
+  const initial = name.trim().slice(0, 1);
+  return initial ? initial.toUpperCase() : "?";
 }
 
 // ── Hook: 从 Yjs 读取 NPC 角色列表 ──
@@ -95,7 +69,7 @@ function getCategoryIcon(category?: TalentConfig["category"]) {
  * 从当前存档读取所有 NPC 角色（controlType === 'npc'）
  * 排除 archived 和 dead 状态
  */
-export function useNpcCharacters(): Character[] {
+function useNpcCharacters(): Character[] {
   const [npcs, setNpcs] = useState<Character[]>([]);
   const currentSaveId = useCurrentSaveId();
 
@@ -160,360 +134,101 @@ export function useNpcCharacters(): Character[] {
   return npcs;
 }
 
-// ── NPC 详情面板 ──
-
-interface NpcDetailPanelProps {
-  character: Character;
-  worldConfig: WorldConfig;
-}
-
-function NpcDetailPanel({ character, worldConfig }: NpcDetailPanelProps) {
-  const fullStats = useCharacterFullStats(character, worldConfig);
-  const allocatableKeys =
-    worldConfig.pointBuyRules?.allocatableAttributes ?? [];
-
-  const talentInfos = useMemo(() => {
-    const ids = character.talentIds ?? [];
-    return ids
-      .map((id) => worldConfig.talents?.find((t) => t.id === id))
-      .filter((t): t is TalentConfig => t != null);
-  }, [character.talentIds, worldConfig.talents]);
-
-  return (
-    <div className="space-y-3 pt-2">
-      {/* 基本信息（维度选择） */}
-      {character.dimensionSelections &&
-        Object.keys(character.dimensionSelections).length > 0 && (
-          <div className="space-y-1">
-            {resolveDimensionSelections(
-              worldConfig,
-              character.dimensionSelections,
-            ).map((d) => (
-              <div key={d.dimensionId} className="flex items-baseline gap-2">
-                <span
-                  className="text-xs font-medium shrink-0 w-12"
-                  style={{ color: color("textMuted") }}
-                >
-                  {d.dimensionLabel}
-                </span>
-                <span
-                  className="text-xs"
-                  style={{ color: color("textSecondary") }}
-                >
-                  {d.option?.name ?? "未选择"}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
-      {/* 年龄和性别 */}
-      {(character.age != null || character.gender) && (
-        <div className="flex items-center gap-3">
-          {character.gender && (
-            <div className="flex items-baseline gap-1">
-              <span
-                className="text-xs font-medium"
-                style={{ color: color("textMuted") }}
-              >
-                性别
-              </span>
-              <span
-                className="text-xs"
-                style={{ color: color("textSecondary") }}
-              >
-                {character.gender}
-              </span>
-            </div>
-          )}
-          {character.age != null && (
-            <div className="flex items-baseline gap-1">
-              <span
-                className="text-xs font-medium"
-                style={{ color: color("textMuted") }}
-              >
-                年龄
-              </span>
-              <span
-                className="text-xs"
-                style={{ color: color("textSecondary") }}
-              >
-                {character.age}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 外貌 */}
-      {character.appearance && (
-        <div>
-          <div
-            className="flex items-center gap-1.5 mb-1"
-            style={{ color: color("textMuted") }}
-          >
-            <BookOpen className="w-3 h-3" />
-            <span className="text-xs font-medium">外貌</span>
-          </div>
-          <p
-            className="text-xs leading-relaxed pl-4"
-            style={{ color: color("textSecondary") }}
-          >
-            {character.appearance}
-          </p>
-        </div>
-      )}
-
-      {/* 性格 */}
-      {character.personality && (
-        <div>
-          <div
-            className="flex items-center gap-1.5 mb-1"
-            style={{ color: color("textMuted") }}
-          >
-            <Users className="w-3 h-3" />
-            <span className="text-xs font-medium">性格</span>
-          </div>
-          <p
-            className="text-xs leading-relaxed pl-4"
-            style={{ color: color("textSecondary") }}
-          >
-            {character.personality}
-          </p>
-        </div>
-      )}
-
-      {/* 属性雷达图 */}
-      {allocatableKeys.length > 0 && (
-        <div>
-          <div
-            className="flex items-center gap-1.5 mb-1.5"
-            style={{ color: color("textMuted") }}
-          >
-            <Shield className="w-3 h-3" />
-            <span className="text-xs font-medium">属性</span>
-          </div>
-          <CharacterRadarChart
-            worldConfig={worldConfig}
-            fullStats={fullStats}
-          />
-        </div>
-      )}
-
-      {/* 资源条 */}
-      <CharacterResources fullStats={fullStats} worldConfig={worldConfig} />
-
-      {/* 天赋 */}
-      {talentInfos.length > 0 && (
-        <div>
-          <div
-            className="flex items-center gap-1.5 mb-1.5"
-            style={{ color: color("textMuted") }}
-          >
-            <Sparkles className="w-3 h-3" />
-            <span className="text-xs font-medium">天赋</span>
-          </div>
-          <div className="space-y-1 pl-4">
-            {talentInfos.map((talent) => (
-              <div
-                key={talent.id}
-                className="flex items-start gap-1.5 rounded px-1.5 py-1"
-                style={{
-                  background: colorAlpha("primary", 0.03),
-                  border: `1px solid ${colorAlpha("primary", 0.06)}`,
-                }}
-              >
-                <span className="mt-0.5" style={{ color: color("primary") }}>
-                  {getCategoryIcon(talent.category)}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <span
-                    className="text-xs font-semibold"
-                    style={{ color: color("textPrimary") }}
-                  >
-                    {talent.name}
-                  </span>
-                  <p
-                    className="text-xs mt-0.5"
-                    style={{ color: color("textMuted") }}
-                  >
-                    {talent.description}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 技能列表 */}
-      <SkillSection characterId={character.id} />
-
-      {/* 背包（只读） */}
-      <InventorySection
-        characterId={character.id}
-        worldConfig={worldConfig}
-        readonly
-      />
-
-      {/* 装备栏（只读） */}
-      <EquipmentSection
-        characterId={character.id}
-        worldConfig={worldConfig}
-        readonly
-      />
-
-      {/* 背景故事 */}
-      {character.description && (
-        <div>
-          <div
-            className="flex items-center gap-1.5 mb-1"
-            style={{ color: color("textMuted") }}
-          >
-            <BookOpen className="w-3 h-3" />
-            <span className="text-xs font-medium">背景故事</span>
-          </div>
-          <p
-            className="text-xs leading-relaxed pl-4"
-            style={{ color: color("textSecondary") }}
-          >
-            {character.description}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── NPC 列表项 ──
 
-interface NpcListItemProps {
+interface NpcCardProps {
   character: Character;
   index: number;
   isOffScene?: boolean;
-  worldConfig: WorldConfig;
+  onOpenDetail: (characterId: string) => void;
 }
 
-function NpcListItem({
-  character,
-  index,
-  isOffScene,
-  worldConfig,
-}: NpcListItemProps) {
-  const [expanded, setExpanded] = useState(false);
+function NpcCard({ character, index, isOffScene, onOpenDetail }: NpcCardProps) {
+  const narrativeState = useWorldArchiveStore((state) => {
+    return state.getEntityByGameId(character.id)?.currentState;
+  });
 
-  const attributes = (character.attributes ?? {}) as Record<string, number>;
-  const level = attributes.level;
+  const level = useMemo(() => {
+    const value = (character.attributes as Record<string, unknown> | undefined)
+      ?.level;
+    return typeof value === "number" ? value : null;
+  }, [character.attributes]);
+
+  const displayState = narrativeState?.trim() || "暂无叙事状态";
+  const avatarColorKey = getAvatarColorKey(character.id);
 
   return (
-    <motion.div
+    <motion.button
+      type="button"
       custom={index}
       variants={listItemVariants}
       initial="hidden"
       animate="visible"
-      className="rounded-lg overflow-hidden"
+      onClick={() => onOpenDetail(character.id)}
+      className="w-full rounded-lg px-3 py-2.5 flex items-center gap-2.5 text-left cursor-pointer"
       style={{
-        background: colorAlpha("primary", isOffScene ? 0.02 : 0.04),
-        border: `1px solid ${colorAlpha("primary", isOffScene ? 0.06 : 0.12)}`,
-        opacity: isOffScene ? 0.7 : 1,
+        background: colorAlpha("primary", isOffScene ? 0.03 : 0.05),
+        border: `1px solid ${colorAlpha("primary", isOffScene ? 0.1 : 0.16)}`,
+        opacity: isOffScene ? 0.78 : 1,
       }}
+      whileHover={{
+        y: -1,
+      }}
+      transition={{ duration: 0.16 }}
     >
-      {/* 列表项头部 — 可点击 */}
-      <button
-        onClick={() => setExpanded((prev) => !prev)}
-        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left cursor-pointer
-                   transition-colors duration-150"
+      <span
+        className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-sm font-semibold"
         style={{
-          background: "transparent",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = colorAlpha("primary", 0.06);
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
+          background: colorAlpha(avatarColorKey, 0.2),
+          border: `1px solid ${colorAlpha(avatarColorKey, 0.32)}`,
+          color: color(avatarColorKey),
         }}
       >
-        {/* 状态指示器 */}
-        <Circle
-          className="w-2.5 h-2.5 shrink-0"
-          fill={isOffScene ? color("textMuted") : color("primary")}
-          stroke="none"
-          style={{
-            filter: isOffScene
-              ? undefined
-              : `drop-shadow(0 0 3px ${colorAlpha("primary", 0.5)})`,
-          }}
-        />
+        {getCharacterInitial(character.name)}
+      </span>
 
-        {/* 名称 */}
-        <span
-          className="text-sm font-semibold flex-1 min-w-0 truncate"
-          style={{
-            color: isOffScene ? color("textMuted") : color("textPrimary"),
-          }}
-        >
-          {character.name}
-        </span>
-
-        {/* 等级 */}
-        {level != null && (
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
           <span
-            className="text-xs shrink-0 px-1.5 py-0.5 rounded"
+            className="text-sm font-semibold truncate"
             style={{
-              background: colorAlpha("secondary", 0.1),
-              color: isOffScene ? color("textMuted") : color("secondary"),
+              color: isOffScene ? color("textSecondary") : color("textPrimary"),
             }}
           >
-            Lv.{level}
+            {character.name}
           </span>
-        )}
 
-        {/* 展开/收起图标 */}
-        <motion.span
-          animate={{ rotate: expanded ? 180 : 0 }}
-          transition={{ duration: 0.2 }}
-          className="shrink-0"
-          style={{ color: color("textMuted") }}
-        >
-          <ChevronDown className="w-3.5 h-3.5" />
-        </motion.span>
-      </button>
-
-      {/* 简要信息（性格摘要） */}
-      {!expanded && character.personality && (
-        <div className="px-3 pb-2 -mt-0.5">
-          <p
-            className="text-xs truncate pl-5"
-            style={{ color: color("textMuted") }}
-          >
-            {character.personality}
-          </p>
-        </div>
-      )}
-
-      {/* 展开的详情 */}
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            key="detail"
-            variants={expandVariants}
-            initial="collapsed"
-            animate="expanded"
-            exit="collapsed"
-            className="overflow-hidden"
-          >
-            <div
-              className="px-3 pb-3"
+          {level != null && (
+            <span
+              className="text-xs shrink-0 px-1.5 py-0.5 rounded"
               style={{
-                borderTop: `1px solid ${colorAlpha("primary", 0.08)}`,
+                background: colorAlpha("secondary", 0.1),
+                color: isOffScene ? color("textMuted") : color("secondary"),
               }}
             >
-              <NpcDetailPanel character={character} worldConfig={worldConfig} />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+              Lv.{level}
+            </span>
+          )}
+        </div>
+
+        <p
+          className="text-xs truncate mt-0.5"
+          style={{
+            color: narrativeState
+              ? color("textMuted")
+              : colorAlpha("textMuted", 0.8),
+          }}
+          title={displayState}
+        >
+          {displayState}
+        </p>
+      </div>
+
+      <ChevronRight
+        className="w-4 h-4 shrink-0"
+        style={{ color: colorAlpha("textMuted", isOffScene ? 0.65 : 0.85) }}
+      />
+    </motion.button>
   );
 }
 
@@ -553,11 +268,12 @@ function GroupHeader({ icon, label, count }: GroupHeaderProps) {
 /**
  * NPC 列表
  *
- * 按状态分组展示当前存档中的 NPC
+ * 按状态分组展示当前存档中的 NPC，并在点击时打开详情弹窗
  */
 export function NpcList() {
   const npcs = useNpcCharacters();
-  const worldConfig = useRuntimeWorldConfig();
+  const [selectedNpcId, setSelectedNpcId] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const { activeNpcs, offSceneNpcs } = useMemo(() => {
     const active: Character[] = [];
@@ -574,57 +290,93 @@ export function NpcList() {
     return { activeNpcs: active, offSceneNpcs: offScene };
   }, [npcs]);
 
+  const handleOpenDetail = useCallback((characterId: string) => {
+    setSelectedNpcId(characterId);
+    setDialogOpen(true);
+  }, []);
+
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      setSelectedNpcId(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedNpcId) {
+      return;
+    }
+
+    const selectedStillExists = npcs.some((npc) => npc.id === selectedNpcId);
+    if (!selectedStillExists) {
+      setDialogOpen(false);
+      setSelectedNpcId(null);
+    }
+  }, [npcs, selectedNpcId]);
+
   if (npcs.length === 0) {
     return null;
   }
 
   return (
-    <div className="space-y-4">
-      {/* 分割线 */}
-      <div
-        className="h-px"
-        style={{
-          background: `linear-gradient(90deg, transparent, ${colorAlpha(
-            "primary",
-            0.2,
-          )}, transparent)`,
-        }}
+    <>
+      <div className="space-y-4">
+        {/* 分割线 */}
+        <div
+          className="h-px"
+          style={{
+            background: `linear-gradient(90deg, transparent, ${colorAlpha(
+              "primary",
+              0.2,
+            )}, transparent)`,
+          }}
+        />
+
+        {/* 在场 NPC */}
+        {activeNpcs.length > 0 && (
+          <div>
+            <GroupHeader icon="⬡" label="在场 NPC" count={activeNpcs.length} />
+            <div className="space-y-2">
+              {activeNpcs.map((npc, i) => (
+                <NpcCard
+                  key={npc.id}
+                  character={npc}
+                  index={i}
+                  onOpenDetail={handleOpenDetail}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 离场 NPC */}
+        {offSceneNpcs.length > 0 && (
+          <div>
+            <GroupHeader
+              icon="⬡"
+              label="离场 NPC"
+              count={offSceneNpcs.length}
+            />
+            <div className="space-y-2">
+              {offSceneNpcs.map((npc, i) => (
+                <NpcCard
+                  key={npc.id}
+                  character={npc}
+                  index={i}
+                  isOffScene
+                  onOpenDetail={handleOpenDetail}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <NpcDetailDialog
+        open={dialogOpen}
+        onOpenChange={handleDialogOpenChange}
+        characterId={selectedNpcId}
       />
-
-      {/* 在场 NPC */}
-      {activeNpcs.length > 0 && (
-        <div>
-          <GroupHeader icon="⬡" label="在场 NPC" count={activeNpcs.length} />
-          <div className="space-y-2">
-            {activeNpcs.map((npc, i) => (
-              <NpcListItem
-                key={npc.id}
-                character={npc}
-                index={i}
-                worldConfig={worldConfig}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 离场 NPC */}
-      {offSceneNpcs.length > 0 && (
-        <div>
-          <GroupHeader icon="⬡" label="离场 NPC" count={offSceneNpcs.length} />
-          <div className="space-y-2">
-            {offSceneNpcs.map((npc, i) => (
-              <NpcListItem
-                key={npc.id}
-                character={npc}
-                index={i}
-                isOffScene
-                worldConfig={worldConfig}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+    </>
   );
 }

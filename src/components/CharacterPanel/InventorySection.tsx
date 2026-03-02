@@ -7,12 +7,9 @@
 
 import { motion } from "framer-motion";
 import {
-  Boxes,
   FlaskConical,
-  Gem,
   HelpCircle,
   Package,
-  ScrollText,
   Shield,
   Sword,
   Trash2,
@@ -21,6 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { ItemCategory, ItemInstance } from "@/domain/entities/item";
 import type { DirectAction } from "@/domain/types";
+import { getCategoryIcon } from "@/lib/ui/category-icons";
 import type { WorldConfig } from "@/lib/world";
 import { directActionService } from "@/modules/game/services";
 import { useInventoryStore } from "@/modules/inventory/store";
@@ -40,26 +38,6 @@ const CATEGORY_LABELS: Record<ItemCategory, string> = {
   quest: "任务物品",
   misc: "杂物",
 };
-
-function getCategoryIcon(category: ItemCategory) {
-  switch (category) {
-    case "weapon":
-      return <Sword className="w-3.5 h-3.5" />;
-    case "armor":
-      return <Shield className="w-3.5 h-3.5" />;
-    case "accessory":
-      return <Gem className="w-3.5 h-3.5" />;
-    case "consumable":
-      return <FlaskConical className="w-3.5 h-3.5" />;
-    case "material":
-      return <Boxes className="w-3.5 h-3.5" />;
-    case "quest":
-      return <ScrollText className="w-3.5 h-3.5" />;
-    case "misc":
-    default:
-      return <HelpCircle className="w-3.5 h-3.5" />;
-  }
-}
 
 function isEquippableItem(item: ItemInstance): boolean {
   return (
@@ -318,7 +296,7 @@ export function InventorySection({
                         : color("primary"),
                     }}
                   >
-                    {getCategoryIcon(item.category)}
+                    {getCategoryIcon(item.category, { fallback: HelpCircle })}
                   </span>
 
                   {/* 信息 */}

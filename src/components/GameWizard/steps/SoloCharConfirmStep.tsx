@@ -7,18 +7,7 @@
  * - 底部：外貌/性格/背景紧凑描述区
  */
 import { motion } from "framer-motion";
-import {
-  BookOpen,
-  Camera,
-  Shield,
-  Sparkles,
-  Star,
-  Swords,
-  User,
-  Users,
-  Wand2,
-  Wrench,
-} from "lucide-react";
+import { BookOpen, Camera, Shield, Sparkles, User, Wrench } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -29,6 +18,7 @@ import {
 } from "react";
 
 import { useMotionTokens } from "@/hooks";
+import { getCategoryIcon } from "@/lib/ui/category-icons";
 import type { TalentConfig, WorldConfig } from "@/lib/world/types";
 import {
   aggregateDimensionEffects,
@@ -156,24 +146,6 @@ function getTalent(
   worldConfig: WorldConfig,
 ): TalentConfig | undefined {
   return worldConfig.talents?.find((t) => t.id === talentId);
-}
-
-/** 天赋分类图标 */
-function getCategoryIcon(category?: TalentConfig["category"]) {
-  switch (category) {
-    case "combat":
-      return <Swords className="w-3.5 h-3.5" />;
-    case "magic":
-      return <Wand2 className="w-3.5 h-3.5" />;
-    case "survival":
-      return <Shield className="w-3.5 h-3.5" />;
-    case "social":
-      return <Users className="w-3.5 h-3.5" />;
-    case "misc":
-      return <Wrench className="w-3.5 h-3.5" />;
-    default:
-      return <Star className="w-3.5 h-3.5" />;
-  }
 }
 
 // ============================================================
@@ -783,7 +755,9 @@ export function SoloCharConfirmStep({ context, onUpdateContext }: StepProps) {
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-2 min-w-0">
                               <span style={{ color: color("primary") }}>
-                                {getCategoryIcon(talent.category)}
+                                {getCategoryIcon(talent.category, {
+                                  miscIcon: Wrench,
+                                })}
                               </span>
                               <span
                                 className="text-sm font-semibold truncate"

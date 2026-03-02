@@ -15,22 +15,12 @@
  */
 
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  Ban,
-  Check,
-  Lock,
-  Shield,
-  Sparkles,
-  Star,
-  Swords,
-  Users,
-  Wand2,
-  Wrench,
-} from "lucide-react";
+import { Ban, Check, Lock, Sparkles, Star, Wrench } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Card } from "@/components/ui";
 import { useMotionTokens } from "@/hooks";
+import { getCategoryIcon } from "@/lib/ui/category-icons";
 import type { TalentConfig, WorldConfig } from "@/lib/world/types";
 import {
   aggregateDimensionEffects,
@@ -44,24 +34,6 @@ import type { StepProps } from "../types";
 // ============================================================
 // 辅助函数
 // ============================================================
-
-/** 天赋分类图标 */
-function getCategoryIcon(category?: TalentConfig["category"]) {
-  switch (category) {
-    case "combat":
-      return <Swords className="w-4 h-4" />;
-    case "magic":
-      return <Wand2 className="w-4 h-4" />;
-    case "survival":
-      return <Shield className="w-4 h-4" />;
-    case "social":
-      return <Users className="w-4 h-4" />;
-    case "misc":
-      return <Wrench className="w-4 h-4" />;
-    default:
-      return <Star className="w-4 h-4" />;
-  }
-}
 
 /** 天赋分类名称 */
 function getCategoryLabel(category?: TalentConfig["category"]): string {
@@ -185,7 +157,10 @@ function TalentCard({
             {isDisabled ? (
               <Lock className="w-4 h-4" />
             ) : (
-              getCategoryIcon(talent.category)
+              getCategoryIcon(talent.category, {
+                miscIcon: Wrench,
+                size: "md",
+              })
             )}
           </div>
 
