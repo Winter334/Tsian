@@ -13,12 +13,14 @@ import { MemoryEvents } from "@/domain/events/memory";
 import { RoomEvents, type ConnectionEvent } from "@/domain/events/room";
 import { SaveEvents, type SaveDeletedPayload } from "@/domain/events/save";
 import { variableResolver } from "@/lib/prompt/resolver";
+import { snapshotRegistry } from "@/modules/checkpoint/snapshot-api";
 import { createMemoryCommandHandlers } from "./handlers";
 import {
   getMemoryRepository,
   resetAllMultiplayerMemoryRepositories,
   resetMemoryRepository,
 } from "./repository";
+import { memorySnapshotFields } from "./snapshot";
 import { useMemoryStore } from "./store";
 import { setupMemorySync, teardownMemorySync } from "./sync";
 import { registerMemoryVariable } from "./variable-registry";
@@ -83,12 +85,14 @@ export async function registerMemoryModule(): Promise<void> {
   registerMemoryVariable(variableResolver);
 
   await registry.register(manifest);
+  snapshotRegistry.register("lyra.memory", memorySnapshotFields);
 }
 
 /**
  * 注销 Memory 模块
  */
 export async function unregisterMemoryModule(): Promise<void> {
+  snapshotRegistry.unregister("lyra.memory");
   await registry.unregister("lyra.memory");
   teardownMemorySync();
   resetMemoryRepository();

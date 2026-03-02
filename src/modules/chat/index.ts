@@ -13,8 +13,10 @@ import { ChatCommands } from "@/domain/commands/chat";
 import { createConversation } from "@/domain/entities/conversation";
 import { ChatEvents } from "@/domain/events/chat";
 import { SaveEvents, type SaveDeletedPayload } from "@/domain/events/save";
+import { snapshotRegistry } from "@/modules/checkpoint/snapshot-api";
 import { createChatCommandHandlers } from "./commands/handlers";
 import { getChatRepository, resetChatRepository } from "./repository/factory";
+import { chatSnapshotFields } from "./snapshot";
 import { useChatUIStore } from "./store/ui-store";
 
 /**
@@ -41,7 +43,7 @@ function ensureDefaultConversation(): void {
       // 存档已有会话，选择最近更新的
       // 注意：总是设置，因为切换存档后旧的 conversationId 不再有效
       const sorted = [...conversations].sort(
-        (a, b) => b.updatedAt - a.updatedAt
+        (a, b) => b.updatedAt - a.updatedAt,
       );
       uiStore.setCurrentConversation(sorted[0].id);
     }
@@ -87,12 +89,14 @@ const manifest: ModuleManifest = {
  */
 export async function registerChatModule(): Promise<void> {
   await registry.register(manifest);
+  snapshotRegistry.register("lyra.chat", chatSnapshotFields);
 }
 
 /**
  * 注销 Chat 模块
  */
 export async function unregisterChatModule(): Promise<void> {
+  snapshotRegistry.unregister("lyra.chat");
   await registry.unregister("lyra.chat");
 }
 

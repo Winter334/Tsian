@@ -23,6 +23,7 @@ import { SaveEvents } from "@/domain/events";
 import type { SaveDeletedPayload } from "@/domain/events/save";
 import type { CreatedNpcData } from "@/domain/types";
 
+import { snapshotRegistry } from "@/modules/checkpoint/snapshot-api";
 import { applyArchiveUpdatesAndSync } from "./apply-updates";
 import { computeArchiveData } from "./archive-injector";
 import { autoRegisterNpcs } from "./auto-register";
@@ -31,6 +32,7 @@ import {
   resetWorldArchiveRepository,
 } from "./repository";
 import { saveArchiveEntity, saveArchiveEntityById } from "./save-entity";
+import { worldArchiveSnapshotFields } from "./snapshot";
 import { useWorldArchiveStore } from "./store";
 import { WorldArchiveSyncBridge } from "./sync/WorldArchiveSyncBridge";
 import type { ArchiveUpdate } from "./types";
@@ -356,11 +358,13 @@ const manifest: ModuleManifest = {
 
 export async function registerWorldArchiveModule(): Promise<void> {
   await registry.register(manifest);
+  snapshotRegistry.register("lyra.world-archive", worldArchiveSnapshotFields);
   rebuildSyncBridgeForCurrentSave();
 }
 
 export async function unregisterWorldArchiveModule(): Promise<void> {
   destroySyncBridge(true);
+  snapshotRegistry.unregister("lyra.world-archive");
   await registry.unregister("lyra.world-archive");
 }
 

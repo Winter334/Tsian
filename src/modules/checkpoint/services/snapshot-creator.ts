@@ -5,11 +5,11 @@ import type {
   MemorySnapshot,
 } from "../../../domain/entities/checkpoint";
 import {
-  SNAPSHOT_FIELDS,
   SNAPSHOT_SKIP,
   type FieldCodec,
   type SnapshotFieldConfig,
 } from "./snapshot-config";
+import { snapshotRegistry } from "./snapshot-registry";
 
 /**
  * 从当前 SaveSlot 的 Yjs 数据中提取检查点快照
@@ -29,10 +29,18 @@ export function createSnapshot(saveDoc: Y.Map<unknown>): CheckpointData {
     gameState: {},
   };
 
-  for (const field of SNAPSHOT_FIELDS) {
-    const yValue = saveDoc.get(field.key);
-    if (yValue === undefined) continue;
-    data[field.key] = extractByStrategy(yValue, field);
+  const fields = snapshotRegistry.getAllFields();
+
+  for (const field of fields) {
+    if (field.strategy === "custom" && field.customHandler) {
+      // 自定义策略：委托给模块提供的 handler
+      data[field.key] = field.customHandler.extract(saveDoc);
+    } else {
+      // 内置策略：保持现有逻辑
+      const yValue = saveDoc.get(field.key);
+      if (yValue === undefined) continue;
+      data[field.key] = extractByStrategy(yValue, field);
+    }
   }
 
   return {

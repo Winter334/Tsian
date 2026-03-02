@@ -2,11 +2,12 @@ import * as Y from "yjs";
 
 import type { CheckpointData } from "../../../domain/entities/checkpoint";
 import {
-  SNAPSHOT_FIELDS,
   SNAPSHOT_SKIP,
   type FieldCodec,
   type SnapshotFieldConfig,
 } from "./snapshot-config";
+
+import { snapshotRegistry } from "./snapshot-registry";
 
 /**
  * 将检查点快照恢复到当前 SaveSlot
@@ -17,19 +18,30 @@ export function restoreSnapshot(
   rootDoc: Y.Doc,
 ): void {
   rootDoc.transact(() => {
-    // 1) 清空所有配置字段（不触碰 saveDoc 元数据字段与 checkpoints）
-    for (const field of SNAPSHOT_FIELDS) {
-      clearByStrategy(saveDoc, field);
+    const fields = snapshotRegistry.getAllFields();
+
+    // 1) 清空所有已注册字段
+    for (const field of fields) {
+      if (field.strategy === "custom" && field.customHandler) {
+        field.customHandler.clear(saveDoc);
+      } else {
+        clearByStrategy(saveDoc, field);
+      }
     }
 
-    // 2) 按配置重建字段
-    for (const field of SNAPSHOT_FIELDS) {
+    // 2) 从快照重建字段
+    for (const field of fields) {
       const data = snapshot[field.key];
       if (data === undefined) continue;
-      rebuildByStrategy(saveDoc, field, data);
+
+      if (field.strategy === "custom" && field.customHandler) {
+        field.customHandler.restore(saveDoc, data);
+      } else {
+        rebuildByStrategy(saveDoc, field, data);
+      }
     }
 
-    // 联机快照进度（可选，保持现有行为）
+    // 联机快照进度（保持特殊处理）
     if (typeof snapshot.turnNumber === "number") {
       saveDoc.set("currentTurnNumber", snapshot.turnNumber);
     }

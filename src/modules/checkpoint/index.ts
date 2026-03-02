@@ -17,6 +17,14 @@ import { createCheckpointCommandHandlers } from "./handlers";
 
 export { CheckpointButton, CheckpointPanel } from "./components";
 export { useCheckpointCount, useCheckpoints } from "./hooks/useCheckpoints";
+export type {
+  CustomSnapshotHandler,
+  FieldCodec,
+  SnapshotFieldConfig,
+  SnapshotStrategy,
+  SnapshotValueTransformer,
+} from "./services/snapshot-config";
+export { snapshotRegistry } from "./services/snapshot-registry";
 export {
   findCheckpointByMessageId,
   findPreviousCheckpoint,

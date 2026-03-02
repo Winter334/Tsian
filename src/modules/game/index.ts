@@ -10,6 +10,7 @@ import {
   type ItemUsedPayload,
 } from "@/domain/events/inventory";
 import { actionSchemaRegistry } from "@/lib/rules/schema";
+import { snapshotRegistry } from "@/modules/checkpoint/snapshot-api";
 import { createGameCommandHandlers } from "./handlers";
 import {
   directActionService,
@@ -25,6 +26,7 @@ import {
   GAME_STATE_SERVICE_TOKEN,
   IRNR_PIPELINE_SERVICE_TOKEN,
 } from "./services/tokens";
+import { gameSnapshotFields } from "./snapshot";
 import { useOperationLogStore } from "./stores/operation-log-store";
 
 // 导出服务
@@ -66,12 +68,14 @@ export async function registerGameModule(): Promise<void> {
     ...gameActionSchemas,
     modifyDamageSchema,
   ]);
+  snapshotRegistry.register("lyra.game", gameSnapshotFields);
 }
 
 /**
  * 注销 Game 模块
  */
 export async function unregisterGameModule(): Promise<void> {
+  snapshotRegistry.unregister("lyra.game");
   actionSchemaRegistry.unregisterModule("lyra.game");
   services.unregister(GAME_STATE_SERVICE_TOKEN);
   services.unregister(IRNR_PIPELINE_SERVICE_TOKEN);

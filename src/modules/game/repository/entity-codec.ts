@@ -350,7 +350,7 @@ export function applyCharacterUpdates(
 }
 
 // 导出类型守卫供 repository 使用
-export { isCharacterStatus };
+export { isCharacterStatus, isControlType };
 
 // 重新导出供外部使用
 export { serializeTagsForYjs };

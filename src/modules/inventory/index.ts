@@ -12,10 +12,12 @@ import { INVENTORY_QUERY_SERVICE_TOKEN } from "@/core/services/tokens";
 import { yjsManager } from "@/core/yjs";
 import { SaveEvents, type SaveDeletedPayload } from "@/domain/events/save";
 import { actionSchemaRegistry } from "@/lib/rules/schema";
+import { snapshotRegistry } from "@/modules/checkpoint/snapshot-api";
 import { createInventoryCommandHandlers } from "./handlers";
 import { clearInventoryRepositoryCache } from "./repository";
 import { inventoryActionSchemas } from "./schemas/action-schemas";
 import { createInventoryQueryService } from "./services/inventory-query-service";
+import { inventorySnapshotFields } from "./snapshot";
 import { InventorySyncBridge } from "./sync/InventorySyncBridge";
 
 // 导出公共 API
@@ -87,6 +89,8 @@ export async function registerInventoryModule(): Promise<void> {
     inventoryActionSchemas,
   );
 
+  snapshotRegistry.register("lyra.inventory", inventorySnapshotFields);
+
   // 条件模块在 SAVE_LOADED 处理中首次注册时会错过该事件，
   // 因此注册完成后若已有当前存档，立即执行水合与观察。
   rebuildSyncBridgeForCurrentSave();
@@ -96,6 +100,9 @@ export async function registerInventoryModule(): Promise<void> {
  * 注销 Inventory 模块
  */
 export async function unregisterInventoryModule(): Promise<void> {
+  // 清理快照注册
+  snapshotRegistry.unregister("lyra.inventory");
+
   // 清理 SyncBridge
   if (syncBridge) {
     syncBridge.destroy();
