@@ -143,6 +143,32 @@ export interface LeaveRoomPayload {
 }
 
 /**
+ * 删除房间命令参数
+ */
+export interface DeleteRoomPayload {
+  /** 房间 ID */
+  roomId: string;
+  /** 执行者 userId（必须是 Host） */
+  userId: string;
+}
+
+/**
+ * 更新房间设置命令参数
+ */
+export interface UpdateRoomSettingsPayload {
+  /** 房间 ID */
+  roomId: string;
+  /** 执行者 userId（必须是 Host） */
+  userId: string;
+  /** 要更新的设置字段（部分更新） */
+  settings: Partial<{
+    name: string;
+    maxPlayers: number;
+    turnDuration: number;
+  }>;
+}
+
+/**
  * 提交行动命令参数
  */
 export interface SubmitActionPayload {
@@ -155,6 +181,22 @@ export interface SubmitActionPayload {
   /** 行动内容 */
   content: string;
   /** 扩展元数据 */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * 修改行动命令参数
+ */
+export interface UpdateActionPayload {
+  /** 房间 ID */
+  roomId: string;
+  /** 回合号 */
+  turnNumber: number;
+  /** 行动所属的玩家 userId */
+  userId: string;
+  /** 更新后的行动内容 */
+  content: string;
+  /** 扩展元数据（可选） */
   metadata?: Record<string, unknown>;
 }
 
@@ -178,6 +220,20 @@ export interface StartTurnPayload {
   roomId: string;
   /** 回合时长（毫秒，可选，使用房间默认值） */
   duration?: number;
+}
+
+/**
+ * 踢出成员命令参数
+ */
+export interface KickMemberPayload {
+  /** 房间 ID */
+  roomId: string;
+  /** 执行踢人的用户 userId（必须是 Host） */
+  userId: string;
+  /** 被踢成员的 userId */
+  targetUserId: string;
+  /** 踢出原因（可选） */
+  reason?: string;
 }
 
 /**

@@ -39,18 +39,37 @@ import {
 } from "@/domain/commands/memory";
 import type {
   CompleteTurnPayload,
+  CreateCharacterPayload,
+  CreateNpcPayload,
   CreateRoomPayload,
+  DeleteRoomPayload,
   JoinRoomPayload,
+  KickMemberPayload,
   LeaveRoomPayload,
   QueryRoomPayload,
   QueryRoomResult,
   StartTurnPayload,
   SubmitActionPayload,
   TransferHostPayload,
+  UpdateActionPayload,
+  UpdateCharacterPayload,
+  UpdateNpcInfoPayload,
+  UpdateNpcStatusPayload,
+  UpdateRoomSettingsPayload,
 } from "@/domain/commands/room";
+import {
+  canOperateCharacter,
+  createCharacter,
+  type Character,
+} from "@/domain/entities/character";
 import {
   RoomEvents,
   type ActionSubmittedEvent,
+  type CharacterCreatedEvent,
+  type CharacterUpdatedEvent,
+  type NpcCreatedEvent,
+  type NpcInfoUpdatedEvent,
+  type NpcStatusChangedEvent,
   type RoomCreatedEvent,
   type TurnCompletedEvent,
 } from "@/domain/events/room";
@@ -63,7 +82,10 @@ import {
   getRuntimeWorldConfig,
   resolveWorldConfig,
 } from "@/lib/world/resolve-config";
-import { worldConfigToYMap } from "@/lib/world/world-config-codec";
+import {
+  worldConfigFromYMap,
+  worldConfigToYMap,
+} from "@/lib/world/world-config-codec";
 import {
   applyCharacterUpdates,
   characterToYMap,
@@ -175,9 +197,23 @@ export async function createRoomHandler(
   let code: string = "";
   let retryCount = 0;
 
-  // 联机建档的 WorldConfig 快照来源：当前活动 Preset
+  // 联机建档的 WorldConfig 默认值来源：当前活动 Preset
   const activePreset = usePresetStore.getState().activePreset;
-  const worldConfig = resolveWorldConfig(activePreset);
+  const defaultWorldConfig = resolveWorldConfig(activePreset);
+  let authoritativeWorldConfig = defaultWorldConfig;
+
+  if (payload.fromSaveId) {
+    const saveSlot = yjsManager.getSaveSlots().get(payload.fromSaveId) as
+      | Y.Map<unknown>
+      | undefined;
+    const worldConfigValue = saveSlot?.get("worldConfig");
+    if (worldConfigValue instanceof Y.Map) {
+      const decodedWorldConfig = worldConfigFromYMap(worldConfigValue);
+      if (decodedWorldConfig) {
+        authoritativeWorldConfig = decodedWorldConfig;
+      }
+    }
+  }
 
   // 确保 API 客户端已配置
   const config = getMultiplayerConfig();
@@ -242,6 +278,12 @@ export async function createRoomHandler(
       turnDuration: payload.turnDuration,
       saveId, // 续玩时传入，新建时为 undefined
     });
+
+    // 写入房间权威 worldConfig（Host 侧来源快照）
+    const encodedWorldConfig = worldConfigToYMap(authoritativeWorldConfig);
+    const mainDocWorldConfigMap = mainDoc.getMap("worldConfig");
+    mainDocWorldConfigMap.set("version", encodedWorldConfig.get("version"));
+    mainDocWorldConfigMap.set("data", encodedWorldConfig.get("data"));
 
     // 更新 mainDoc 的 code（因为 createMainDoc 会生成新的 code，我们需要用服务器确认的 code）
     const metadataMap = mainDoc.getMap("metadata");
@@ -317,6 +359,11 @@ export async function createRoomHandler(
         | Y.Map<unknown>
         | undefined;
       if (saveSlot) {
+        saveSlot.set(
+          "worldConfig",
+          worldConfigToYMap(authoritativeWorldConfig),
+        );
+
         const savedTurnNumber =
           (saveSlot.get("currentTurnNumber") as number) || 0;
         if (savedTurnNumber > 0) {
@@ -437,7 +484,10 @@ export async function createRoomHandler(
         | Y.Map<unknown>
         | undefined;
       if (createdSave) {
-        createdSave.set("worldConfig", worldConfigToYMap(worldConfig));
+        createdSave.set(
+          "worldConfig",
+          worldConfigToYMap(authoritativeWorldConfig),
+        );
       }
 
       // 将 saveId 写入 MainDoc（新建场景）
@@ -528,9 +578,19 @@ export async function joinRoomHandler(
   const { code, userId, displayName } = payload;
   const now = Date.now();
 
-  // 联机建档的 WorldConfig 快照来源：当前活动 Preset
+  // 联机建档的 WorldConfig 本地回退值来源：当前活动 Preset
   const activePreset = usePresetStore.getState().activePreset;
-  const worldConfig = resolveWorldConfig(activePreset);
+  const fallbackWorldConfig = resolveWorldConfig(activePreset);
+  let authoritativeWorldConfig = fallbackWorldConfig;
+
+  const applyAuthoritativeWorldConfigToSave = (saveId: string): void => {
+    const saveSlot = yjsManager.getSaveSlots().get(saveId) as
+      | Y.Map<unknown>
+      | undefined;
+    if (saveSlot) {
+      saveSlot.set("worldConfig", worldConfigToYMap(authoritativeWorldConfig));
+    }
+  };
 
   // 确保 API 客户端已配置
   const config = getMultiplayerConfig();
@@ -632,6 +692,14 @@ export async function joinRoomHandler(
         providerStatus: multiplayerProvider.getStatus(),
       });
       // MainDoc 同步超时，继续执行
+    }
+
+    const mainDocWorldConfigMap = mainDoc.getMap("worldConfig");
+    const syncedWorldConfig = worldConfigFromYMap(
+      mainDocWorldConfigMap as Y.Map<unknown>,
+    );
+    if (syncedWorldConfig) {
+      authoritativeWorldConfig = syncedWorldConfig;
     }
 
     // 连接 HistoryDoc（复用 MainDoc 的 WebSocket）
@@ -767,6 +835,9 @@ export async function joinRoomHandler(
         yjsManager.loadSave(matchedSave.id);
         guestSaveId = matchedSave.id;
 
+        // matchedSave 路径也必须执行 Host 权威 worldConfig 回填，避免沿用本地旧配置
+        applyAuthoritativeWorldConfigToSave(matchedSave.id);
+
         // 对齐 Save 模块行为：联机入房加载存档后发布 SAVE_LOADED
         eventBus.emit(
           eventBus.createEvent(SaveEvents.SAVE_LOADED, {
@@ -795,7 +866,10 @@ export async function joinRoomHandler(
           | Y.Map<unknown>
           | undefined;
         if (createdGuestSave) {
-          createdGuestSave.set("worldConfig", worldConfigToYMap(worldConfig));
+          createdGuestSave.set(
+            "worldConfig",
+            worldConfigToYMap(authoritativeWorldConfig),
+          );
         }
 
         const previousSaveId = yjsManager.getCurrentSaveId();
@@ -828,7 +902,10 @@ export async function joinRoomHandler(
           | Y.Map<unknown>
           | undefined;
         if (fallbackGuestSave) {
-          fallbackGuestSave.set("worldConfig", worldConfigToYMap(worldConfig));
+          fallbackGuestSave.set(
+            "worldConfig",
+            worldConfigToYMap(authoritativeWorldConfig),
+          );
         }
 
         const previousSaveId = yjsManager.getCurrentSaveId();
@@ -2485,20 +2562,6 @@ export async function completeTurnHandler(
 
 // ===== 角色管理 =====
 
-import type {
-  CreateCharacterPayload,
-  UpdateCharacterPayload,
-} from "@/domain/commands/room";
-import {
-  canOperateCharacter,
-  createCharacter,
-  type Character,
-} from "@/domain/entities/character";
-import type {
-  CharacterCreatedEvent,
-  CharacterUpdatedEvent,
-} from "@/domain/events/room";
-
 /**
  * 创建角色命令处理器
  *
@@ -2674,6 +2737,474 @@ export async function updateCharacterHandler(
       updatedAt,
     };
     eventBus.emit(eventBus.createEvent(RoomEvents.CHARACTER_UPDATED, event));
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * 踢出成员命令处理器
+ */
+export async function kickMemberHandler(
+  payload: KickMemberPayload,
+  _context: CommandContext,
+): Promise<CommandResult<void>> {
+  try {
+    const { roomId, userId, targetUserId } = payload;
+    const now = Date.now();
+
+    const mainDoc = subdocManager.getMainDoc(roomId);
+    if (!mainDoc) {
+      return { success: false, error: `MainDoc not found: ${roomId}` };
+    }
+
+    // 验证是否为 Host
+    if (!subdocManager.isHost(roomId, userId)) {
+      return { success: false, error: "Only host can kick members" };
+    }
+
+    const membersMap = mainDoc.getMap("members") as Y.Map<Member>;
+    const targetMember = membersMap.get(targetUserId);
+    if (!targetMember) {
+      return {
+        success: false,
+        error: `Target member not found: ${targetUserId}`,
+      };
+    }
+
+    if (targetUserId === userId) {
+      return { success: false, error: "Host cannot kick themselves" };
+    }
+
+    writeMemberActionMeta(roomId, targetUserId, {
+      action: "kick",
+      by: userId,
+      reason: payload.reason,
+      at: now,
+    });
+
+    membersMap.delete(targetUserId);
+
+    // 后端权威路径：kick 成功后应主动断开目标连接并广播成员变更。
+    // 前端兼容兜底：若本地正是被踢目标，立即执行离房清理，避免继续停留房间态。
+    const localUserId = useRoomStore.getState().localUser.userId;
+    if (targetUserId === localUserId) {
+      historyDocProvider.disconnect(roomId);
+      turnDocProvider.disconnectAll();
+      multiplayerProvider.disconnect();
+      subdocManager.leaveRoom(roomId);
+      useRoomStore.getState().reset();
+    }
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * 删除房间命令处理器
+ */
+export async function deleteRoomHandler(
+  payload: DeleteRoomPayload,
+  _context: CommandContext,
+): Promise<CommandResult<void>> {
+  try {
+    const { roomId, userId } = payload;
+    const now = Date.now();
+
+    const mainDoc = subdocManager.getMainDoc(roomId);
+    if (!mainDoc) {
+      return { success: false, error: `MainDoc not found: ${roomId}` };
+    }
+
+    // 验证是否为 Host
+    if (!subdocManager.isHost(roomId, userId)) {
+      return { success: false, error: "Only host can delete room" };
+    }
+
+    mainDoc.transact(() => {
+      const metadataMap = mainDoc.getMap("metadata");
+      metadataMap.set("disbanded", true);
+      metadataMap.set("disbandedAt", now);
+      metadataMap.set("status", "ended");
+    });
+
+    eventBus.emit(
+      eventBus.createEvent(RoomEvents.ROOM_DELETED, {
+        roomId,
+        userId,
+        deletedAt: now,
+      }),
+    );
+
+    // 先尝试后端房间删除契约，失败时继续执行本地兜底清理，避免幽灵连接/幽灵房间。
+    try {
+      await apiClient.deleteRoom(roomId, userId);
+    } catch {
+      // API 不可用时保持前端收口，等待后端恢复后由服务端权威拒绝旧 roomId 写入
+    }
+
+    // 无论后端调用是否成功，都执行本地 teardown
+    historyDocProvider.disconnect(roomId);
+    turnDocProvider.disconnectAll();
+    multiplayerProvider.disconnect();
+    subdocManager.leaveRoom(roomId);
+    useRoomStore.getState().reset();
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * 更新房间设置命令处理器
+ */
+export async function updateRoomSettingsHandler(
+  payload: UpdateRoomSettingsPayload,
+  _context: CommandContext,
+): Promise<CommandResult<void>> {
+  try {
+    const { roomId, userId, settings } = payload;
+    const now = Date.now();
+
+    const mainDoc = subdocManager.getMainDoc(roomId);
+    if (!mainDoc) {
+      return { success: false, error: `MainDoc not found: ${roomId}` };
+    }
+
+    // 验证是否为 Host
+    if (!subdocManager.isHost(roomId, userId)) {
+      return { success: false, error: "Only host can update room settings" };
+    }
+
+    const metadataMap = mainDoc.getMap("metadata");
+    const status = metadataMap.get("status") as string | undefined;
+    if (status !== "waiting") {
+      return {
+        success: false,
+        error: "Cannot update room settings after game started",
+      };
+    }
+
+    mainDoc.transact(() => {
+      if ("name" in settings) {
+        metadataMap.set("name", settings.name);
+      }
+      if ("maxPlayers" in settings) {
+        metadataMap.set("maxPlayers", settings.maxPlayers);
+      }
+      if ("turnDuration" in settings) {
+        metadataMap.set("turnDuration", settings.turnDuration);
+      }
+      metadataMap.set("updatedAt", now);
+    });
+
+    eventBus.emit(
+      eventBus.createEvent(RoomEvents.ROOM_SETTINGS_UPDATED, {
+        roomId,
+        settings,
+        updatedAt: now,
+        userId,
+      }),
+    );
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * 修改行动命令处理器
+ */
+export async function updateActionHandler(
+  payload: UpdateActionPayload,
+  _context: CommandContext,
+): Promise<CommandResult<void>> {
+  try {
+    const { roomId, turnNumber, userId, content, metadata } = payload;
+    const now = Date.now();
+
+    const localUserId = useRoomStore.getState().localUser.userId;
+    if (!localUserId || localUserId !== userId) {
+      return {
+        success: false,
+        error: "Invalid action operator",
+      };
+    }
+
+    const mainDoc = subdocManager.getMainDoc(roomId);
+    if (!mainDoc) {
+      return { success: false, error: `MainDoc not found: ${roomId}` };
+    }
+
+    const membersMap = mainDoc.getMap("members") as Y.Map<Member>;
+    if (!membersMap.has(userId)) {
+      return {
+        success: false,
+        error: "Only room members can update action",
+      };
+    }
+
+    const turnDoc = subdocManager.getTurnDoc(roomId, turnNumber);
+    if (!turnDoc) {
+      return {
+        success: false,
+        error: `TurnDoc not found: ${roomId}:${turnNumber}`,
+      };
+    }
+
+    const configMap = turnDoc.getMap("config");
+    const status = configMap.get("status") as string | undefined;
+    if (status === "completed") {
+      return {
+        success: false,
+        error: "Cannot update action in completed turn",
+      };
+    }
+
+    const isLocked = Boolean(configMap.get("isLocked"));
+    if (isLocked) {
+      return {
+        success: false,
+        error: "Cannot update action after turn is locked",
+      };
+    }
+
+    const actionsMap = turnDoc.getMap("actions");
+    if (!actionsMap.has(userId)) {
+      return {
+        success: false,
+        error: `No submitted action found for user: ${userId}`,
+      };
+    }
+
+    actionsMap.set(userId, {
+      userId,
+      content,
+      submittedAt: now,
+      metadata,
+    });
+
+    eventBus.emit(
+      eventBus.createEvent(RoomEvents.ACTION_UPDATED, {
+        roomId,
+        turnNumber,
+        userId,
+        updatedAt: now,
+      }),
+    );
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * 创建 NPC 命令处理器
+ */
+export async function createNpcHandler(
+  payload: CreateNpcPayload,
+  _context: CommandContext,
+): Promise<CommandResult<{ characterId: string }>> {
+  try {
+    const { roomId } = payload;
+
+    const mainDoc = subdocManager.getMainDoc(roomId);
+    if (!mainDoc) {
+      return { success: false, error: `MainDoc not found: ${roomId}` };
+    }
+
+    const userId = useRoomStore.getState().localUser.userId;
+    if (!userId) {
+      return { success: false, error: "当前用户未登录或 userId 缺失" };
+    }
+
+    const uniqueTag = getUniqueTag();
+    if (!uniqueTag) {
+      return { success: false, error: "无法获取 uniqueTag" };
+    }
+
+    if (!subdocManager.isHost(roomId, userId)) {
+      return { success: false, error: "Only host can create NPC" };
+    }
+
+    const charactersMap = mainDoc.getMap("characters") as Y.Map<Y.Map<unknown>>;
+
+    const character = createCharacter({
+      name: payload.name,
+      description: payload.description,
+      personality: payload.personality,
+      appearance: payload.appearance,
+      age: payload.age,
+      gender: payload.gender,
+      attributes: payload.attributes,
+      talentIds: payload.talentIds,
+      controlType: "npc",
+      operatorUserId: userId,
+      operatorUniqueTag: uniqueTag,
+      creatorUniqueTag: uniqueTag,
+      status: "active",
+    });
+
+    mainDoc.transact(() => {
+      charactersMap.set(character.id, characterToYMap(character));
+    });
+
+    const event: NpcCreatedEvent = {
+      roomId,
+      characterId: character.id,
+      name: character.name,
+      description: character.description,
+      personality: character.personality,
+      appearance: character.appearance,
+      talentIds: character.talentIds,
+      createdAt: character.createdAt,
+    };
+    eventBus.emit(eventBus.createEvent(RoomEvents.NPC_CREATED, event));
+
+    return { success: true, data: { characterId: character.id } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * 更新 NPC 状态命令处理器
+ */
+export async function updateNpcStatusHandler(
+  payload: UpdateNpcStatusPayload,
+  _context: CommandContext,
+): Promise<CommandResult<void>> {
+  try {
+    const { roomId, characterId, status } = payload;
+    const now = Date.now();
+
+    const mainDoc = subdocManager.getMainDoc(roomId);
+    if (!mainDoc) {
+      return { success: false, error: `MainDoc not found: ${roomId}` };
+    }
+
+    const userId = useRoomStore.getState().localUser.userId;
+    if (!userId) {
+      return { success: false, error: "当前用户未登录或 userId 缺失" };
+    }
+
+    const charactersMap = mainDoc.getMap("characters") as Y.Map<Y.Map<unknown>>;
+    const charMap = charactersMap.get(characterId);
+    if (!charMap) {
+      return { success: false, error: `角色不存在: ${characterId}` };
+    }
+
+    const character = yMapToCharacter(charMap);
+    if (character.controlType !== "npc") {
+      return { success: false, error: `目标角色不是 NPC: ${characterId}` };
+    }
+
+    if (!subdocManager.isHost(roomId, userId)) {
+      return { success: false, error: "Only host can update NPC status" };
+    }
+
+    const previousStatus = character.status;
+
+    mainDoc.transact(() => {
+      charMap.set("status", status);
+      charMap.set("updatedAt", now);
+    });
+
+    const event: NpcStatusChangedEvent = {
+      roomId,
+      characterId,
+      previousStatus,
+      newStatus: status,
+      changedAt: now,
+    };
+    eventBus.emit(eventBus.createEvent(RoomEvents.NPC_STATUS_CHANGED, event));
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * 更新 NPC 信息命令处理器
+ */
+export async function updateNpcInfoHandler(
+  payload: UpdateNpcInfoPayload,
+  _context: CommandContext,
+): Promise<CommandResult<void>> {
+  try {
+    const { roomId, characterId, updates } = payload;
+    const now = Date.now();
+
+    const mainDoc = subdocManager.getMainDoc(roomId);
+    if (!mainDoc) {
+      return { success: false, error: `MainDoc not found: ${roomId}` };
+    }
+
+    const userId = useRoomStore.getState().localUser.userId;
+    if (!userId) {
+      return { success: false, error: "当前用户未登录或 userId 缺失" };
+    }
+
+    const charactersMap = mainDoc.getMap("characters") as Y.Map<Y.Map<unknown>>;
+    const charMap = charactersMap.get(characterId);
+    if (!charMap) {
+      return { success: false, error: `角色不存在: ${characterId}` };
+    }
+
+    const character = yMapToCharacter(charMap);
+    if (character.controlType !== "npc") {
+      return { success: false, error: `目标角色不是 NPC: ${characterId}` };
+    }
+
+    if (!subdocManager.isHost(roomId, userId)) {
+      return { success: false, error: "Only host can update NPC info" };
+    }
+
+    mainDoc.transact(() => {
+      for (const [key, value] of Object.entries(updates)) {
+        if (value !== undefined) {
+          charMap.set(key, value);
+        }
+      }
+      charMap.set("updatedAt", now);
+    });
+
+    const event: NpcInfoUpdatedEvent = {
+      roomId,
+      characterId,
+      updates,
+      updatedAt: now,
+    };
+    eventBus.emit(eventBus.createEvent(RoomEvents.NPC_INFO_UPDATED, event));
 
     return { success: true };
   } catch (error) {

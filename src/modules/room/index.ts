@@ -12,7 +12,12 @@
 
 import { commandBus } from "@/core/command-bus";
 import { eventBus } from "@/core/event-bus";
-import { multiplayerProvider } from "@/core/yjs";
+import {
+  historyDocProvider,
+  multiplayerProvider,
+  subdocManager,
+  turnDocProvider,
+} from "@/core/yjs";
 import { RoomCommands } from "@/domain/commands/room";
 import {
   RoomEvents,
@@ -31,12 +36,15 @@ import {
   completePhaseHandler,
   completeTurnHandler,
   createCharacterHandler,
+  createNpcHandler,
   createRoomHandler,
+  deleteRoomHandler,
   endGameHandler,
   enterPhaseHandler,
   extendTurnDeadlineHandler,
   forceStartTurnHandler,
   joinRoomHandler,
+  kickMemberHandler,
   leaveRoomHandler,
   lockActionHandler,
   queryRoomHandler,
@@ -44,8 +52,12 @@ import {
   startTurnHandler,
   submitActionHandler,
   transferHostHandler,
+  updateActionHandler,
   updateCharacterHandler,
   updateMemberStatusHandler,
+  updateNpcInfoHandler,
+  updateNpcStatusHandler,
+  updateRoomSettingsHandler,
 } from "./commands/handlers";
 import { useRoomStore } from "./store";
 import { RoomSyncBridge } from "./sync";
@@ -68,7 +80,7 @@ function setupRoomSyncBridge(roomId: string): void {
   // 幂等检查：如果已有同房间的 SyncBridge 实例且正常运行，跳过
   if (roomSyncBridge && roomSyncBridge.roomId === roomId) {
     console.log(
-      `[Room] SyncBridge already active for room ${roomId}, skipping setup`
+      `[Room] SyncBridge already active for room ${roomId}, skipping setup`,
     );
     return;
   }
@@ -138,7 +150,7 @@ function setupEventSubscriptions(): void {
       });
       store.setMode("online");
       store.setLoading(false);
-    })
+    }),
   );
 
   // 成员加入事件
@@ -163,7 +175,7 @@ function setupEventSubscriptions(): void {
 
       // store.addMember() 已移除：由 SyncBridge.applySnapshotToStore() 通过 setMembers() 覆盖
       store.setLoading(false);
-    })
+    }),
   );
 
   // 成员离开事件
@@ -177,28 +189,54 @@ function setupEventSubscriptions(): void {
         store.reset();
       }
       // 其他成员离开：由 SyncBridge.applySnapshotToStore() 通过 setMembers() 覆盖
-    })
+    }),
   );
 
   // 连接事件
   unsubscribers.push(
     eventBus.on(RoomEvents.CONNECTED, () => {
       store.setConnectionStatus("connected");
-    })
+    }),
+  );
+
+  // 成员被踢事件：当前用户被踢时立即收口离房态
+  unsubscribers.push(
+    eventBus.on(RoomEvents.MEMBER_KICKED, (event) => {
+      const payload = event.payload as { roomId: string; userId: string };
+      const localUserId = useRoomStore.getState().localUser.userId;
+
+      if (payload.userId !== localUserId) {
+        return;
+      }
+
+      historyDocProvider.disconnect(payload.roomId);
+      turnDocProvider.disconnectAll();
+      multiplayerProvider.disconnect();
+      subdocManager.leaveRoom(payload.roomId);
+      store.reset();
+      store.setError("你已被房主移出房间");
+    }),
   );
 
   // 断开连接事件
   unsubscribers.push(
     eventBus.on(RoomEvents.DISCONNECTED, () => {
+      const currentRoom = useRoomStore.getState().currentRoom;
+      if (currentRoom) {
+        historyDocProvider.disconnect(currentRoom.roomId);
+        turnDocProvider.disconnectAll();
+        subdocManager.leaveRoom(currentRoom.roomId);
+        store.reset();
+      }
       store.setConnectionStatus("disconnected");
-    })
+    }),
   );
 
   // 重连中事件
   unsubscribers.push(
     eventBus.on(RoomEvents.RECONNECTING, () => {
       store.setConnectionStatus("reconnecting");
-    })
+    }),
   );
 
   // 存档加载事件 - 当加载单人存档时重置房间状态
@@ -210,14 +248,14 @@ function setupEventSubscriptions(): void {
       if (payload.saveType === "solo") {
         store.reset();
       }
-    })
+    }),
   );
 
   // 重连成功事件
   unsubscribers.push(
     eventBus.on(RoomEvents.RECONNECTED, () => {
       store.setConnectionStatus("synced");
-    })
+    }),
   );
 
   // 成员状态更新事件
@@ -229,7 +267,7 @@ function setupEventSubscriptions(): void {
         status: "online" | "away" | "offline";
       };
       store.updateMemberStatus(payload.userId, payload.status);
-    })
+    }),
   );
 
   // 房主转让事件
@@ -252,7 +290,7 @@ function setupEventSubscriptions(): void {
       }
 
       // 成员角色更新已由 SyncBridge.applySnapshotToStore() 通过 setMembers() 覆盖
-    })
+    }),
   );
 }
 
@@ -299,7 +337,7 @@ function setupProviderListeners(): void {
         // 同步完成后设置 RoomSyncBridge（幂等，重复调用安全）
         setupRoomSyncBridge(config.roomId);
         eventBus.emit(
-          eventBus.createEvent(RoomEvents.RECONNECTED, eventPayload)
+          eventBus.createEvent(RoomEvents.RECONNECTED, eventPayload),
         );
         break;
       case "reconnecting":
@@ -308,12 +346,12 @@ function setupProviderListeners(): void {
           roomSyncBridge.onReconnect();
         }
         eventBus.emit(
-          eventBus.createEvent(RoomEvents.RECONNECTING, eventPayload)
+          eventBus.createEvent(RoomEvents.RECONNECTING, eventPayload),
         );
         break;
       case "disconnected":
         eventBus.emit(
-          eventBus.createEvent(RoomEvents.DISCONNECTED, eventPayload)
+          eventBus.createEvent(RoomEvents.DISCONNECTED, eventPayload),
         );
         break;
       case "error":
@@ -355,7 +393,7 @@ export function registerRoomModule(): void {
     useRoomStore.getState().setLoading(true);
     return createRoomHandler(
       command.payload as Parameters<typeof createRoomHandler>[0],
-      context
+      context,
     );
   });
 
@@ -367,14 +405,14 @@ export function registerRoomModule(): void {
     useRoomStore.getState().setLoading(true);
     return joinRoomHandler(
       command.payload as Parameters<typeof joinRoomHandler>[0],
-      context
+      context,
     );
   });
 
   commandBus.register(RoomCommands.LEAVE_ROOM, async (command, context) => {
     return leaveRoomHandler(
       command.payload as Parameters<typeof leaveRoomHandler>[0],
-      context
+      context,
     );
   });
 
@@ -383,36 +421,36 @@ export function registerRoomModule(): void {
     async (command, context) => {
       return updateMemberStatusHandler(
         command.payload as Parameters<typeof updateMemberStatusHandler>[0],
-        context
+        context,
       );
-    }
+    },
   );
 
   commandBus.register(RoomCommands.START_TURN, async (command, context) => {
     return startTurnHandler(
       command.payload as Parameters<typeof startTurnHandler>[0],
-      context
+      context,
     );
   });
 
   commandBus.register(RoomCommands.SUBMIT_ACTION, async (command, context) => {
     return submitActionHandler(
       command.payload as Parameters<typeof submitActionHandler>[0],
-      context
+      context,
     );
   });
 
   commandBus.register(RoomCommands.TRANSFER_HOST, async (command, context) => {
     return transferHostHandler(
       command.payload as Parameters<typeof transferHostHandler>[0],
-      context
+      context,
     );
   });
 
   commandBus.register(RoomCommands.QUERY_ROOM, async (command, context) => {
     return queryRoomHandler(
       command.payload as Parameters<typeof queryRoomHandler>[0],
-      context
+      context,
     );
   });
 
@@ -420,35 +458,35 @@ export function registerRoomModule(): void {
   commandBus.register(RoomCommands.ENTER_PHASE, async (command, context) => {
     return enterPhaseHandler(
       command.payload as Parameters<typeof enterPhaseHandler>[0],
-      context
+      context,
     );
   });
 
   commandBus.register(RoomCommands.COMPLETE_PHASE, async (command, context) => {
     return completePhaseHandler(
       command.payload as Parameters<typeof completePhaseHandler>[0],
-      context
+      context,
     );
   });
 
   commandBus.register(RoomCommands.ADVANCE_PHASE, async (command, context) => {
     return advancePhaseHandler(
       command.payload as Parameters<typeof advancePhaseHandler>[0],
-      context
+      context,
     );
   });
 
   commandBus.register(RoomCommands.START_GAME, async (command, context) => {
     return startGameHandler(
       command.payload as Parameters<typeof startGameHandler>[0],
-      context
+      context,
     );
   });
 
   commandBus.register(RoomCommands.END_GAME, async (command, context) => {
     return endGameHandler(
       command.payload as Parameters<typeof endGameHandler>[0],
-      context
+      context,
     );
   });
 
@@ -458,9 +496,9 @@ export function registerRoomModule(): void {
     async (command, context) => {
       return extendTurnDeadlineHandler(
         command.payload as Parameters<typeof extendTurnDeadlineHandler>[0],
-        context
+        context,
       );
-    }
+    },
   );
 
   commandBus.register(
@@ -468,22 +506,22 @@ export function registerRoomModule(): void {
     async (command, context) => {
       return forceStartTurnHandler(
         command.payload as Parameters<typeof forceStartTurnHandler>[0],
-        context
+        context,
       );
-    }
+    },
   );
 
   commandBus.register(RoomCommands.LOCK_ACTION, async (command, context) => {
     return lockActionHandler(
       command.payload as Parameters<typeof lockActionHandler>[0],
-      context
+      context,
     );
   });
 
   commandBus.register(RoomCommands.COMPLETE_TURN, async (command, context) => {
     return completeTurnHandler(
       command.payload as Parameters<typeof completeTurnHandler>[0],
-      context
+      context,
     );
   });
 
@@ -493,15 +531,15 @@ export function registerRoomModule(): void {
     async (command, context) => {
       return processAiTurnHandler(
         command.payload as Parameters<typeof processAiTurnHandler>[0],
-        context
+        context,
       );
-    }
+    },
   );
 
   commandBus.register(RoomCommands.CANCEL_AI_TURN, async (command, context) => {
     return cancelAiTurnHandler(
       command.payload as Parameters<typeof cancelAiTurnHandler>[0],
-      context
+      context,
     );
   });
 
@@ -510,9 +548,9 @@ export function registerRoomModule(): void {
     async (command, context) => {
       return regenerateAiTurnHandler(
         command.payload as Parameters<typeof regenerateAiTurnHandler>[0],
-        context
+        context,
       );
-    }
+    },
   );
 
   // ===== 角色管理命令 =====
@@ -521,9 +559,9 @@ export function registerRoomModule(): void {
     async (command, context) => {
       return createCharacterHandler(
         command.payload as Parameters<typeof createCharacterHandler>[0],
-        context
+        context,
       );
-    }
+    },
   );
 
   commandBus.register(
@@ -531,9 +569,70 @@ export function registerRoomModule(): void {
     async (command, context) => {
       return updateCharacterHandler(
         command.payload as Parameters<typeof updateCharacterHandler>[0],
-        context
+        context,
       );
-    }
+    },
+  );
+
+  // ===== 踢出/删除命令 =====
+  commandBus.register(RoomCommands.KICK_MEMBER, async (command, context) => {
+    return kickMemberHandler(
+      command.payload as Parameters<typeof kickMemberHandler>[0],
+      context,
+    );
+  });
+
+  commandBus.register(RoomCommands.DELETE_ROOM, async (command, context) => {
+    return deleteRoomHandler(
+      command.payload as Parameters<typeof deleteRoomHandler>[0],
+      context,
+    );
+  });
+
+  // ===== 房间设置/行动命令 =====
+  commandBus.register(
+    RoomCommands.UPDATE_ROOM_SETTINGS,
+    async (command, context) => {
+      return updateRoomSettingsHandler(
+        command.payload as Parameters<typeof updateRoomSettingsHandler>[0],
+        context,
+      );
+    },
+  );
+
+  commandBus.register(RoomCommands.UPDATE_ACTION, async (command, context) => {
+    return updateActionHandler(
+      command.payload as Parameters<typeof updateActionHandler>[0],
+      context,
+    );
+  });
+
+  // ===== NPC 管理命令 =====
+  commandBus.register(RoomCommands.CREATE_NPC, async (command, context) => {
+    return createNpcHandler(
+      command.payload as Parameters<typeof createNpcHandler>[0],
+      context,
+    );
+  });
+
+  commandBus.register(
+    RoomCommands.UPDATE_NPC_STATUS,
+    async (command, context) => {
+      return updateNpcStatusHandler(
+        command.payload as Parameters<typeof updateNpcStatusHandler>[0],
+        context,
+      );
+    },
+  );
+
+  commandBus.register(
+    RoomCommands.UPDATE_NPC_INFO,
+    async (command, context) => {
+      return updateNpcInfoHandler(
+        command.payload as Parameters<typeof updateNpcInfoHandler>[0],
+        context,
+      );
+    },
   );
 
   // 设置事件订阅
@@ -587,7 +686,7 @@ function setupAiEventSubscriptions(): void {
           // AI 处理失败，静默处理
         }
       }, 100);
-    })
+    }),
   );
 
   // AI 完成后自动归档回合（写入 HistoryDoc + SaveSlot）
@@ -615,7 +714,7 @@ function setupAiEventSubscriptions(): void {
         .catch(() => {
           // 自动完成回合失败，静默处理
         });
-    })
+    }),
   );
 }
 

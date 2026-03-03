@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { yjsManager } from "@/core/yjs";
 import type { Character } from "@/domain/entities/character";
-import { useCurrentSaveId } from "@/modules";
+import { getUniqueTag } from "@/lib/user-identity";
+import { useCurrentSaveId, useRoomStore } from "@/modules";
 import { yMapToCharacter } from "@/modules/game/repository";
 
 /**
@@ -12,6 +13,8 @@ import { yMapToCharacter } from "@/modules/game/repository";
 export function usePlayerCharacter(): Character | null {
   const [character, setCharacter] = useState<Character | null>(null);
   const currentSaveId = useCurrentSaveId();
+  const roomMode = useRoomStore((s) => s.mode);
+  const localUserId = useRoomStore((s) => s.localUser.userId);
 
   const readCharacter = useCallback(() => {
     const currentSave = yjsManager.getCurrentSave();
@@ -25,20 +28,55 @@ export function usePlayerCharacter(): Character | null {
       | undefined;
 
     if (charactersMap && charactersMap.size > 0) {
-      let playerChar: Character | null = null;
+      const localUniqueTag = getUniqueTag() || "";
+      let onlineMatchedByUserId: Character | null = null;
+      let onlineMatchedByUniqueTag: Character | null = null;
+      let offlinePlayerChar: Character | null = null;
+
       charactersMap.forEach((charMap) => {
         const char = yMapToCharacter(charMap);
-        if ((char.controlType ?? "player") === "player" && !playerChar) {
-          playerChar = char;
+        const isPlayerCharacter = (char.controlType ?? "player") === "player";
+
+        if (!isPlayerCharacter) {
+          return;
+        }
+
+        if (roomMode === "online") {
+          if (
+            !onlineMatchedByUserId &&
+            localUserId &&
+            char.operatorUserId === localUserId
+          ) {
+            onlineMatchedByUserId = char;
+          }
+
+          if (
+            !onlineMatchedByUniqueTag &&
+            localUniqueTag &&
+            char.operatorUniqueTag === localUniqueTag
+          ) {
+            onlineMatchedByUniqueTag = char;
+          }
+
+          return;
+        }
+
+        if (!offlinePlayerChar) {
+          offlinePlayerChar = char;
         }
       });
 
-      setCharacter(playerChar);
+      if (roomMode === "online") {
+        setCharacter(onlineMatchedByUserId ?? onlineMatchedByUniqueTag ?? null);
+        return;
+      }
+
+      setCharacter(offlinePlayerChar);
       return;
     }
 
     setCharacter(null);
-  }, []);
+  }, [localUserId, roomMode]);
 
   useEffect(() => {
     // 初始读取（覆盖 currentSaveId 从 null 变为有效值的场景）

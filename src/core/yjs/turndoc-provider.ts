@@ -115,14 +115,14 @@ export class TurnDocProvider {
     // 验证配置
     if (!this.currentConfig) {
       throw new Error(
-        "[TurnDocProvider] Config not set. Call setConfig() first."
+        "[TurnDocProvider] Config not set. Call setConfig() first.",
       );
     }
 
     // 验证 roomId 匹配
     if (this.currentConfig.roomId !== roomId) {
       throw new Error(
-        `[TurnDocProvider] Room ID mismatch: config has ${this.currentConfig.roomId}, but connecting to ${roomId}`
+        `[TurnDocProvider] Room ID mismatch: config has ${this.currentConfig.roomId}, but connecting to ${roomId}`,
       );
     }
 
@@ -131,7 +131,7 @@ export class TurnDocProvider {
 
     if (!websocketProvider) {
       throw new Error(
-        "[TurnDocProvider] SharedWebSocket not connected. MainDoc should connect first."
+        "[TurnDocProvider] SharedWebSocket not connected. MainDoc should connect first.",
       );
     }
 
@@ -147,8 +147,10 @@ export class TurnDocProvider {
     };
     this.connections.set(key, connection);
 
+    let provider: HocuspocusProvider | null = null;
+
     try {
-      const provider = new HocuspocusProvider({
+      provider = new HocuspocusProvider({
         websocketProvider, // 使用共享 WebSocket（Multiplexing）
         name: documentName,
         document: doc,
@@ -198,8 +200,14 @@ export class TurnDocProvider {
       connection.provider = provider;
     } catch (error) {
       // 连接失败，清理
+      if (provider) {
+        provider.destroy();
+      }
       this.connections.delete(key);
       connection.status = "error";
+      this.emitStatusChange(roomId, turnNumber, "error");
+      // 对称释放 sharedWebSocket.get() 的引用，避免失败分支泄漏
+      sharedWebSocket.release();
       throw error;
     }
   }
@@ -253,6 +261,8 @@ export class TurnDocProvider {
   disconnectAll(): void {
     this.connections.forEach((conn) => {
       conn.provider.destroy();
+      // 释放共享 WebSocket 引用
+      sharedWebSocket.release();
     });
 
     this.connections.clear();
@@ -292,7 +302,7 @@ export class TurnDocProvider {
   async waitForSync(
     roomId: string,
     turnNumber: number,
-    timeout = 10000
+    timeout = 10000,
   ): Promise<void> {
     const key = this.getKey(roomId, turnNumber);
     const startTime = Date.now();
@@ -405,7 +415,7 @@ export class TurnDocProvider {
   private emitStatusChange(
     roomId: string,
     turnNumber: number,
-    status: ConnectionStatus
+    status: ConnectionStatus,
   ): void {
     const event: TurnDocStatusEvent = { roomId, turnNumber, status };
     this.listeners.forEach((listener) => {
