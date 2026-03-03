@@ -119,8 +119,11 @@ export type {
 export { DEFAULT_ROOM_CODE_OPTIONS, DEFAULT_SUBDOC_CONFIG } from "./room/types";
 export type {
   ArchivedTurn,
+  CharacterInventorySnapshot,
   CompletedTurnData,
   HistoryDocStructure,
+  InventorySnapshot,
+  InventoryYjsData,
   LoadedSubdocInfo,
   MainDocConfig,
   MainDocStructure,
@@ -137,6 +140,8 @@ export type {
   TurnData,
   TurnDocStructure,
   TurnStatus,
+  WorldArchiveMetadataSnapshot,
+  WorldArchiveYjsData,
 } from "./room/types";
 
 // 类型

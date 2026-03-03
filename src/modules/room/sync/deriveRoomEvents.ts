@@ -58,18 +58,18 @@ export interface EventMetaReader {
  */
 export function computeSnapshotDiff(
   prev: RoomSnapshot,
-  next: RoomSnapshot
+  next: RoomSnapshot,
 ): SnapshotDiff {
   // 计算成员变化
   const prevMemberIds = new Set(prev.members.map((m) => m.userId));
   const nextMemberIds = new Set(next.members.map((m) => m.userId));
 
   const membersJoined: SnapshotMember[] = next.members.filter(
-    (m) => !prevMemberIds.has(m.userId)
+    (m) => !prevMemberIds.has(m.userId),
   );
 
   const membersLeft: SnapshotMember[] = prev.members.filter(
-    (m) => !nextMemberIds.has(m.userId)
+    (m) => !nextMemberIds.has(m.userId),
   );
 
   return {
@@ -97,6 +97,22 @@ export function computeSnapshotDiff(
         ? { prev: prev.hostUserId, next: next.hostUserId }
         : undefined,
 
+    worldArchiveChanged:
+      prev.worldArchiveVersion !== next.worldArchiveVersion ||
+      prev.worldArchiveUpdatedAt !== next.worldArchiveUpdatedAt,
+    worldArchive:
+      prev.worldArchiveVersion !== next.worldArchiveVersion ||
+      prev.worldArchiveUpdatedAt !== next.worldArchiveUpdatedAt
+        ? {
+            prevCount: prev.worldArchiveEntityCount,
+            nextCount: next.worldArchiveEntityCount,
+            prevVersion: prev.worldArchiveVersion,
+            nextVersion: next.worldArchiveVersion,
+            prevUpdatedAt: prev.worldArchiveUpdatedAt,
+            nextUpdatedAt: next.worldArchiveUpdatedAt,
+          }
+        : undefined,
+
     membersJoined,
     membersLeft,
   };
@@ -115,7 +131,7 @@ export function computeSnapshotDiff(
 export function deriveRoomEvents(
   prev: RoomSnapshot,
   next: RoomSnapshot,
-  metaReader?: EventMetaReader
+  metaReader?: EventMetaReader,
 ): DeriveEventsResult {
   const events: DomainEvent[] = [];
   const diff = computeSnapshotDiff(prev, next);
@@ -291,7 +307,7 @@ export function deriveRoomEvents(
  */
 export function hasSnapshotChanged(
   prev: RoomSnapshot,
-  next: RoomSnapshot
+  next: RoomSnapshot,
 ): boolean {
   // 快速检查：比较关键字段
   if (prev.status !== next.status) return true;
@@ -299,6 +315,8 @@ export function hasSnapshotChanged(
   if (prev.currentTurnNumber !== next.currentTurnNumber) return true;
   if (prev.currentPhaseId !== next.currentPhaseId) return true;
   if (prev.members.length !== next.members.length) return true;
+  if (prev.worldArchiveVersion !== next.worldArchiveVersion) return true;
+  if (prev.worldArchiveUpdatedAt !== next.worldArchiveUpdatedAt) return true;
 
   // 详细检查：比较成员列表
   const prevMemberIds = new Set(prev.members.map((m) => m.userId));

@@ -6,6 +6,7 @@ import type {
   CommandResult,
 } from "@/core/command-bus";
 import type { ModuleManifest } from "@/core/registry";
+import { subdocManager } from "@/core/yjs";
 import {
   WorldArchiveCommands,
   type AddWorldArchiveRelationshipPayload,
@@ -24,6 +25,7 @@ import type { SaveDeletedPayload } from "@/domain/events/save";
 import type { CreatedNpcData } from "@/domain/types";
 
 import { snapshotRegistry } from "@/modules/checkpoint/snapshot-api";
+import { useRoomStore } from "@/modules/room/store";
 import { applyArchiveUpdatesAndSync } from "./apply-updates";
 import { computeArchiveData } from "./archive-injector";
 import { autoRegisterNpcs } from "./auto-register";
@@ -63,6 +65,30 @@ function ensureEntityExists(entityId: string): CommandResult<void> | null {
   };
 }
 
+function ensureWorldArchivePermission(
+  context: CommandContext,
+): CommandResult<void> | null {
+  const room = useRoomStore.getState().currentRoom;
+  if (!room) {
+    return null;
+  }
+
+  const sender = context.sender ?? useRoomStore.getState().localUser.userId;
+  if (!sender) {
+    return { success: false, error: "Missing sender in online mode" };
+  }
+
+  if (subdocManager.isHost(room.roomId, sender)) {
+    return null;
+  }
+
+  return {
+    success: false,
+    error:
+      "Permission denied: only host can modify world archive in online mode",
+  };
+}
+
 let syncBridge: WorldArchiveSyncBridge | null = null;
 
 function rebuildSyncBridgeForCurrentSave(): void {
@@ -99,8 +125,16 @@ const createEntityHandler: CommandHandler<
   { entityId: string }
 > = async (
   command: Command<CreateWorldArchiveEntityPayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<{ entityId: string }>> => {
+  const permissionError = ensureWorldArchivePermission(context);
+  if (permissionError) {
+    return {
+      success: false,
+      error: permissionError.error ?? "Permission denied",
+    };
+  }
+
   const { archetype, name, essence, currentState, presence, tags } =
     command.payload;
 
@@ -130,8 +164,13 @@ const updateEntityNameHandler: CommandHandler<
   void
 > = async (
   command: Command<UpdateWorldArchiveEntityNamePayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
+  const permissionError = ensureWorldArchivePermission(context);
+  if (permissionError) {
+    return permissionError;
+  }
+
   const { entityId, name } = command.payload;
 
   const missingEntityResult = ensureEntityExists(entityId);
@@ -150,8 +189,13 @@ const updateEntityEssenceHandler: CommandHandler<
   void
 > = async (
   command: Command<UpdateWorldArchiveEntityEssencePayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
+  const permissionError = ensureWorldArchivePermission(context);
+  if (permissionError) {
+    return permissionError;
+  }
+
   const { entityId, essence } = command.payload;
 
   const missingEntityResult = ensureEntityExists(entityId);
@@ -170,8 +214,13 @@ const updateEntityStateHandler: CommandHandler<
   void
 > = async (
   command: Command<UpdateWorldArchiveEntityStatePayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
+  const permissionError = ensureWorldArchivePermission(context);
+  if (permissionError) {
+    return permissionError;
+  }
+
   const { entityId, currentState } = command.payload;
 
   const missingEntityResult = ensureEntityExists(entityId);
@@ -190,8 +239,13 @@ const updateEntityPresenceHandler: CommandHandler<
   void
 > = async (
   command: Command<UpdateWorldArchiveEntityPresencePayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
+  const permissionError = ensureWorldArchivePermission(context);
+  if (permissionError) {
+    return permissionError;
+  }
+
   const { entityId, presence } = command.payload;
 
   const missingEntityResult = ensureEntityExists(entityId);
@@ -210,8 +264,13 @@ const addRelationshipHandler: CommandHandler<
   void
 > = async (
   command: Command<AddWorldArchiveRelationshipPayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
+  const permissionError = ensureWorldArchivePermission(context);
+  if (permissionError) {
+    return permissionError;
+  }
+
   const { entityId, relationship } = command.payload;
 
   const missingEntityResult = ensureEntityExists(entityId);
@@ -230,8 +289,13 @@ const updateRelationshipHandler: CommandHandler<
   void
 > = async (
   command: Command<UpdateWorldArchiveRelationshipPayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
+  const permissionError = ensureWorldArchivePermission(context);
+  if (permissionError) {
+    return permissionError;
+  }
+
   const { entityId, relationshipId, updates } = command.payload;
 
   const missingEntityResult = ensureEntityExists(entityId);
@@ -252,8 +316,13 @@ const removeRelationshipHandler: CommandHandler<
   void
 > = async (
   command: Command<RemoveWorldArchiveRelationshipPayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
+  const permissionError = ensureWorldArchivePermission(context);
+  if (permissionError) {
+    return permissionError;
+  }
+
   const { entityId, relationshipId } = command.payload;
 
   const missingEntityResult = ensureEntityExists(entityId);
@@ -272,8 +341,13 @@ const updateTagsHandler: CommandHandler<
   void
 > = async (
   command: Command<UpdateWorldArchiveTagsPayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
+  const permissionError = ensureWorldArchivePermission(context);
+  if (permissionError) {
+    return permissionError;
+  }
+
   const { entityId, tags } = command.payload;
 
   const missingEntityResult = ensureEntityExists(entityId);
@@ -292,8 +366,13 @@ const syncPipelineChangesHandler: CommandHandler<
   void
 > = async (
   command: Command<SyncPipelineArchiveChangesPayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
+  const permissionError = ensureWorldArchivePermission(context);
+  if (permissionError) {
+    return permissionError;
+  }
+
   const { currentTurn, createdNpcs, archiveUpdates } = command.payload;
 
   if (createdNpcs && createdNpcs.length > 0) {

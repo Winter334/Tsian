@@ -14,6 +14,7 @@ import type {
   CommandHandler,
   CommandResult,
 } from "@/core/command-bus";
+import { subdocManager } from "@/core/yjs";
 import type {
   EquipItemPayload,
   GrantItemPayload,
@@ -24,6 +25,7 @@ import type {
   UseItemPayload,
 } from "@/domain/commands/inventory";
 import { InventoryCommands } from "@/domain/commands/inventory";
+import { canOperateCharacter } from "@/domain/entities/character";
 import { createItemInstance } from "@/domain/entities/item";
 import { createSkillInstance } from "@/domain/entities/skill";
 import type {
@@ -39,7 +41,11 @@ import type {
 import { InventoryEvents } from "@/domain/events/inventory";
 import type { ResultFrame } from "@/domain/types/result-frame";
 import type { RuleAction } from "@/domain/types/rule-script";
+import { getUniqueTag } from "@/lib/user-identity";
 import { getRuntimeWorldConfig } from "@/lib/world";
+import { yMapToCharacter } from "@/modules/game/repository";
+import { useRoomStore } from "@/modules/room/store";
+import * as Y from "yjs";
 import {
   executeItemViaEngine,
   executeSimpleAction,
@@ -49,6 +55,57 @@ import {
 import { getInventoryRepository } from "./repository";
 import { useInventoryStore } from "./store";
 
+function ensureInventoryPermission(
+  characterId: string,
+  context: CommandContext,
+): CommandResult<void> | null {
+  const room = useRoomStore.getState().currentRoom;
+  if (!room) {
+    // offline：保持原行为
+    return null;
+  }
+
+  const sender = context.sender ?? useRoomStore.getState().localUser.userId;
+  if (!sender) {
+    return { success: false, error: "Missing sender in online mode" };
+  }
+
+  if (subdocManager.isHost(room.roomId, sender)) {
+    return null;
+  }
+
+  const mainDoc = subdocManager.getMainDoc(room.roomId);
+  if (!mainDoc) {
+    return { success: false, error: "MainDoc not found" };
+  }
+
+  const charactersMap = mainDoc.getMap("characters") as Y.Map<Y.Map<unknown>>;
+  const charMap = charactersMap.get(characterId);
+  if (!charMap) {
+    return { success: false, error: "Character not found" };
+  }
+
+  const uniqueTag = getUniqueTag();
+  if (!uniqueTag) {
+    return { success: false, error: "Missing uniqueTag in online mode" };
+  }
+
+  try {
+    const character = yMapToCharacter(charMap);
+    if (canOperateCharacter(character, sender, uniqueTag)) {
+      return null;
+    }
+  } catch {
+    return { success: false, error: "Character decode failed" };
+  }
+
+  return {
+    success: false,
+    error:
+      "Permission denied: only host or character operator can modify inventory",
+  };
+}
+
 // ─── GRANT_ITEM ───────────────────────────────────────────
 
 const handleGrantItem: CommandHandler<
@@ -56,7 +113,7 @@ const handleGrantItem: CommandHandler<
   { item: unknown }
 > = async (
   command: Command<GrantItemPayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<{ item: unknown }>> => {
   const {
     characterId,
@@ -69,6 +126,11 @@ const handleGrantItem: CommandHandler<
     effects,
     reason,
   } = command.payload;
+
+  const permissionError = ensureInventoryPermission(characterId, context);
+  if (permissionError) {
+    return { success: false, error: permissionError.error };
+  }
 
   // 1. 获取 Repository
   const repo = getInventoryRepository();
@@ -129,9 +191,6 @@ const handleGrantItem: CommandHandler<
 
   // 5. 写入 Yjs
   repo.addItem(characterId, item);
-  // 直接同步更新 Store，保证 UI 即时响应
-  // Store 层 _addItem 内部有 instanceId 去重保护，不会与 SyncBridge 产生重复
-  useInventoryStore.getState()._addItem(characterId, item);
 
   // 6. 发射事件
   eventBus.emit(
@@ -157,9 +216,14 @@ const handleGrantItem: CommandHandler<
 
 const handleRemoveItem: CommandHandler<RemoveItemPayload, void> = async (
   command: Command<RemoveItemPayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
   const { characterId, instanceId, quantity, reason } = command.payload;
+
+  const permissionError = ensureInventoryPermission(characterId, context);
+  if (permissionError) {
+    return permissionError;
+  }
 
   const repo = getInventoryRepository();
   if (!repo) {
@@ -173,18 +237,10 @@ const handleRemoveItem: CommandHandler<RemoveItemPayload, void> = async (
   }
 
   const itemName = existing.name;
-  const finalQuantity =
-    quantity !== undefined && quantity < existing.quantity
-      ? existing.quantity - quantity
-      : 0;
-
   // 从 Yjs 移除
   repo.removeItem(characterId, instanceId, quantity);
 
-  // 使用绝对值更新 Store，避免与 SyncBridge 双写时发生二次扣减
-  useInventoryStore
-    .getState()
-    ._updateItemQuantity(characterId, instanceId, finalQuantity);
+  // 状态由 SyncBridge 统一从权威 Yjs 下行，避免双写回环
 
   // 发射事件
   eventBus.emit(
@@ -210,9 +266,14 @@ const handleRemoveItem: CommandHandler<RemoveItemPayload, void> = async (
 
 const handleEquipItem: CommandHandler<EquipItemPayload, void> = async (
   command: Command<EquipItemPayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
   const { characterId, instanceId, targetSlot, reason } = command.payload;
+
+  const permissionError = ensureInventoryPermission(characterId, context);
+  if (permissionError) {
+    return permissionError;
+  }
 
   const repo = getInventoryRepository();
   if (!repo) {
@@ -264,13 +325,11 @@ const handleEquipItem: CommandHandler<EquipItemPayload, void> = async (
   let replacedItem: ItemEquippedPayload["replacedItem"];
   if (conflicting && conflicting.instanceId !== instanceId) {
     repo.updateEquipStatus(characterId, conflicting.instanceId, false);
-    store._unequipItem(characterId, conflicting.instanceId);
     replacedItem = { ...conflicting };
   }
 
   // 装备目标物品
   repo.updateEquipStatus(characterId, instanceId, true, slot);
-  store._equipItem(characterId, instanceId, slot);
 
   const equippedItem = {
     ...item,
@@ -302,9 +361,14 @@ const handleEquipItem: CommandHandler<EquipItemPayload, void> = async (
 
 const handleUnequipItem: CommandHandler<UnequipItemPayload, void> = async (
   command: Command<UnequipItemPayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
   const { characterId, instanceId, reason } = command.payload;
+
+  const permissionError = ensureInventoryPermission(characterId, context);
+  if (permissionError) {
+    return permissionError;
+  }
 
   const repo = getInventoryRepository();
   if (!repo) {
@@ -329,7 +393,6 @@ const handleUnequipItem: CommandHandler<UnequipItemPayload, void> = async (
 
   // 卸下装备
   repo.updateEquipStatus(characterId, instanceId, false);
-  useInventoryStore.getState()._unequipItem(characterId, instanceId);
 
   const unequippedItem = {
     ...item,
@@ -361,10 +424,15 @@ const handleUnequipItem: CommandHandler<UnequipItemPayload, void> = async (
 
 const handleUseItem: CommandHandler<UseItemPayload, void> = async (
   command: Command<UseItemPayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
   const { characterId, instanceId, quantity, targetId, reason } =
     command.payload;
+
+  const permissionError = ensureInventoryPermission(characterId, context);
+  if (permissionError) {
+    return permissionError;
+  }
 
   const repo = getInventoryRepository();
   if (!repo) {
@@ -412,9 +480,7 @@ const handleUseItem: CommandHandler<UseItemPayload, void> = async (
   // 扣减数量
   const newQty = item.quantity - useQty;
   repo.updateItemQuantity(characterId, instanceId, newQty);
-  useInventoryStore
-    .getState()
-    ._updateItemQuantity(characterId, instanceId, newQty);
+  // 状态由 SyncBridge 统一从权威 Yjs 下行，避免双写回环
 
   let resultFrame: ResultFrame | undefined;
 
@@ -469,7 +535,7 @@ const handleGrantSkill: CommandHandler<
   { skill: unknown }
 > = async (
   command: Command<GrantSkillPayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<{ skill: unknown }>> => {
   const {
     characterId,
@@ -481,6 +547,11 @@ const handleGrantSkill: CommandHandler<
     cost,
     reason,
   } = command.payload;
+
+  const permissionError = ensureInventoryPermission(characterId, context);
+  if (permissionError) {
+    return { success: false, error: permissionError.error };
+  }
 
   const repo = getInventoryRepository();
   if (!repo) {
@@ -500,9 +571,6 @@ const handleGrantSkill: CommandHandler<
 
   // 写入 Yjs
   repo.addSkill(characterId, skill);
-  // 直接同步更新 Store，保证 UI 即时响应
-  // Store 层 _addSkill 内部有 instanceId 去重保护，不会与 SyncBridge 产生重复
-  useInventoryStore.getState()._addSkill(characterId, skill);
 
   // 发射事件
   eventBus.emit(
@@ -528,9 +596,14 @@ const handleGrantSkill: CommandHandler<
 
 const handleRemoveSkill: CommandHandler<RemoveSkillPayload, void> = async (
   command: Command<RemoveSkillPayload>,
-  _context: CommandContext,
+  context: CommandContext,
 ): Promise<CommandResult<void>> => {
   const { characterId, instanceId, reason } = command.payload;
+
+  const permissionError = ensureInventoryPermission(characterId, context);
+  if (permissionError) {
+    return permissionError;
+  }
 
   const repo = getInventoryRepository();
   if (!repo) {
@@ -548,8 +621,7 @@ const handleRemoveSkill: CommandHandler<RemoveSkillPayload, void> = async (
   // 从 Yjs 移除
   repo.removeSkill(characterId, instanceId);
 
-  // 更新 Store
-  useInventoryStore.getState()._removeSkill(characterId, instanceId);
+  // 状态由 SyncBridge 统一从权威 Yjs 下行，避免双写回环
 
   // 发射事件
   eventBus.emit(

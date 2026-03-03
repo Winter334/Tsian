@@ -6,7 +6,9 @@
  */
 
 import type { Character } from "@/domain/entities/character";
+import type { ItemInstance } from "@/domain/entities/item";
 import type { FlowTemplate, PhaseInstance } from "@/domain/entities/phase";
+import type { SkillInstance } from "@/domain/entities/skill";
 import type {
   AiAbortReason,
   AiAborted,
@@ -178,6 +180,29 @@ export interface CompletedTurnData {
   aiResponseLength: number;
 }
 
+/**
+ * HistoryDoc.worldArchive 元数据约定。
+ *
+ * B1 仅定义最小结构，具体读写策略由后续 Bridge 层实现。
+ */
+export interface WorldArchiveMetadataSnapshot {
+  /** 结构版本号 */
+  version: number;
+  /** 最近更新时间戳 */
+  updatedAt: number;
+}
+
+/**
+ * HistoryDoc.worldArchive 根节点。
+ *
+ * 挂载路径：HistoryDoc.worldArchive
+ * 键约定：
+ * - entities: Y.Map<string>（entityId -> JSON 字符串）
+ * - relationships: Y.Array<string>（关系快照 JSON 字符串列表）
+ * - metadata: Y.Map<unknown>（至少包含 version / updatedAt）
+ */
+export type WorldArchiveYjsData = Y.Map<unknown>;
+
 // ===== Yjs 文档结构类型 =====
 
 /**
@@ -197,6 +222,29 @@ export interface MainDocConfig {
   /** 使用的流程模板 ID */
   flowTemplateId: string;
 }
+
+/**
+ * MainDoc.inventory 中单角色的快照数据（供桥接层序列化使用）
+ */
+export interface CharacterInventorySnapshot {
+  items: ItemInstance[];
+  skills: SkillInstance[];
+}
+
+/**
+ * MainDoc.inventory 的快照结构（characterId -> inventory）
+ */
+export type InventorySnapshot = Record<string, CharacterInventorySnapshot>;
+
+/**
+ * MainDoc.inventory 的 Yjs 结构。
+ *
+ * 顶层 key: characterId
+ * 值: 角色级 Y.Map，内部约定：
+ * - items: Y.Array<Y.Map<unknown>>
+ * - skills: Y.Array<Y.Map<unknown>>
+ */
+export type InventoryYjsData = Y.Map<Y.Map<unknown>>;
 
 /**
  * MainDoc 结构（房间主文档）
@@ -221,6 +269,12 @@ export interface MainDocStructure {
    * 修改单个属性时只同步变化的部分
    */
   characters: Y.Map<Y.Map<unknown>>;
+  /**
+   * 库存与技能（characterId -> { items, skills }）
+   *
+   * 挂载路径：MainDoc.inventory
+   */
+  inventory: InventoryYjsData;
 }
 
 /**
@@ -287,6 +341,8 @@ export interface HistoryDocStructure {
   messages: Y.Map<Y.Array<unknown>>;
   /** 归档的历史回合 */
   archivedTurns: Y.Array<ArchivedTurn>;
+  /** 世界档案联机根节点 */
+  worldArchive: WorldArchiveYjsData;
 }
 
 // ===== SubdocManager 接口 =====

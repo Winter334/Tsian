@@ -39,6 +39,15 @@ export interface RoomSnapshot {
   /** 当前阶段 ID */
   currentPhaseId: string | null;
 
+  /** 世界档案实体数量 */
+  worldArchiveEntityCount: number;
+
+  /** 世界档案版本号（metadata.version，缺省为 0） */
+  worldArchiveVersion: number;
+
+  /** 世界档案更新时间戳（metadata.updatedAt，缺省为 0） */
+  worldArchiveUpdatedAt: number;
+
   /** 快照创建时间 */
   updatedAt: number;
 }
@@ -61,6 +70,15 @@ export interface SnapshotMember {
 
   /** 在线状态 */
   status: Member["status"];
+}
+
+/**
+ * 世界档案变化摘要（用于快照增量判定）
+ */
+export interface WorldArchiveSummary {
+  entityCount: number;
+  version: number;
+  updatedAt: number;
 }
 
 /**
@@ -101,6 +119,19 @@ export interface SnapshotDiff {
   host?: {
     prev: string;
     next: string;
+  };
+
+  /** 世界档案是否变化 */
+  worldArchiveChanged: boolean;
+
+  /** 世界档案变化详情 */
+  worldArchive?: {
+    prevCount: number;
+    nextCount: number;
+    prevVersion: number;
+    nextVersion: number;
+    prevUpdatedAt: number;
+    nextUpdatedAt: number;
   };
 
   /** 新加入的成员 */
@@ -203,6 +234,9 @@ export function createEmptySnapshot(roomId: string): RoomSnapshot {
     turnDuration: 5 * 60 * 1000,
     currentTurnNumber: 0,
     currentPhaseId: null,
+    worldArchiveEntityCount: 0,
+    worldArchiveVersion: 0,
+    worldArchiveUpdatedAt: 0,
     updatedAt: Date.now(),
   };
 }
@@ -217,5 +251,20 @@ export function toSnapshotMember(member: Member): SnapshotMember {
     role: member.role,
     joinedAt: member.joinedAt,
     status: member.status,
+  };
+}
+
+/**
+ * 基于 metadata.version / metadata.updatedAt 构建 worldArchive 摘要。
+ */
+export function toWorldArchiveSummary(input: {
+  entityCount: number;
+  version: number;
+  updatedAt: number;
+}): WorldArchiveSummary {
+  return {
+    entityCount: input.entityCount,
+    version: input.version,
+    updatedAt: input.updatedAt,
   };
 }

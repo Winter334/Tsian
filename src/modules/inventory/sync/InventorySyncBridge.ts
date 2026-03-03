@@ -2,9 +2,13 @@
  * InventorySyncBridge — Yjs → Zustand Store 的同步桥接
  *
  * 职责：
- * 1. 初始水合：存档加载时从 Yjs 读取所有角色的物品/技能，写入 Store
+ * 1. 初始水合：从权威源读取所有角色的物品/技能，写入 Store
  * 2. 实时观察：通过 Y.Map.observeDeep() 监听 Yjs 变化，自动推送到 Store
  * 3. 清理：存档关闭/切换时取消观察、清空 Store
+ *
+ * 数据源策略：
+ * - offline：SaveSlot.inventories / SaveSlot.skills
+ * - online：MainDoc.inventory.{characterId}.{items|skills}
  *
  * ⚠️ 架构说明：
  * - SyncBridge 是 Yjs 状态到本地 Store 的**唯一桥接点**
@@ -14,15 +18,18 @@
  * @module inventory/sync/InventorySyncBridge
  */
 
-import { yjsManager } from "@/core/yjs";
+import { subdocManager, yjsManager } from "@/core/yjs";
 import type { ItemInstance } from "@/domain/entities/item";
 import type { SkillInstance } from "@/domain/entities/skill";
+import { useRoomStore } from "@/modules/room/store";
 import * as Y from "yjs";
 import {
   yMapToItemInstance,
   yMapToSkillInstance,
 } from "../repository/inventory-codec";
 import { useInventoryStore } from "../store";
+
+type InventoryYEvent = Y.YEvent<Y.AbstractType<unknown>>;
 
 /**
  * InventorySyncBridge 类
@@ -42,10 +49,13 @@ export class InventorySyncBridge {
   /** skills Y.Map 引用 */
   private skillsMap: Y.Map<unknown> | null = null;
 
+  /** online 模式下的权威库存根节点（MainDoc.inventory） */
+  private onlineInventoryRoot: Y.Map<Y.Map<unknown>> | null = null;
+
   // ===== 生命周期 =====
 
   /**
-   * 初始水合：从 Yjs 读取所有角色的物品/技能，写入 Store
+   * 初始水合：从权威源读取所有角色的物品/技能，写入 Store
    *
    * 遍历 inventories 和 skills Y.Map 的所有 key（characterId），
    * 读取数据并批量设置到 Store。
@@ -92,6 +102,21 @@ export class InventorySyncBridge {
   startObserving(): void {
     if (this.destroyed) return;
 
+    // online：直接观察权威节点 MainDoc.inventory，避免临时映射导致观察链不稳定
+    if (this.onlineInventoryRoot) {
+      const onlineObserver = (events: InventoryYEvent[]) => {
+        if (this.destroyed) return;
+        this.handleOnlineInventoryRootChange(events);
+      };
+
+      this.onlineInventoryRoot.observeDeep(onlineObserver);
+      this.observerCleanups.push(() =>
+        this.onlineInventoryRoot?.unobserveDeep(onlineObserver),
+      );
+      return;
+    }
+
+    // offline：沿用 SaveSlot.inventories / SaveSlot.skills 双映射观察
     if (!this.inventoriesMap || !this.skillsMap) {
       console.warn(
         "[InventorySyncBridge] startObserving: 未执行 hydrate，跳过",
@@ -99,9 +124,7 @@ export class InventorySyncBridge {
       return;
     }
 
-    // 观察 inventories 的深层变化
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const inventoriesObserver = (events: Y.YEvent<any>[]) => {
+    const inventoriesObserver = (events: InventoryYEvent[]) => {
       if (this.destroyed) return;
       this.handleInventoriesChange(events);
     };
@@ -111,9 +134,7 @@ export class InventorySyncBridge {
       this.inventoriesMap?.unobserveDeep(inventoriesObserver),
     );
 
-    // 观察 skills 的深层变化
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const skillsObserver = (events: Y.YEvent<any>[]) => {
+    const skillsObserver = (events: InventoryYEvent[]) => {
       if (this.destroyed) return;
       this.handleSkillsChange(events);
     };
@@ -144,25 +165,74 @@ export class InventorySyncBridge {
     // 清除引用
     this.inventoriesMap = null;
     this.skillsMap = null;
+    this.onlineInventoryRoot = null;
   }
 
   // ===== 内部方法 =====
 
   /**
-   * 获取当前存档的 inventories 和 skills Y.Map
-   *
-   * 惰性创建，确保 Y.Map 存在
+   * 在线模式：从 MainDoc.inventory 读取角色映射
    */
-  private getYjsMaps(): {
+  private getOnlineYjsMaps(): {
     inventoriesMap: Y.Map<unknown>;
     skillsMap: Y.Map<unknown>;
   } | null {
+    this.onlineInventoryRoot = null;
+
+    const room = useRoomStore.getState().currentRoom;
+    if (!room) {
+      return null;
+    }
+
+    const inventoryRoot = subdocManager.getRoomInventoryRoot(room.roomId);
+    if (!inventoryRoot) {
+      return null;
+    }
+
+    this.onlineInventoryRoot = inventoryRoot;
+
+    const inventoriesMap = new Y.Map<unknown>();
+    const skillsMap = new Y.Map<unknown>();
+
+    inventoryRoot.forEach((characterInventoryMap, characterId) => {
+      if (!(characterInventoryMap instanceof Y.Map)) {
+        return;
+      }
+
+      const items = characterInventoryMap.get("items");
+      const skills = characterInventoryMap.get("skills");
+
+      if (items instanceof Y.Array) {
+        inventoriesMap.set(characterId, items);
+      }
+
+      if (skills instanceof Y.Array) {
+        skillsMap.set(characterId, skills);
+      }
+    });
+
+    return { inventoriesMap, skillsMap };
+  }
+
+  /**
+   * 离线模式：从 SaveSlot 读取 inventories / skills
+   */
+  private getOfflineYjsMaps(): {
+    inventoriesMap: Y.Map<unknown>;
+    skillsMap: Y.Map<unknown>;
+  } | null {
+    this.onlineInventoryRoot = null;
+
     const saveId = yjsManager.getCurrentSaveId();
-    if (!saveId) return null;
+    if (!saveId) {
+      return null;
+    }
 
     const savesMap = yjsManager.getSaveSlots();
     const saveMap = savesMap.get(saveId) as Y.Map<unknown> | undefined;
-    if (!saveMap) return null;
+    if (!saveMap) {
+      return null;
+    }
 
     // 惰性创建 inventories map
     let inventoriesMap = saveMap.get("inventories") as
@@ -181,6 +251,24 @@ export class InventorySyncBridge {
     }
 
     return { inventoriesMap, skillsMap };
+  }
+
+  /**
+   * 获取当前会话可用的 inventories / skills 映射
+   */
+  private getYjsMaps(): {
+    inventoriesMap: Y.Map<unknown>;
+    skillsMap: Y.Map<unknown>;
+  } | null {
+    const room = useRoomStore.getState().currentRoom;
+    if (room) {
+      const onlineMaps = this.getOnlineYjsMaps();
+      if (onlineMaps) {
+        return onlineMaps;
+      }
+    }
+
+    return this.getOfflineYjsMaps();
   }
 
   /**
@@ -230,12 +318,91 @@ export class InventorySyncBridge {
   }
 
   /**
+   * 从 MainDoc.inventory 读取指定角色的物品列表
+   */
+  private readOnlineItems(characterId: string): ItemInstance[] {
+    const inventoryRoot = this.onlineInventoryRoot;
+    if (!inventoryRoot) return [];
+
+    const characterInventoryMap = inventoryRoot.get(characterId);
+    if (!(characterInventoryMap instanceof Y.Map)) return [];
+
+    const itemsValue = characterInventoryMap.get("items");
+    if (!(itemsValue instanceof Y.Array)) return [];
+
+    const items: ItemInstance[] = [];
+    for (let i = 0; i < itemsValue.length; i++) {
+      const itemMap = itemsValue.get(i);
+      if (!(itemMap instanceof Y.Map)) {
+        continue;
+      }
+
+      try {
+        items.push(yMapToItemInstance(itemMap));
+      } catch {
+        // 跳过无效数据
+      }
+    }
+
+    return items;
+  }
+
+  /**
+   * 从 MainDoc.inventory 读取指定角色的技能列表
+   */
+  private readOnlineSkills(characterId: string): SkillInstance[] {
+    const inventoryRoot = this.onlineInventoryRoot;
+    if (!inventoryRoot) return [];
+
+    const characterInventoryMap = inventoryRoot.get(characterId);
+    if (!(characterInventoryMap instanceof Y.Map)) return [];
+
+    const skillsValue = characterInventoryMap.get("skills");
+    if (!(skillsValue instanceof Y.Array)) return [];
+
+    const skills: SkillInstance[] = [];
+    for (let i = 0; i < skillsValue.length; i++) {
+      const skillMap = skillsValue.get(i);
+      if (!(skillMap instanceof Y.Map)) {
+        continue;
+      }
+
+      try {
+        skills.push(yMapToSkillInstance(skillMap));
+      } catch {
+        // 跳过无效数据
+      }
+    }
+
+    return skills;
+  }
+
+  /**
+   * 处理 online 模式下 MainDoc.inventory 的深层变化
+   */
+  private handleOnlineInventoryRootChange(events: InventoryYEvent[]): void {
+    if (!this.onlineInventoryRoot) return;
+
+    const affectedCharacterIds = this.extractAffectedKeys(
+      events,
+      this.onlineInventoryRoot as unknown as Y.Map<unknown>,
+    );
+
+    const store = useInventoryStore.getState();
+    for (const characterId of affectedCharacterIds) {
+      const items = this.readOnlineItems(characterId);
+      const skills = this.readOnlineSkills(characterId);
+      store._setCharacterItems(characterId, items);
+      store._setCharacterSkills(characterId, skills);
+    }
+  }
+
+  /**
    * 处理 inventories Y.Map 的深层变化
    *
    * 从事件中提取受影响的 characterId，重新读取对应数据并写入 Store
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private handleInventoriesChange(events: Y.YEvent<any>[]): void {
+  private handleInventoriesChange(events: InventoryYEvent[]): void {
     if (!this.inventoriesMap) return;
 
     const affectedCharacterIds = this.extractAffectedKeys(
@@ -255,8 +422,7 @@ export class InventorySyncBridge {
    *
    * 从事件中提取受影响的 characterId，重新读取对应数据并写入 Store
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private handleSkillsChange(events: Y.YEvent<any>[]): void {
+  private handleSkillsChange(events: InventoryYEvent[]): void {
     if (!this.skillsMap) return;
 
     const affectedCharacterIds = this.extractAffectedKeys(
@@ -279,8 +445,7 @@ export class InventorySyncBridge {
    * - 如果事件目标是嵌套对象（Y.Array 或 Y.Map），向上追溯找到根 Map 的 key
    */
   private extractAffectedKeys(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    events: Y.YEvent<any>[],
+    events: InventoryYEvent[],
     rootMap: Y.Map<unknown>,
   ): Set<string> {
     const affected = new Set<string>();

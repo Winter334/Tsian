@@ -1,6 +1,9 @@
 import * as Y from "yjs";
 
-import type { WorldArchiveRepository } from "../repository";
+import {
+  WORLD_ARCHIVE_WRITE_ORIGIN,
+  type WorldArchiveRepository,
+} from "../repository";
 import { useWorldArchiveStore } from "../store";
 
 interface DestroyOptions {
@@ -33,8 +36,14 @@ export class WorldArchiveSyncBridge {
     }
 
     this.unobserveEntities = this.repository.observeEntities(
-      (_event: Y.YMapEvent<string>) => {
+      (event: Y.YMapEvent<string>) => {
         if (this.destroyed) {
+          return;
+        }
+
+        // 防回环：本端仓储写入（Command -> Repository -> Yjs）已在 Store 同步过，
+        // 跳过本次 observe 回调，仅消费远端/其他来源变更。
+        if (event.transaction.origin === WORLD_ARCHIVE_WRITE_ORIGIN) {
           return;
         }
 

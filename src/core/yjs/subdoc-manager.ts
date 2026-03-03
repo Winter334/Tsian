@@ -15,12 +15,14 @@ import * as Y from "yjs";
 import { yjsManager } from "./manager";
 import type {
   ArchivedTurn,
+  InventoryYjsData,
   LoadedSubdocInfo,
   Member,
   RoomMetadata,
   RoomRef,
   SubdocManagerConfig,
   TurnStatus,
+  WorldArchiveYjsData,
 } from "./room/types";
 import { DEFAULT_ROOM_CODE_OPTIONS, DEFAULT_SUBDOC_CONFIG } from "./room/types";
 
@@ -229,6 +231,35 @@ export class SubdocManager {
     return (mainDoc.getMap("members") as Y.Map<Member>).size;
   }
 
+  /**
+   * 获取房间库存根节点（MainDoc.inventory）
+   *
+   * Inventory/Skill 挂载在 MainDoc 下的 inventory 命名空间，
+   * 不是独立 Subdoc。
+   */
+  getRoomInventoryRoot(roomId: string): InventoryYjsData | null {
+    const mainDoc = this.getMainDoc(roomId);
+    if (!mainDoc) {
+      return null;
+    }
+
+    return mainDoc.getMap("inventory") as InventoryYjsData;
+  }
+
+  /**
+   * 获取世界档案根节点（HistoryDoc.worldArchive）
+   *
+   * WorldArchive 在联机模式下挂载于 HistoryDoc，与消息归档同层。
+   */
+  getRoomWorldArchiveRoot(roomId: string): WorldArchiveYjsData | null {
+    const historyDoc = this.getHistoryDoc(roomId);
+    if (!historyDoc) {
+      return null;
+    }
+
+    return historyDoc.getMap("worldArchive") as WorldArchiveYjsData;
+  }
+
   // ===== MainDoc 操作 =====
 
   /**
@@ -247,6 +278,7 @@ export class SubdocManager {
     mainDoc.getMap("config");
     mainDoc.getMap("turnDocRefs");
     mainDoc.getMap("characters"); // Phase 2: 角色列表
+    mainDoc.getMap("inventory"); // Phase 2: Inventory / Skill 联机根节点
 
     // 缓存 MainDoc
     this.mainDocs.set(roomId, mainDoc);
@@ -270,7 +302,7 @@ export class SubdocManager {
       turnDuration?: number;
       /** 存档 ID（用于跨房间匹配存档，核心匹配字段） */
       saveId?: string;
-    }
+    },
   ): { mainDoc: Y.Doc; code: string } {
     const now = Date.now();
     const code = generateRoomCode();
@@ -325,6 +357,10 @@ export class SubdocManager {
     // 初始化 characters Map（Phase 2: 角色系统）
     // 使用嵌套 Y.Map 存储角色数据，支持增量同步
     mainDoc.getMap("characters");
+
+    // 初始化 inventory Map（Phase 2: Inventory / Skill 联机同步）
+    // 挂载结构：MainDoc.inventory.{characterId}.{items|skills}
+    mainDoc.getMap("inventory");
 
     // 缓存 MainDoc
     this.mainDocs.set(roomId, mainDoc);
@@ -509,7 +545,7 @@ export class SubdocManager {
 
     if (!guid) {
       throw new Error(
-        `[SubdocManager] TurnDoc not found: ${roomId}:${turnNumber}`
+        `[SubdocManager] TurnDoc not found: ${roomId}:${turnNumber}`,
       );
     }
 
@@ -604,6 +640,21 @@ export class SubdocManager {
     historyDoc.getMap("conversations");
     historyDoc.getMap("messages");
     historyDoc.getArray("archivedTurns");
+
+    // Phase 2: WorldArchive 联机同步根节点（HistoryDoc.worldArchive）
+    const worldArchiveRoot = historyDoc.getMap("worldArchive");
+    if (!(worldArchiveRoot.get("entities") instanceof Y.Map)) {
+      worldArchiveRoot.set("entities", new Y.Map<string>());
+    }
+    if (!(worldArchiveRoot.get("relationships") instanceof Y.Array)) {
+      worldArchiveRoot.set("relationships", new Y.Array<string>());
+    }
+    if (!(worldArchiveRoot.get("metadata") instanceof Y.Map)) {
+      const metadata = new Y.Map<unknown>();
+      metadata.set("version", 1);
+      metadata.set("updatedAt", Date.now());
+      worldArchiveRoot.set("metadata", metadata);
+    }
 
     // TODO: 通过 Hocuspocus Provider 同步
 
@@ -764,7 +815,7 @@ export class SubdocManager {
   async getHistoryMessages(
     roomId: string,
     conversationId: string,
-    options: PaginationOptions = {}
+    options: PaginationOptions = {},
   ): Promise<PaginatedResult<HistoryMessageItem>> {
     const { limit = 20, cursor } = options;
 
@@ -816,7 +867,7 @@ export class SubdocManager {
    */
   async getArchivedTurns(
     roomId: string,
-    options: PaginationOptions = {}
+    options: PaginationOptions = {},
   ): Promise<PaginatedResult<ArchivedTurn>> {
     const { limit = 10, cursor } = options;
 
@@ -825,7 +876,7 @@ export class SubdocManager {
 
     // 获取归档回合 Array
     const archivedTurns = historyDoc.getArray(
-      "archivedTurns"
+      "archivedTurns",
     ) as Y.Array<ArchivedTurn>;
     const allTurns = archivedTurns.toArray();
     const total = allTurns.length;
@@ -854,7 +905,7 @@ export class SubdocManager {
    */
   async getHistoryMessageCount(
     roomId: string,
-    conversationId: string
+    conversationId: string,
   ): Promise<number> {
     const historyDoc = await this.loadHistoryDoc(roomId);
     const messagesMap = historyDoc.getMap("messages") as Y.Map<

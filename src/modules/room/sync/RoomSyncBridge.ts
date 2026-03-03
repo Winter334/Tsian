@@ -32,6 +32,12 @@ import { RoomCommands } from "@/domain/commands/room";
 import type { Character } from "@/domain/entities/character";
 import { RoomEvents } from "@/domain/events/room";
 import { characterToYMap, yMapToCharacter } from "@/modules/game/repository";
+import {
+  itemInstanceToYMap,
+  skillInstanceToYMap,
+  yMapToItemInstance,
+  yMapToSkillInstance,
+} from "@/modules/inventory/repository";
 import * as Y from "yjs";
 import { useRoomStore } from "../store";
 import type { EventMetaReader } from "./deriveRoomEvents";
@@ -47,6 +53,7 @@ import {
   createEmptySnapshot,
   DEFAULT_SYNC_BRIDGE_CONFIG,
   toSnapshotMember,
+  toWorldArchiveSummary,
 } from "./types";
 
 /**
@@ -83,8 +90,14 @@ export class RoomSyncBridge implements EventMetaReader {
   /** HistoryDoc 消息 Map 引用（用于 Guest 镜像） */
   private historyMessagesMap: Y.Map<Y.Array<unknown>> | null = null;
 
+  /** HistoryDoc worldArchive 根引用（用于变化检测 + SaveSlot 镜像） */
+  private historyWorldArchiveRoot: Y.Map<unknown> | null = null;
+
   /** MainDoc characters Map 引用（用于角色同步） */
   private charactersMap: Y.Map<Y.Map<unknown>> | null = null;
+
+  /** MainDoc inventory 根引用（用于 Inventory/Skill 同步） */
+  private inventoryRoot: Y.Map<Y.Map<unknown>> | null = null;
 
   /** 是否已销毁 */
   private destroyed: boolean = false;
@@ -114,7 +127,7 @@ export class RoomSyncBridge implements EventMetaReader {
     const mainDoc = subdocManager.getMainDoc(this.roomId);
     if (!mainDoc) {
       console.warn(
-        `[RoomSyncBridge] Cannot setup: MainDoc not found for room ${this.roomId}`
+        `[RoomSyncBridge] Cannot setup: MainDoc not found for room ${this.roomId}`,
       );
       return;
     }
@@ -124,6 +137,7 @@ export class RoomSyncBridge implements EventMetaReader {
     const configMap = mainDoc.getMap("config");
     const membersMap = mainDoc.getMap("members") as Y.Map<Member>;
     const charactersMap = mainDoc.getMap("characters") as Y.Map<Y.Map<unknown>>;
+    const inventoryRoot = subdocManager.getRoomInventoryRoot(this.roomId);
 
     console.info("[RoomSyncDiag] SyncBridge.setup", {
       roomId: this.roomId,
@@ -133,8 +147,9 @@ export class RoomSyncBridge implements EventMetaReader {
       disbanded: (metadataMap.get("disbanded") as boolean | undefined) ?? false,
     });
 
-    // 保存 characters Map 引用
+    // 保存引用
     this.charactersMap = charactersMap;
+    this.inventoryRoot = inventoryRoot;
 
     // 创建观察器回调
     const observer = () => this.scheduleUpdate();
@@ -148,11 +163,16 @@ export class RoomSyncBridge implements EventMetaReader {
     this.observerCleanups.push(
       () => metadataMap.unobserve(observer),
       () => configMap.unobserve(observer),
-      () => membersMap.unobserve(observer)
+      () => membersMap.unobserve(observer),
     );
 
     // 设置 characters 同步（监听深层变化）
     this.setupCharactersSync(charactersMap);
+
+    // 设置 inventory 同步（MainDoc.inventory -> SaveSlot.inventories/skills）
+    if (inventoryRoot) {
+      this.setupInventorySync(inventoryRoot);
+    }
 
     // 新增：为 configMap 添加专门的回合号变化监听器
     // 用于 Guest 自动切换到新回合
@@ -210,7 +230,9 @@ export class RoomSyncBridge implements EventMetaReader {
     this.disbandedHandled = false;
     this.savedMemberCount = 0;
     this.historyMessagesMap = null;
+    this.historyWorldArchiveRoot = null;
     this.charactersMap = null;
+    this.inventoryRoot = null;
   }
 
   /**
@@ -320,7 +342,7 @@ export class RoomSyncBridge implements EventMetaReader {
           roomId: this.roomId,
           turnNumber,
           reason: "sync_failed",
-        })
+        }),
       );
     } finally {
       this.isSwitchingTurn = false;
@@ -337,7 +359,7 @@ export class RoomSyncBridge implements EventMetaReader {
   private async waitForTurnSyncWithRetry(
     turnNumber: number,
     maxRetries: number,
-    timeout: number = 5000
+    timeout: number = 5000,
   ): Promise<void> {
     let retries = maxRetries;
 
@@ -349,7 +371,7 @@ export class RoomSyncBridge implements EventMetaReader {
         retries--;
         if (retries === 0) {
           throw new Error(
-            `Failed to sync turn ${turnNumber} after ${maxRetries} retries`
+            `Failed to sync turn ${turnNumber} after ${maxRetries} retries`,
           );
         }
 
@@ -368,7 +390,7 @@ export class RoomSyncBridge implements EventMetaReader {
     const mainDoc = subdocManager.getMainDoc(this.roomId);
     if (!mainDoc) {
       console.warn(
-        `[RoomSyncBridge] buildSnapshot: MainDoc not found, returning empty snapshot`
+        `[RoomSyncBridge] buildSnapshot: MainDoc not found, returning empty snapshot`,
       );
       return createEmptySnapshot(this.roomId);
     }
@@ -385,6 +407,8 @@ export class RoomSyncBridge implements EventMetaReader {
     // 按 userId 排序以保证一致性
     members.sort((a, b) => a.userId.localeCompare(b.userId));
 
+    const worldArchiveSummary = this.buildWorldArchiveSummary();
+
     const snapshot: RoomSnapshot = {
       roomId: this.roomId,
       hostUserId: (metadataMap.get("hostUserId") as string) || "",
@@ -396,6 +420,9 @@ export class RoomSyncBridge implements EventMetaReader {
       currentTurnNumber: (configMap.get("currentTurnNumber") as number) || 0,
       currentPhaseId:
         (configMap.get("currentPhaseId") as string | null) || null,
+      worldArchiveEntityCount: worldArchiveSummary.entityCount,
+      worldArchiveVersion: worldArchiveSummary.version,
+      worldArchiveUpdatedAt: worldArchiveSummary.updatedAt,
       updatedAt: Date.now(),
     };
 
@@ -479,7 +506,7 @@ export class RoomSyncBridge implements EventMetaReader {
     const { events, diff } = deriveRoomEvents(
       this.lastSnapshot!,
       currentSnapshot,
-      this // 传入 this 作为 EventMetaReader
+      this, // 传入 this 作为 EventMetaReader
     );
 
     // 发送事件
@@ -543,7 +570,7 @@ export class RoomSyncBridge implements EventMetaReader {
           roomId: this.roomId,
           deletedAt: Date.now(),
           reason: "disbanded",
-        })
+        }),
       );
 
       // 自动离开房间（通过 CommandBus 触发）
@@ -670,7 +697,7 @@ export class RoomSyncBridge implements EventMetaReader {
     this.savedMemberCount = Math.max(
       this.savedMemberCount,
       savedCount,
-      currentMemberCount
+      currentMemberCount,
     );
 
     // 同时更新房间配置
@@ -759,6 +786,252 @@ export class RoomSyncBridge implements EventMetaReader {
     });
   }
 
+  // ===== Inventory / Skill 同步 =====
+
+  /**
+   * 克隆物品数组（Y.Array<Y.Map<unknown>>）
+   *
+   * 通过 codec 做 decode + encode，避免跨 Doc 复用 Yjs 实例。
+   */
+  private buildClonedItemArray(
+    source: Y.Array<unknown>,
+  ): Y.Array<Y.Map<unknown>> {
+    const cloned = new Y.Array<Y.Map<unknown>>();
+    const encoded: Y.Map<unknown>[] = [];
+
+    for (let index = 0; index < source.length; index++) {
+      const raw = source.get(index);
+      if (!(raw instanceof Y.Map)) {
+        continue;
+      }
+
+      try {
+        const item = yMapToItemInstance(raw);
+        encoded.push(itemInstanceToYMap(item));
+      } catch {
+        // 跳过无效数据
+      }
+    }
+
+    if (encoded.length > 0) {
+      cloned.insert(0, encoded);
+    }
+
+    return cloned;
+  }
+
+  /**
+   * 克隆技能数组（Y.Array<Y.Map<unknown>>）
+   *
+   * 通过 codec 做 decode + encode，避免跨 Doc 复用 Yjs 实例。
+   */
+  private buildClonedSkillArray(
+    source: Y.Array<unknown>,
+  ): Y.Array<Y.Map<unknown>> {
+    const cloned = new Y.Array<Y.Map<unknown>>();
+    const encoded: Y.Map<unknown>[] = [];
+
+    for (let index = 0; index < source.length; index++) {
+      const raw = source.get(index);
+      if (!(raw instanceof Y.Map)) {
+        continue;
+      }
+
+      try {
+        const skill = yMapToSkillInstance(raw);
+        encoded.push(skillInstanceToYMap(skill));
+      } catch {
+        // 跳过无效数据
+      }
+    }
+
+    if (encoded.length > 0) {
+      cloned.insert(0, encoded);
+    }
+
+    return cloned;
+  }
+
+  /**
+   * Host 启动房间同步时，将本地 SaveSlot.inventory 作为初始权威状态补写到 MainDoc.inventory。
+   *
+   * 仅在 MainDoc.inventory 为空时执行，避免覆盖已有联机权威数据。
+   */
+  private seedMainInventoryFromSave(
+    inventoryRoot: Y.Map<Y.Map<unknown>>,
+  ): void {
+    if (inventoryRoot.size > 0) {
+      return;
+    }
+
+    const store = useRoomStore.getState();
+    if (!store.currentRoom?.isHost) {
+      return;
+    }
+
+    const currentSaveId = yjsManager.getCurrentSaveId();
+    if (!currentSaveId) {
+      return;
+    }
+
+    const saveSlot = yjsManager.getSaveSlots().get(currentSaveId) as
+      | Y.Map<unknown>
+      | undefined;
+    if (!saveSlot) {
+      return;
+    }
+
+    const saveInventories = saveSlot.get("inventories") as
+      | Y.Map<Y.Array<unknown>>
+      | undefined;
+    const saveSkills = saveSlot.get("skills") as
+      | Y.Map<Y.Array<unknown>>
+      | undefined;
+
+    if (
+      (!saveInventories || saveInventories.size === 0) &&
+      (!saveSkills || saveSkills.size === 0)
+    ) {
+      return;
+    }
+
+    const rootDoc = yjsManager.getDoc();
+
+    rootDoc.transact(() => {
+      const characterIds = new Set<string>();
+
+      saveInventories?.forEach((_value, characterId) => {
+        characterIds.add(characterId);
+      });
+      saveSkills?.forEach((_value, characterId) => {
+        characterIds.add(characterId);
+      });
+
+      characterIds.forEach((characterId) => {
+        const characterInventoryMap = new Y.Map<unknown>();
+
+        const sourceItems = saveInventories?.get(characterId);
+        const sourceSkills = saveSkills?.get(characterId);
+
+        characterInventoryMap.set(
+          "items",
+          sourceItems instanceof Y.Array
+            ? this.buildClonedItemArray(sourceItems)
+            : new Y.Array<Y.Map<unknown>>(),
+        );
+        characterInventoryMap.set(
+          "skills",
+          sourceSkills instanceof Y.Array
+            ? this.buildClonedSkillArray(sourceSkills)
+            : new Y.Array<Y.Map<unknown>>(),
+        );
+
+        inventoryRoot.set(characterId, characterInventoryMap);
+      });
+    });
+  }
+
+  /**
+   * 设置 MainDoc.inventory -> SaveSlot 的同步。
+   */
+  private setupInventorySync(inventoryRoot: Y.Map<Y.Map<unknown>>): void {
+    // Host 首次建房/续玩时，先把本地库存作为初始权威状态写入 MainDoc
+    this.seedMainInventoryFromSave(inventoryRoot);
+
+    const observer = () => this.syncInventoryToSave();
+
+    inventoryRoot.observeDeep(observer);
+    this.observerCleanups.push(() => inventoryRoot.unobserveDeep(observer));
+
+    // 初次同步一次
+    this.syncInventoryToSave();
+  }
+
+  /**
+   * 将 MainDoc.inventory 同步到 SaveSlot.inventories / SaveSlot.skills。
+   *
+   * 仅做 MainDoc -> SaveSlot 的单向镜像，避免回环写入。
+   */
+  private syncInventoryToSave(): void {
+    if (this.destroyed || !this.inventoryRoot) {
+      return;
+    }
+
+    const currentSaveId = yjsManager.getCurrentSaveId();
+    if (!currentSaveId) {
+      return;
+    }
+
+    const saveSlot = yjsManager.getSaveSlots().get(currentSaveId) as
+      | Y.Map<unknown>
+      | undefined;
+    if (!saveSlot) {
+      return;
+    }
+
+    let saveInventories = saveSlot.get("inventories") as
+      | Y.Map<Y.Array<Y.Map<unknown>>>
+      | undefined;
+    let saveSkills = saveSlot.get("skills") as
+      | Y.Map<Y.Array<Y.Map<unknown>>>
+      | undefined;
+
+    const rootDoc = yjsManager.getDoc();
+
+    rootDoc.transact(() => {
+      if (!saveInventories) {
+        saveInventories = new Y.Map<Y.Array<Y.Map<unknown>>>();
+        saveSlot.set("inventories", saveInventories);
+      }
+
+      if (!saveSkills) {
+        saveSkills = new Y.Map<Y.Array<Y.Map<unknown>>>();
+        saveSlot.set("skills", saveSkills);
+      }
+
+      const characterIds = new Set<string>();
+
+      this.inventoryRoot!.forEach((characterInventoryMap, characterId) => {
+        if (!(characterInventoryMap instanceof Y.Map)) {
+          return;
+        }
+
+        characterIds.add(characterId);
+
+        const sourceItems = characterInventoryMap.get("items");
+        const sourceSkills = characterInventoryMap.get("skills");
+
+        saveInventories!.set(
+          characterId,
+          sourceItems instanceof Y.Array
+            ? this.buildClonedItemArray(sourceItems)
+            : new Y.Array<Y.Map<unknown>>(),
+        );
+
+        saveSkills!.set(
+          characterId,
+          sourceSkills instanceof Y.Array
+            ? this.buildClonedSkillArray(sourceSkills)
+            : new Y.Array<Y.Map<unknown>>(),
+        );
+      });
+
+      for (const characterId of Array.from(saveInventories!.keys())) {
+        if (!characterIds.has(characterId)) {
+          saveInventories!.delete(characterId);
+        }
+      }
+
+      for (const characterId of Array.from(saveSkills!.keys())) {
+        if (!characterIds.has(characterId)) {
+          saveSkills!.delete(characterId);
+        }
+      }
+
+      saveSlot.set("updatedAt", Date.now());
+    });
+  }
+
   // ===== HistoryDoc 镜像（Guest） =====
 
   /**
@@ -775,8 +1048,10 @@ export class RoomSyncBridge implements EventMetaReader {
         const messagesMap = historyDoc.getMap("messages") as Y.Map<
           Y.Array<unknown>
         >;
+        const worldArchiveRoot = historyDoc.getMap("worldArchive");
 
         this.historyMessagesMap = messagesMap;
+        this.historyWorldArchiveRoot = worldArchiveRoot;
 
         const observer = () => this.mirrorHistoryMessages(messagesMap);
 
@@ -784,8 +1059,22 @@ export class RoomSyncBridge implements EventMetaReader {
         messagesMap.observeDeep(observer);
         this.observerCleanups.push(() => messagesMap.unobserveDeep(observer));
 
+        const worldArchiveObserver = () => {
+          if (this.destroyed) {
+            return;
+          }
+          this.scheduleUpdate();
+          this.mirrorWorldArchiveToSave(worldArchiveRoot);
+        };
+
+        worldArchiveRoot.observeDeep(worldArchiveObserver);
+        this.observerCleanups.push(() =>
+          worldArchiveRoot.unobserveDeep(worldArchiveObserver),
+        );
+
         // 初次镜像一次（如果当前是 Guest）
         this.mirrorHistoryMessages(messagesMap);
+        this.mirrorWorldArchiveToSave(worldArchiveRoot);
       })
       .catch(() => {
         // HistoryDoc 镜像设置失败，静默处理
@@ -888,6 +1177,115 @@ export class RoomSyncBridge implements EventMetaReader {
           saveArray.insert(saveArray.length, newItems);
         }
       });
+
+      saveSlot.set("updatedAt", Date.now());
+    });
+  }
+
+  /**
+   * 从 HistoryDoc.worldArchive 读取实体快照摘要，用于 Room 快照 diff 检测。
+   */
+  private buildWorldArchiveSummary(): {
+    entityCount: number;
+    version: number;
+    updatedAt: number;
+  } {
+    const root = this.historyWorldArchiveRoot;
+    if (!(root instanceof Y.Map)) {
+      return { entityCount: 0, version: 0, updatedAt: 0 };
+    }
+
+    const entitiesMap = root.get("entities");
+    const metadataMap = root.get("metadata");
+
+    const entityCount = entitiesMap instanceof Y.Map ? entitiesMap.size : 0;
+
+    const versionRaw =
+      metadataMap instanceof Y.Map ? metadataMap.get("version") : undefined;
+    const version = typeof versionRaw === "number" ? versionRaw : 0;
+
+    const updatedAtRaw =
+      metadataMap instanceof Y.Map ? metadataMap.get("updatedAt") : undefined;
+    const updatedAt = typeof updatedAtRaw === "number" ? updatedAtRaw : 0;
+
+    return toWorldArchiveSummary({
+      entityCount,
+      version,
+      updatedAt,
+    });
+  }
+
+  /**
+   * Guest 镜像 worldArchive 到本地 SaveSlot（用于续玩展示），Host 不执行。
+   */
+  /**
+   * worldArchive 变化判定使用 metadata.version / metadata.updatedAt，避免高频全量序列化。
+   * SaveSlot 镜像是单向 HistoryDoc -> SaveSlot，不会回写 HistoryDoc，因此无跨端回环。
+   */
+  private mirrorWorldArchiveToSave(worldArchiveRoot: Y.Map<unknown>): void {
+    if (this.destroyed) {
+      return;
+    }
+
+    const store = useRoomStore.getState();
+    const currentRoom = store.currentRoom;
+
+    // Host 不执行镜像，避免与权威写入链路重复。
+    if (!currentRoom || currentRoom.isHost) {
+      return;
+    }
+
+    const entitiesSource = worldArchiveRoot.get("entities");
+    if (!(entitiesSource instanceof Y.Map)) {
+      return;
+    }
+
+    const currentSaveId = yjsManager.getCurrentSaveId();
+    if (!currentSaveId) {
+      return;
+    }
+
+    const saveSlot = yjsManager.getSaveSlots().get(currentSaveId) as
+      | Y.Map<unknown>
+      | undefined;
+    if (!saveSlot) {
+      return;
+    }
+
+    const rootDoc = yjsManager.getDoc();
+
+    rootDoc.transact(() => {
+      let saveWorldArchive = saveSlot.get("worldArchive") as
+        | Y.Map<unknown>
+        | undefined;
+      if (!(saveWorldArchive instanceof Y.Map)) {
+        saveWorldArchive = new Y.Map<unknown>();
+        saveSlot.set("worldArchive", saveWorldArchive);
+      }
+
+      let saveEntities = saveWorldArchive.get("entities") as
+        | Y.Map<string>
+        | undefined;
+      if (!(saveEntities instanceof Y.Map)) {
+        saveEntities = new Y.Map<string>();
+        saveWorldArchive.set("entities", saveEntities);
+      }
+
+      const sourceIds = new Set<string>();
+      entitiesSource.forEach((rawValue, entityId) => {
+        if (typeof rawValue !== "string") {
+          return;
+        }
+
+        sourceIds.add(entityId);
+        saveEntities!.set(entityId, rawValue);
+      });
+
+      for (const entityId of Array.from(saveEntities.keys())) {
+        if (!sourceIds.has(entityId)) {
+          saveEntities.delete(entityId);
+        }
+      }
 
       saveSlot.set("updatedAt", Date.now());
     });
