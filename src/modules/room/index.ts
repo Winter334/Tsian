@@ -66,6 +66,7 @@ import {
   updateNpcInfoHandler,
   updateNpcStatusHandler,
   updateRoomSettingsHandler,
+  withdrawActionHandler,
 } from "./commands/handlers";
 import { useRoomStore } from "./store";
 import { RoomSyncBridge } from "./sync";
@@ -519,6 +520,7 @@ function createRoomCommandHandlers(): Record<
     [RoomCommands.DELETE_ROOM]: wrap(deleteRoomHandler),
     [RoomCommands.UPDATE_ROOM_SETTINGS]: wrap(updateRoomSettingsHandler),
     [RoomCommands.UPDATE_ACTION]: wrap(updateActionHandler),
+    [RoomCommands.WITHDRAW_ACTION]: wrap(withdrawActionHandler),
     [RoomCommands.CREATE_NPC]: wrap(createNpcHandler),
     [RoomCommands.UPDATE_NPC_STATUS]: wrap(updateNpcStatusHandler),
     [RoomCommands.UPDATE_NPC_INFO]: wrap(updateNpcInfoHandler),
@@ -674,6 +676,7 @@ export {
   useCreateRoom,
   useJoinRoom,
   useLeaveRoom,
+  useMyAction,
   useQueryRoom,
   // 角色相关
   useRoomCharacters,
@@ -681,6 +684,7 @@ export {
   useRoomInfo,
   useRoomMembers,
   // 回合控制
+  useTurnActions,
   useTurnControl,
   // 消息展示
   useTurnMessages,
@@ -690,10 +694,14 @@ export {
   type CreateRoomResult,
   type JoinRoomResult,
   type LeaveRoomResult,
+  type MyActionState,
+  type PlayerActionState,
   type RoomPreview,
   type TurnControlState,
   type TurnMessagesState,
+  type UseMyActionReturn,
   type UseRoomCharactersResult,
+  type UseTurnActionsReturn,
   type UseTurnControlReturn,
   type UseTurnMessagesReturn,
 } from "./hooks";

@@ -162,7 +162,7 @@ export function ActionInput({
         setTyping(false);
       }, 2000);
     },
-    [effectiveStatus, setLocalStatus, setTyping]
+    [effectiveStatus, setLocalStatus, setTyping],
   );
 
   // 提交行动
@@ -190,7 +190,7 @@ export function ActionInput({
       setIsEditing(false);
       setStatusAndTyping("submitted", false);
     },
-    [dispatch, roomId, turnNumber, localUser.userId, setStatusAndTyping]
+    [dispatch, roomId, turnNumber, localUser.userId, setStatusAndTyping],
   );
 
   // 修改行动（进入编辑模式）
@@ -205,21 +205,41 @@ export function ActionInput({
   }, [canEdit, effectiveStatus, submittedContent, setLocalStatus]);
 
   // 撤回行动
-  const handleWithdraw = useCallback(() => {
-    if (!canWithdraw) return;
+  const handleWithdraw = useCallback(async () => {
+    if (!canWithdraw || !localUser.userId) return;
 
-    // TODO: 实现撤回行动的 Command
-    // 目前只是本地状态重置，需要添加 WITHDRAW_ACTION 命令
+    // 清除 typing 防抖定时器
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
+    }
+
+    const result = await dispatch({
+      type: RoomCommands.WITHDRAW_ACTION,
+      payload: {
+        roomId,
+        turnNumber,
+        userId: localUser.userId,
+        operatorId: localUser.userId,
+      },
+    });
+
+    if (!result.success) {
+      return;
     }
 
     setIsEditing(false);
     setContent("");
     setStatusAndTyping("empty", false);
     inputRef.current?.focus();
-  }, [canWithdraw, setStatusAndTyping]);
+  }, [
+    canWithdraw,
+    dispatch,
+    localUser.userId,
+    roomId,
+    turnNumber,
+    setStatusAndTyping,
+  ]);
 
   // Host 强制开始
   const handleForceStart = useCallback(async () => {
@@ -315,7 +335,7 @@ export function ActionInput({
             className={cn(
               "p-3",
               `transition-all duration-[${animation.duration.normal * 1000}ms]`,
-              "hover:scale-105 active:scale-95"
+              "hover:scale-105 active:scale-95",
             )}
             style={{
               background: colorAlpha("primary", 0.2),
@@ -334,7 +354,7 @@ export function ActionInput({
             className={cn(
               "p-3",
               `transition-all duration-[${animation.duration.normal * 1000}ms]`,
-              "hover:scale-105 active:scale-95"
+              "hover:scale-105 active:scale-95",
             )}
             style={{
               background: colorAlpha("error", 0.2),

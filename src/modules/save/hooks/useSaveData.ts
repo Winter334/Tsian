@@ -6,6 +6,7 @@
 
 import { yjsManager } from "@/core/yjs";
 import type { SaveSlotInfo } from "@/core/yjs/types";
+import { useCurrentSaveId } from "@/hooks/useCurrentSaveId";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import type * as Y from "yjs";
 
@@ -74,25 +75,7 @@ export function useSaveSlotsSync(): SaveSlotInfo[] {
 /**
  * 获取当前存档 ID
  */
-export function useCurrentSaveId(): string | null {
-  const [saveId, setSaveId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const checkSaveId = () => {
-      setSaveId(yjsManager.getCurrentSaveId());
-    };
-
-    // 初始检查
-    checkSaveId();
-
-    // 监听存档变化（通过定期检查，因为 yjsManager 没有事件）
-    const interval = setInterval(checkSaveId, 100);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  return saveId;
-}
+export { useCurrentSaveId };
 
 /**
  * 获取当前存档信息

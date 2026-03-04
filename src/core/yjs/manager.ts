@@ -41,6 +41,7 @@ export class YjsManager {
   private doc: Y.Doc | null = null;
   private provider: IndexeddbPersistence | null = null;
   private currentSaveId: string | null = null;
+  private saveIdListeners = new Set<() => void>();
   private initialized = false;
 
   /**
@@ -97,7 +98,10 @@ export class YjsManager {
       if (savedId) {
         const saves = this.getSaveSlots();
         if (saves.has(savedId)) {
-          this.currentSaveId = savedId;
+          if (this.currentSaveId !== savedId) {
+            this.currentSaveId = savedId;
+            this.notifySaveIdChange();
+          }
         } else {
           // 存档已被删除，清除 localStorage
           localStorage.removeItem(CURRENT_SAVE_KEY);
@@ -355,8 +359,13 @@ export class YjsManager {
       throw new Error(`[YjsManager] Save not found: ${saveId}`);
     }
 
+    const hasChanged = this.currentSaveId !== saveId;
     this.currentSaveId = saveId;
     this.persistCurrentSave();
+
+    if (hasChanged) {
+      this.notifySaveIdChange();
+    }
   }
 
   /**
@@ -376,6 +385,23 @@ export class YjsManager {
    */
   getCurrentSaveId(): string | null {
     return this.currentSaveId;
+  }
+
+  /**
+   * 订阅当前存档 ID 变化
+   */
+  subscribeSaveId(listener: () => void): () => void {
+    this.saveIdListeners.add(listener);
+    return () => {
+      this.saveIdListeners.delete(listener);
+    };
+  }
+
+  /**
+   * 通知当前存档 ID 变化
+   */
+  private notifySaveIdChange(): void {
+    this.saveIdListeners.forEach((listener) => listener());
   }
 
   /**
@@ -406,6 +432,7 @@ export class YjsManager {
     if (this.currentSaveId === saveId) {
       this.currentSaveId = null;
       this.persistCurrentSave();
+      this.notifySaveIdChange();
     }
   }
 
@@ -815,7 +842,12 @@ export class YjsManager {
       this.doc = null;
     }
 
+    const hasCurrentSave = this.currentSaveId !== null;
     this.currentSaveId = null;
+    if (hasCurrentSave) {
+      this.notifySaveIdChange();
+    }
+
     this.initialized = false;
   }
 

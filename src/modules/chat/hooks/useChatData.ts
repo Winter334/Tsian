@@ -7,55 +7,12 @@
  * 注意：这些 Hooks 会响应存档切换，当存档变化时自动重新订阅
  */
 
-import { eventBus } from "@/core/event-bus";
 import { yjsManager } from "@/core/yjs";
 import type { Conversation } from "@/domain/entities/conversation";
 import type { Message } from "@/domain/entities/message";
-import { SaveEvents } from "@/domain/events/save";
+import { useCurrentSaveId } from "@/hooks/useCurrentSaveId";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import type * as Y from "yjs";
-
-/**
- * 订阅当前存档 ID 变化
- * 使用 EventBus 监听存档切换事件，实现即时响应
- */
-interface CurrentSaveStateInternal {
-  saveId: string | null;
-  revision: number;
-}
-
-function useCurrentSaveIdInternal(): CurrentSaveStateInternal {
-  const [currentSaveState, setCurrentSaveState] =
-    useState<CurrentSaveStateInternal>(() => ({
-      saveId: yjsManager.getCurrentSaveId(),
-      revision: 0,
-    }));
-
-  useEffect(() => {
-    // 统一的存档变化处理器
-    const syncSaveState = () => {
-      const nextSaveId = yjsManager.getCurrentSaveId();
-      setCurrentSaveState((prev) => ({
-        saveId: nextSaveId,
-        revision: prev.revision + 1,
-      }));
-    };
-
-    // 订阅所有存档相关事件
-    const unsubscribes = [
-      eventBus.on(SaveEvents.SAVE_LOADED, syncSaveState),
-      eventBus.on(SaveEvents.SAVE_CREATED, syncSaveState),
-      eventBus.on(SaveEvents.SAVE_DELETED, syncSaveState),
-    ];
-
-    // 初始同步
-    syncSaveState();
-
-    return () => unsubscribes.forEach((unsub) => unsub());
-  }, []);
-
-  return currentSaveState;
-}
 
 /**
  * 订阅会话列表
@@ -66,8 +23,7 @@ export function useConversations(): Conversation[] {
   const [conversations, setConversations] = useState<Conversation[]>([]);
 
   // 监听存档切换
-  const { saveId: currentSaveId, revision: currentSaveRevision } =
-    useCurrentSaveIdInternal();
+  const currentSaveId = useCurrentSaveId();
 
   useEffect(() => {
     const saveDoc = yjsManager.getCurrentSave();
@@ -102,7 +58,7 @@ export function useConversations(): Conversation[] {
     return () => {
       conversationsMap.unobserve(updateConversations);
     };
-  }, [currentSaveId, currentSaveRevision]); // 当存档切换/回溯时重新订阅
+  }, [currentSaveId]);
 
   return conversations;
 }
@@ -117,8 +73,7 @@ export function useMessages(conversationId: string | null): Message[] {
   const [messages, setMessages] = useState<Message[]>([]);
 
   // 监听存档切换
-  const { saveId: currentSaveId, revision: currentSaveRevision } =
-    useCurrentSaveIdInternal();
+  const currentSaveId = useCurrentSaveId();
 
   useEffect(() => {
     // 清空消息，等待正确的 conversationId
@@ -166,7 +121,7 @@ export function useMessages(conversationId: string | null): Message[] {
     return () => {
       messagesMap.unobserveDeep(updateMessages);
     };
-  }, [conversationId, currentSaveId, currentSaveRevision]); // 当存档切换/回溯时重新订阅
+  }, [conversationId, currentSaveId]);
 
   return messages;
 }
@@ -185,8 +140,7 @@ export function useConversation(
   );
 
   // 监听存档切换
-  const { saveId: currentSaveId, revision: currentSaveRevision } =
-    useCurrentSaveIdInternal();
+  const currentSaveId = useCurrentSaveId();
 
   useEffect(() => {
     if (!conversationId) {
@@ -223,7 +177,7 @@ export function useConversation(
     return () => {
       conversationsMap.unobserve(updateConversation);
     };
-  }, [conversationId, currentSaveId, currentSaveRevision]); // 当存档切换/回溯时重新订阅
+  }, [conversationId, currentSaveId]);
 
   return conversation;
 }
@@ -234,12 +188,11 @@ export function useConversation(
  * 这个版本使用 React 18 的 useSyncExternalStore，
  * 可以更好地与 React 的并发特性配合。
  *
- * 注意：currentSaveId/currentSaveRevision 在依赖数组中是故意的，用于在存档切换/回溯时重新创建函数
+ * 注意：currentSaveId 在依赖数组中是故意的，用于在存档切换时重新创建函数
  */
 export function useConversationsSync(): Conversation[] {
   // 监听存档切换，用于触发重新订阅
-  const { saveId: currentSaveId, revision: currentSaveRevision } =
-    useCurrentSaveIdInternal();
+  const currentSaveId = useCurrentSaveId();
 
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
@@ -254,8 +207,8 @@ export function useConversationsSync(): Conversation[] {
       conversationsMap.observe(onStoreChange);
       return () => conversationsMap.unobserve(onStoreChange);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId/currentSaveRevision 用于触发重新订阅
-    [currentSaveId, currentSaveRevision],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId 用于触发重新订阅
+    [currentSaveId],
   );
 
   const getSnapshot = useCallback(() => {
@@ -270,8 +223,8 @@ export function useConversationsSync(): Conversation[] {
     const list = Array.from(conversationsMap.values());
     list.sort((a, b) => b.updatedAt - a.updatedAt);
     return list;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId/currentSaveRevision 用于触发重新获取
-  }, [currentSaveId, currentSaveRevision]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId 用于触发重新获取
+  }, [currentSaveId]);
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
@@ -279,12 +232,11 @@ export function useConversationsSync(): Conversation[] {
 /**
  * 使用 useSyncExternalStore 订阅消息列表（更高效的实现）
  *
- * 注意：currentSaveId/currentSaveRevision 在依赖数组中是故意的，用于在存档切换/回溯时重新创建函数
+ * 注意：currentSaveId 在依赖数组中是故意的，用于在存档切换时重新创建函数
  */
 export function useMessagesSync(conversationId: string | null): Message[] {
   // 监听存档切换，用于触发重新订阅
-  const { saveId: currentSaveId, revision: currentSaveRevision } =
-    useCurrentSaveIdInternal();
+  const currentSaveId = useCurrentSaveId();
 
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
@@ -299,8 +251,8 @@ export function useMessagesSync(conversationId: string | null): Message[] {
       messagesMap.observeDeep(onStoreChange);
       return () => messagesMap.unobserveDeep(onStoreChange);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId/currentSaveRevision 用于触发重新订阅
-    [conversationId, currentSaveId, currentSaveRevision],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId 用于触发重新订阅
+    [conversationId, currentSaveId],
   );
 
   const getSnapshot = useCallback(() => {
@@ -316,8 +268,8 @@ export function useMessagesSync(conversationId: string | null): Message[] {
     if (!messagesArray) return [];
 
     return messagesArray.toArray();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId/currentSaveRevision 用于触发重新获取
-  }, [conversationId, currentSaveId, currentSaveRevision]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSaveId 用于触发重新获取
+  }, [conversationId, currentSaveId]);
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

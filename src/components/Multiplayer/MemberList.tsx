@@ -6,74 +6,114 @@
 
 import type { Member } from "@/core/yjs/room/types";
 import { Crown } from "lucide-react";
+import type { ReactNode } from "react";
+
+import { color, colorAlpha } from "@/styles/tokens";
 
 interface MemberListProps {
   members: Member[];
   localUserId: string;
   compact?: boolean;
+  renderExtra?: (member: Member) => ReactNode;
+}
+
+function MemberStatusDot({
+  status,
+  compact,
+}: {
+  status: Member["status"];
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={compact ? "h-1.5 w-1.5 rounded-full" : "h-2 w-2 rounded-full"}
+      style={{
+        background: status === "online" ? color("success") : color("warning"),
+      }}
+    />
+  );
 }
 
 export function MemberList({
   members,
   localUserId,
   compact = false,
+  renderExtra,
 }: MemberListProps) {
   if (compact) {
     return (
       <div className="space-y-1">
-        {members.map((member) => (
-          <div key={member.userId} className="flex items-center gap-2 text-sm">
+        {members.map((member) => {
+          const extraContent = renderExtra?.(member);
+          return (
             <div
-              className={`w-1.5 h-1.5 rounded-full ${
-                member.status === "online" ? "bg-green-500" : "bg-yellow-500"
-              }`}
-            />
-            <span className="truncate">{member.displayName}</span>
-            {member.role === "host" && (
-              <Crown size={12} className="text-yellow-500" />
-            )}
-          </div>
-        ))}
+              key={member.userId}
+              className="flex items-center justify-between gap-2 text-sm"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <MemberStatusDot status={member.status} compact />
+                <span className="truncate">{member.displayName}</span>
+                {member.role === "host" && (
+                  <Crown size={12} style={{ color: color("warning") }} />
+                )}
+              </div>
+              {extraContent ? (
+                <div className="shrink-0">{extraContent}</div>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     );
   }
 
   return (
     <div className="space-y-2">
-      {members.map((member) => (
-        <div
-          key={member.userId}
-          className="flex items-center gap-3 p-2 rounded-lg bg-muted/30"
-        >
-          {/* 在线状态 */}
+      {members.map((member) => {
+        const extraContent = renderExtra?.(member);
+        return (
           <div
-            className={`w-2 h-2 rounded-full ${
-              member.status === "online" ? "bg-green-500" : "bg-yellow-500"
-            }`}
-          />
+            key={member.userId}
+            className="flex items-center gap-3 rounded-lg p-2"
+            style={{ background: colorAlpha("bgElevated", 0.32) }}
+          >
+            <MemberStatusDot status={member.status} />
 
-          {/* 头像 */}
-          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-            <span className="text-sm font-medium">
-              {member.displayName[0].toUpperCase()}
-            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20">
+              <span className="text-sm font-medium">
+                {(member.displayName[0] ?? "?").toUpperCase()}
+              </span>
+            </div>
+
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span
+                className={
+                  member.userId === localUserId
+                    ? "truncate font-medium"
+                    : "truncate"
+                }
+              >
+                {member.displayName}
+                {member.userId === localUserId && " (你)"}
+              </span>
+
+              {member.role === "host" && (
+                <span
+                  className="flex items-center gap-1 rounded px-2 py-0.5 text-xs text-primary"
+                  style={{ background: colorAlpha("primary", 0.2) }}
+                >
+                  <Crown size={10} />
+                  房主
+                </span>
+              )}
+            </div>
+
+            {extraContent ? (
+              <div className="shrink-0">{extraContent}</div>
+            ) : null}
           </div>
-
-          {/* 名称 */}
-          <span className={member.userId === localUserId ? "font-medium" : ""}>
-            {member.displayName}
-            {member.userId === localUserId && " (你)"}
-          </span>
-
-          {/* 角色标签 */}
-          {member.role === "host" && (
-            <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded flex items-center gap-1">
-              <Crown size={10} />
-              房主
-            </span>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

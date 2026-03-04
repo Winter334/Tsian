@@ -157,6 +157,10 @@ export interface UpdateCharacterParams {
   operatorUniqueTag?: string;
   /** 角色属性 */
   attributes?: Record<string, unknown>;
+  /** 维度选择（key: 维度 ID, value: 选项 ID） */
+  dimensionSelections?: Record<string, string>;
+  /** 已选天赋 ID 列表 */
+  talentIds?: string[];
 }
 
 /**

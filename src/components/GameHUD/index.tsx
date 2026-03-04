@@ -1,75 +1,47 @@
-import { motion } from "framer-motion";
-import { Menu } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { AiInsightDialog } from "@/components/AiInsight";
-import { animation, colorAlpha } from "@/styles/tokens";
+import { selectSessionMode, useSessionStore } from "@/stores";
+import { colorAlpha } from "@/styles/tokens";
 
-import { HubReturnButton } from "./HubReturnButton";
 import { LeftSidebar } from "./LeftSidebar";
 import { RightSidebar, type RightSidebarTab } from "./RightSidebar";
 import { SidebarDrawer } from "./SidebarDrawer";
+import { TopBar } from "./TopBar";
 
 interface GameHUDProps {
   onReturnToHub: () => void;
   onOpenCharacterPanel: () => void;
   onOpenArchiveManager: () => void;
+  onOpenRoomInfo: () => void;
   children: ReactNode;
-}
-
-interface MobileSidebarButtonProps {
-  side: "left" | "right";
-  onClick: () => void;
-  className?: string;
-}
-
-function MobileSidebarButton({
-  side,
-  onClick,
-  className,
-}: MobileSidebarButtonProps) {
-  const positionClass = side === "left" ? "left-3" : "right-14";
-
-  return (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      className={[
-        "md:hidden absolute top-3 z-40",
-        positionClass,
-        "w-10 h-10 rounded-full",
-        "inline-flex items-center justify-center",
-        "backdrop-blur-sm",
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      style={{
-        background: colorAlpha("bgElevated", 0.58),
-        border: `1px solid ${colorAlpha("primary", 0.2)}`,
-        color: colorAlpha("textPrimary", 0.95),
-      }}
-      whileHover={{ scale: 1.04 }}
-      whileTap={{ scale: 0.96 }}
-      transition={{ duration: animation.duration.fast }}
-      aria-label={side === "left" ? "打开角色状态" : "打开右侧功能栏"}
-    >
-      <Menu className="w-4 h-4" />
-    </motion.button>
-  );
 }
 
 export function GameHUD({
   onReturnToHub,
   onOpenCharacterPanel,
   onOpenArchiveManager,
+  onOpenRoomInfo,
   children,
 }: GameHUDProps) {
+  const sessionMode = useSessionStore(selectSessionMode);
+  const isMultiplayer = sessionMode === "multiplayer";
+
   const [leftOpen, setLeftOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
   const [rightSidebarActiveTab, setRightSidebarActiveTab] =
-    useState<RightSidebarTab>("scene");
+    useState<RightSidebarTab>(isMultiplayer ? "team" : "scene");
   const [aiInsightOpen, setAiInsightOpen] = useState(false);
+
+  useEffect(() => {
+    setRightSidebarActiveTab((current) => {
+      if (!isMultiplayer && current === "team") {
+        return "scene";
+      }
+
+      return current;
+    });
+  }, [isMultiplayer]);
 
   return (
     <div className="relative h-dvh flex">
@@ -83,13 +55,15 @@ export function GameHUD({
         <LeftSidebar onOpenCharacterPanel={onOpenCharacterPanel} />
       </aside>
 
-      <main className="flex-1 min-w-0 relative overflow-hidden">
-        <MobileSidebarButton side="left" onClick={() => setLeftOpen(true)} />
-        <MobileSidebarButton side="right" onClick={() => setRightOpen(true)} />
+      <main className="flex-1 min-w-0 relative overflow-hidden flex flex-col">
+        <TopBar
+          onOpenLeftSidebar={() => setLeftOpen(true)}
+          onOpenRightSidebar={() => setRightOpen(true)}
+          onReturnToHub={onReturnToHub}
+          onOpenRoomInfo={onOpenRoomInfo}
+        />
 
-        <HubReturnButton onClick={onReturnToHub} />
-
-        {children}
+        <div className="flex-1 min-h-0 overflow-auto">{children}</div>
 
         <SidebarDrawer
           side="left"

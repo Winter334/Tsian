@@ -14,6 +14,22 @@
  * - 开始游戏时检查所有成员是否都有角色
  */
 
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  Copy,
+  Crown,
+  Loader2,
+  SquarePen,
+  UserCheck,
+  UserPlus,
+  UserX,
+} from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+
+import { ConnectionIndicator, MemberList } from "@/components/Multiplayer";
 import { Button } from "@/components/ui/button";
 import type { Member } from "@/core/yjs/room/types";
 import type { SaveMemberInfo } from "@/core/yjs/types";
@@ -23,6 +39,7 @@ import { canOperateCharacter } from "@/domain/entities/character";
 import { RoomEvents } from "@/domain/events/room";
 import { useCommand, useEvent } from "@/hooks";
 import { getOrCreateUserId } from "@/lib/user-identity";
+
 // 通过模块顶层入口导入，符合架构规范
 import {
   useConnectionStatus,
@@ -31,125 +48,10 @@ import {
   useRoomInfo,
   useRoomMembers,
 } from "@/modules";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  CheckCircle2,
-  Copy,
-  Crown,
-  Loader2,
-  UserCheck,
-  UserPlus,
-  UserX,
-  X,
-} from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
-import { SimpleForm } from "../components/CharacterCreation";
+
+import { color, colorAlpha, glow } from "@/styles/tokens";
+import { MultiplayerCharWizardDialog } from "../components/CharacterCreation/MultiplayerCharWizardDialog";
 import type { StepProps } from "../types";
-
-// 连接状态指示器
-function ConnectionIndicator({
-  status,
-}: {
-  status:
-    | "disconnected"
-    | "connecting"
-    | "connected"
-    | "synced"
-    | "reconnecting"
-    | "error";
-}) {
-  const config: Record<string, { color: string; animate: boolean }> = {
-    disconnected: { color: "bg-gray-400", animate: false },
-    connecting: { color: "bg-yellow-400", animate: true },
-    connected: { color: "bg-blue-400", animate: false },
-    synced: { color: "bg-green-400", animate: false },
-    reconnecting: { color: "bg-yellow-400", animate: true },
-    error: { color: "bg-red-400", animate: false },
-  };
-
-  const { color, animate } = config[status] || config.disconnected;
-
-  return (
-    <div
-      className={`w-2 h-2 rounded-full ${color} ${
-        animate ? "animate-pulse" : ""
-      }`}
-    />
-  );
-}
-
-// 成员列表项（带角色信息）
-function MemberItem({
-  member,
-  isLocal,
-  isHost,
-  character,
-  onKick,
-}: {
-  member: Member;
-  isLocal: boolean;
-  isHost: boolean;
-  character?: Character;
-  onKick?: (userId: string) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-      <div className="flex items-center gap-3">
-        {/* 在线状态 */}
-        <div
-          className={`w-2 h-2 rounded-full ${
-            member.status === "online" ? "bg-green-500" : "bg-yellow-500"
-          }`}
-        />
-
-        {/* 头像 */}
-        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-          <span className="text-sm font-medium">
-            {member.displayName[0].toUpperCase()}
-          </span>
-        </div>
-
-        {/* 名称和角色信息 */}
-        <div className="flex flex-col">
-          <span className={isLocal ? "font-medium" : ""}>
-            {member.displayName}
-            {isLocal && " (你)"}
-          </span>
-          {character ? (
-            <span className="text-xs text-green-500 flex items-center gap-1">
-              <UserPlus size={10} />
-              角色: {character.name}
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground">未创建角色</span>
-          )}
-        </div>
-
-        {/* 房主标签 */}
-        {member.role === "host" && (
-          <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded flex items-center gap-1">
-            <Crown size={10} />
-            房主
-          </span>
-        )}
-      </div>
-
-      {/* 踢出按钮（仅房主可见） */}
-      {isHost && member.role !== "host" && onKick && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-          onClick={() => onKick(member.userId)}
-        >
-          <X size={16} />
-        </Button>
-      )}
-    </div>
-  );
-}
 
 // ===== 成员到齐检查相关类型和组件 =====
 
@@ -258,6 +160,7 @@ export function WaitingLobby({ context, onBack, onComplete }: StepProps) {
   const [copied, setCopied] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const dispatch = useCommand();
 
   const localUserId = getOrCreateUserId();
@@ -292,6 +195,75 @@ export function WaitingLobby({ context, onBack, onComplete }: StepProps) {
     },
     [characters],
   );
+
+  const getWizardCharacterAttributes = useCallback((): {
+    attributes?: Record<string, number>;
+    allocatedPoints?: Record<string, number>;
+  } => {
+    const attrs = myCharacter?.attributes;
+    if (!attrs || typeof attrs !== "object" || Array.isArray(attrs)) {
+      return {};
+    }
+
+    const numericEntries = Object.entries(attrs).filter(
+      (entry): entry is [string, number] => typeof entry[1] === "number",
+    );
+
+    if (numericEntries.length === 0) {
+      return {};
+    }
+
+    const attributes = Object.fromEntries(numericEntries);
+
+    const baseByKey = Object.fromEntries(
+      (context.worldConfig?.primaryAttributes ?? []).map((attr) => [
+        attr.key,
+        attr.defaultValue,
+      ]),
+    );
+    const dimModifiers: Record<string, number> = {};
+
+    for (const dim of context.worldConfig?.dimensions ?? []) {
+      const selectedId = myCharacter?.dimensionSelections?.[dim.id];
+      if (!selectedId) continue;
+      const selected = dim.options.find((opt) => opt.id === selectedId);
+      for (const [attrKey, mod] of Object.entries(
+        selected?.effects?.attributeModifiers ?? {},
+      )) {
+        dimModifiers[attrKey] = (dimModifiers[attrKey] ?? 0) + mod;
+      }
+    }
+
+    const allocatedPoints = Object.fromEntries(
+      numericEntries.map(([key, value]) => {
+        const base = baseByKey[key] ?? 0;
+        const dim = dimModifiers[key] ?? 0;
+        return [key, Math.max(0, value - base - dim)];
+      }),
+    );
+
+    return {
+      attributes,
+      allocatedPoints,
+    };
+  }, [
+    context.worldConfig,
+    myCharacter?.attributes,
+    myCharacter?.dimensionSelections,
+  ]);
+
+  const renderCharacterStatus = useCallback((character?: Character) => {
+    if (character) {
+      return (
+        <span className="flex items-center gap-1 text-xs text-green-500">
+          <UserPlus size={10} />
+          角色: {character.name}
+        </span>
+      );
+    }
+
+    return <span className="text-xs text-muted-foreground">未创建角色</span>;
+  }, []);
 
   // 检查所有成员是否都有角色
   const allMembersHaveCharacters = useMemo(() => {
@@ -457,25 +429,20 @@ export function WaitingLobby({ context, onBack, onComplete }: StepProps) {
                 <p className="text-sm text-muted-foreground mb-3">
                   新加入的成员
                 </p>
-                <div className="space-y-2">
-                  {members
-                    .filter(
-                      (m) =>
-                        !expectedMembers.some(
-                          (e) =>
-                            e.displayName.toLowerCase() ===
-                            m.displayName.toLowerCase(),
-                        ),
-                    )
-                    .map((member) => (
-                      <MemberItem
-                        key={member.userId}
-                        member={member}
-                        isLocal={member.userId === localUserId}
-                        isHost={isHost}
-                      />
-                    ))}
-                </div>
+                <MemberList
+                  members={members.filter(
+                    (m) =>
+                      !expectedMembers.some(
+                        (e) =>
+                          e.displayName.toLowerCase() ===
+                          m.displayName.toLowerCase(),
+                      ),
+                  )}
+                  localUserId={localUserId}
+                  renderExtra={(member) =>
+                    renderCharacterStatus(getMemberCharacter(member))
+                  }
+                />
               </div>
             )}
           </>
@@ -486,15 +453,13 @@ export function WaitingLobby({ context, onBack, onComplete }: StepProps) {
               成员 ({members.length}/{currentRoom.maxPlayers || 8})
             </p>
             <div className="space-y-2">
-              {members.map((member) => (
-                <MemberItem
-                  key={member.userId}
-                  member={member}
-                  isLocal={member.userId === localUserId}
-                  isHost={isHost}
-                  character={getMemberCharacter(member)}
-                />
-              ))}
+              <MemberList
+                members={members}
+                localUserId={localUserId}
+                renderExtra={(member) =>
+                  renderCharacterStatus(getMemberCharacter(member))
+                }
+              />
 
               {/* 空位 */}
               {Array.from({
@@ -515,14 +480,97 @@ export function WaitingLobby({ context, onBack, onComplete }: StepProps) {
 
       {/* 角色创建区域 */}
       <div className="mb-8">
-        <SimpleForm
-          roomId={currentRoom.roomId}
-          hasCharacter={hasCharacter}
-          currentCharacterId={myCharacter?.id}
-          currentCharacterName={myCharacter?.name}
-          disabled={isStarting}
-        />
+        {!hasCharacter ? (
+          <div
+            className="rounded-xl p-5"
+            style={{
+              background: colorAlpha("primary", 0.05),
+              border: `1px solid ${colorAlpha("primary", 0.22)}`,
+            }}
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm" style={{ color: color("textMuted") }}>
+                  角色状态
+                </p>
+                <p
+                  className="font-medium"
+                  style={{ color: color("textPrimary") }}
+                >
+                  尚未创建角色
+                </p>
+              </div>
+              <Button onClick={() => setWizardOpen(true)} disabled={isStarting}>
+                创建我的角色
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="rounded-xl p-5"
+            style={{
+              background: colorAlpha("success", 0.08),
+              border: `1px solid ${colorAlpha("success", 0.25)}`,
+            }}
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm" style={{ color: color("textMuted") }}>
+                  我的角色
+                </p>
+                <p
+                  className="font-semibold"
+                  style={{
+                    color: color("success"),
+                    textShadow: glow("success", "sm", 0.25),
+                  }}
+                >
+                  {myCharacter?.name ?? "未命名角色"}
+                </p>
+                <p
+                  className="mt-1 text-sm leading-relaxed"
+                  style={{ color: color("textSecondary") }}
+                >
+                  {myCharacter?.description?.trim()
+                    ? myCharacter.description.trim().slice(0, 50) +
+                      (myCharacter.description.trim().length > 50 ? "…" : "")
+                    : "暂无角色描述"}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                onClick={() => setWizardOpen(true)}
+                disabled={isStarting}
+              >
+                <SquarePen size={14} className="mr-1.5" />
+                编辑角色
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
+
+      <MultiplayerCharWizardDialog
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        roomId={currentRoom.roomId}
+        existingCharacterId={myCharacter?.id}
+        existingCharacterData={
+          hasCharacter
+            ? {
+                characterName: myCharacter?.name,
+                characterDescription: myCharacter?.description,
+                characterPersonality: myCharacter?.personality,
+                characterAppearance: myCharacter?.appearance,
+                characterAge: myCharacter?.age,
+                characterGender: myCharacter?.gender,
+                dimensionSelections: myCharacter?.dimensionSelections,
+                talentIds: myCharacter?.talentIds,
+                ...getWizardCharacterAttributes(),
+              }
+            : undefined
+        }
+      />
 
       {/* 操作按钮 */}
       <div className="flex justify-between">

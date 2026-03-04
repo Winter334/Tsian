@@ -56,6 +56,7 @@ import type {
   UpdateNpcInfoPayload,
   UpdateNpcStatusPayload,
   UpdateRoomSettingsPayload,
+  WithdrawActionPayload,
 } from "@/domain/commands/room";
 import {
   canOperateCharacter,
@@ -65,6 +66,7 @@ import {
 import {
   RoomEvents,
   type ActionSubmittedEvent,
+  type ActionWithdrawnEvent,
   type CharacterCreatedEvent,
   type CharacterUpdatedEvent,
   type NpcCreatedEvent,
@@ -1304,6 +1306,113 @@ export async function submitActionHandler(
       totalPlayers,
     };
     eventBus.emit(eventBus.createEvent(RoomEvents.ACTION_SUBMITTED, event));
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * 撤回行动命令处理器
+ */
+export async function withdrawActionHandler(
+  payload: WithdrawActionPayload,
+  _context: CommandContext,
+): Promise<CommandResult<void>> {
+  try {
+    const { roomId, turnNumber, userId, operatorId } = payload;
+    const now = Date.now();
+
+    if (!operatorId || !userId) {
+      return {
+        success: false,
+        error: "Invalid action operator",
+      };
+    }
+
+    const localUserId = useRoomStore.getState().localUser.userId;
+    if (!localUserId || localUserId !== operatorId) {
+      return {
+        success: false,
+        error: "Invalid action operator",
+      };
+    }
+
+    const mainDoc = subdocManager.getMainDoc(roomId);
+    if (!mainDoc) {
+      return { success: false, error: `MainDoc not found: ${roomId}` };
+    }
+
+    const membersMap = mainDoc.getMap("members") as Y.Map<Member>;
+    if (!membersMap.has(userId) || !membersMap.has(operatorId)) {
+      return {
+        success: false,
+        error: "Only room members can withdraw action",
+      };
+    }
+
+    const canWithdrawSelf = operatorId === userId;
+    const canWithdrawAsHost =
+      operatorId !== userId && subdocManager.isHost(roomId, operatorId);
+    if (!canWithdrawSelf && !canWithdrawAsHost) {
+      return {
+        success: false,
+        error: "Only self or host can withdraw action",
+      };
+    }
+
+    const turnDoc = subdocManager.getTurnDoc(roomId, turnNumber);
+    if (!turnDoc) {
+      return {
+        success: false,
+        error: `TurnDoc not found: ${roomId}:${turnNumber}`,
+      };
+    }
+
+    const configMap = turnDoc.getMap("config");
+    const status = configMap.get("status") as string | undefined;
+    if (status === "completed") {
+      return {
+        success: false,
+        error: "Cannot withdraw action in completed turn",
+      };
+    }
+
+    const isLocked = Boolean(configMap.get("isLocked"));
+    if (isLocked) {
+      return {
+        success: false,
+        error: "Cannot withdraw action after turn is locked",
+      };
+    }
+
+    const actionsMap = turnDoc.getMap("actions");
+    if (!actionsMap.has(userId)) {
+      return {
+        success: false,
+        error: `No submitted action found for user: ${userId}`,
+      };
+    }
+
+    actionsMap.delete(userId);
+
+    const submittedCount = actionsMap.size;
+    const totalPlayers = subdocManager.getMemberCount(roomId);
+
+    const event: ActionWithdrawnEvent = {
+      roomId,
+      turnNumber,
+      userId,
+      operatorId,
+      withdrawnAt: now,
+      submittedCount,
+      totalPlayers,
+    };
+    eventBus.emit(eventBus.createEvent(RoomEvents.ACTION_WITHDRAWN, event));
 
     return { success: true };
   } catch (error) {

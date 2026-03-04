@@ -6,16 +6,21 @@ import { animation, colorAlpha, glow } from "@/styles/tokens";
 interface HubReturnButtonProps {
   onClick: () => void;
   className?: string;
+  floating?: boolean;
 }
 
-export function HubReturnButton({ onClick, className }: HubReturnButtonProps) {
+export function HubReturnButton({
+  onClick,
+  className,
+  floating = true,
+}: HubReturnButtonProps) {
   return (
     <motion.button
       type="button"
       onClick={onClick}
       title="返回大厅"
       className={[
-        "absolute top-3 right-3 z-50",
+        floating ? "absolute top-3 right-3 z-50" : "shrink-0",
         "w-10 h-10 rounded-full",
         "inline-flex items-center justify-center",
         "backdrop-blur-sm",

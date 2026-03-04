@@ -462,6 +462,7 @@ function AppContent() {
 
   // 从 Game 返回 Hub
   const handleReturnToHub = () => {
+    setRoomInfoOpen(false);
     setAppState("hub");
   };
 
@@ -502,6 +503,7 @@ function AppContent() {
     } catch {
       // 离房失败不阻塞回标题
     } finally {
+      setRoomInfoOpen(false);
       setAppState("title");
     }
   };
@@ -596,6 +598,7 @@ function AppContent() {
                     onReturnToHub={handleReturnToHub}
                     onOpenCharacterPanel={handleOpenCharacterPanel}
                     onOpenArchiveManager={handleOpenWorldArchive}
+                    onOpenRoomInfo={handleOpenRoomInfo}
                   >
                     <GameView className="h-full" />
                   </GameHUD>

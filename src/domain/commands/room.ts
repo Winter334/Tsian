@@ -45,6 +45,8 @@ export const RoomCommands = {
   SUBMIT_ACTION: "room/turn/submit",
   /** 修改行动 */
   UPDATE_ACTION: "room/turn/action/update",
+  /** 撤回行动 */
+  WITHDRAW_ACTION: "room/turn/action/withdraw",
   /** 锁定行动 */
   LOCK_ACTION: "room/turn/action/lock",
   /** 完成回合 */
@@ -198,6 +200,20 @@ export interface UpdateActionPayload {
   content: string;
   /** 扩展元数据（可选） */
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * 撤回行动命令参数
+ */
+export interface WithdrawActionPayload {
+  /** 房间 ID */
+  roomId: string;
+  /** 回合号 */
+  turnNumber: number;
+  /** 被撤回行动的所属用户 ID */
+  userId: string;
+  /** 执行撤回的用户 ID（自己或 Host） */
+  operatorId: string;
 }
 
 /**

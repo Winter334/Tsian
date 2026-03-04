@@ -37,6 +37,8 @@ export const RoomEvents = {
   ACTION_SUBMITTED: "room.turn.action.submitted",
   /** 行动已更新 */
   ACTION_UPDATED: "room.turn.action.updated",
+  /** 行动已撤回 */
+  ACTION_WITHDRAWN: "room.turn.action.withdrawn",
   /** 行动已锁定 */
   ACTION_LOCKED: "room.turn.action.locked",
   /** 回合已完成 */
@@ -164,6 +166,23 @@ export interface ActionSubmittedEvent {
   userId: string;
   submittedAt: number;
   /** 当前已提交的玩家数 */
+  submittedCount: number;
+  /** 总玩家数 */
+  totalPlayers: number;
+}
+
+/**
+ * 行动撤回事件
+ */
+export interface ActionWithdrawnEvent {
+  roomId: string;
+  turnNumber: number;
+  /** 被撤回行动的所属用户 */
+  userId: string;
+  /** 执行撤回的人（自己或 Host） */
+  operatorId: string;
+  withdrawnAt: number;
+  /** 撤回后当前已提交的玩家数 */
   submittedCount: number;
   /** 总玩家数 */
   totalPlayers: number;

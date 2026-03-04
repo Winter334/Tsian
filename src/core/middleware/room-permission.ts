@@ -252,6 +252,31 @@ export const ROOM_PERMISSION_RULES: readonly PermissionRule[] = [
     validatePayload: REQUIRE_SENDER_MATCH_USER_ID,
   },
   {
+    commandPattern: "room/turn/action/withdraw",
+    requiredRole: "member",
+    validatePayload: ({ command, payload, sender }) => {
+      const operatorId = readPayloadString(payload, "operatorId");
+      if (!operatorId) {
+        return `Permission denied for ${command.type}: payload.operatorId is required`;
+      }
+
+      if (!sender) {
+        return `Permission denied for ${command.type}: missing sender`;
+      }
+
+      if (operatorId !== sender) {
+        return `Permission denied for ${command.type}: sender must match payload.operatorId`;
+      }
+
+      const targetUserId = readPayloadString(payload, "userId");
+      if (!targetUserId) {
+        return `Permission denied for ${command.type}: payload.userId is required`;
+      }
+
+      return null;
+    },
+  },
+  {
     commandPattern: "room/character/create",
     requiredRole: "member",
     validatePayload: REQUIRE_SENDER_MATCH_USER_ID,
