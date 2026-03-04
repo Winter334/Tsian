@@ -54,40 +54,56 @@ export function validateExportData(data: unknown): ValidationResult {
     return { valid: false, error: "缺少导出时间" };
   }
 
-  // 5. 数据完整性检查
+  // 5. 数据完整性检查 + 归一化
   if (obj.type === "single_save") {
     if (!obj.save || typeof obj.save !== "object") {
       return { valid: false, error: "缺少存档数据" };
     }
 
     const saveValidation = validateSave(obj.save);
-    if (!saveValidation.valid) {
+    if (!saveValidation.valid || !saveValidation.data) {
       return { valid: false, error: saveValidation.error };
     }
-  } else {
-    if (!Array.isArray(obj.saves)) {
-      return { valid: false, error: "缺少存档列表" };
-    }
 
-    for (let i = 0; i < obj.saves.length; i++) {
-      const saveValidation = validateSave(obj.saves[i]);
-      if (!saveValidation.valid) {
-        return {
-          valid: false,
-          error: `存档 ${i + 1}: ${saveValidation.error}`,
-        };
-      }
-    }
+    const normalizedData: ExportData = {
+      ...(data as ExportData),
+      type: "single_save",
+      save: saveValidation.data,
+    };
+
+    return { valid: true, data: normalizedData };
   }
 
-  return { valid: true, data: data as ExportData };
+  if (!Array.isArray(obj.saves)) {
+    return { valid: false, error: "缺少存档列表" };
+  }
+
+  const normalizedSaves: ExportedSave[] = [];
+  for (let i = 0; i < obj.saves.length; i++) {
+    const saveValidation = validateSave(obj.saves[i]);
+    if (!saveValidation.valid || !saveValidation.data) {
+      return {
+        valid: false,
+        error: `存档 ${i + 1}: ${saveValidation.error}`,
+      };
+    }
+    normalizedSaves.push(saveValidation.data);
+  }
+
+  const normalizedData: ExportData = {
+    ...(data as ExportData),
+    type: "full_backup",
+    saves: normalizedSaves,
+  };
+
+  return { valid: true, data: normalizedData };
 }
 
 /**
  * 验证单个存档数据
  */
 function validateSave(
-  save: unknown
+  save: unknown,
 ): Omit<ValidationResult, "data"> & { data?: ExportedSave } {
   if (!save || typeof save !== "object") {
     return { valid: false, error: "存档数据无效" };
@@ -157,14 +173,90 @@ function validateSave(
     return { valid: false, error: "游戏状态格式无效" };
   }
 
-  return { valid: true, data: save as ExportedSave };
+  // 联机元信息校验（可选字段）
+  if (
+    obj.type !== undefined &&
+    obj.type !== "solo" &&
+    obj.type !== "multiplayer"
+  ) {
+    return { valid: false, error: "存档 type 字段无效" };
+  }
+
+  if (obj.lastRoomId !== undefined && typeof obj.lastRoomId !== "string") {
+    return { valid: false, error: "存档 lastRoomId 字段格式无效" };
+  }
+
+  if (obj.lastRoomCode !== undefined && typeof obj.lastRoomCode !== "string") {
+    return { valid: false, error: "存档 lastRoomCode 字段格式无效" };
+  }
+
+  if (obj.memberCount !== undefined && typeof obj.memberCount !== "number") {
+    return { valid: false, error: "存档 memberCount 字段格式无效" };
+  }
+
+  if (obj.members !== undefined) {
+    if (!Array.isArray(obj.members)) {
+      return { valid: false, error: "存档 members 字段格式无效" };
+    }
+
+    for (let i = 0; i < obj.members.length; i++) {
+      const memberValidation = validateMember(obj.members[i]);
+      if (!memberValidation.valid) {
+        return {
+          valid: false,
+          error: `存档成员 ${i + 1}: ${memberValidation.error}`,
+        };
+      }
+    }
+  }
+
+  if (obj.maxPlayers !== undefined && typeof obj.maxPlayers !== "number") {
+    return { valid: false, error: "存档 maxPlayers 字段格式无效" };
+  }
+
+  if (obj.turnDuration !== undefined && typeof obj.turnDuration !== "number") {
+    return { valid: false, error: "存档 turnDuration 字段格式无效" };
+  }
+
+  // 游戏进度校验（可选字段）
+  if (
+    obj.currentTurnNumber !== undefined &&
+    typeof obj.currentTurnNumber !== "number"
+  ) {
+    return { valid: false, error: "存档 currentTurnNumber 字段格式无效" };
+  }
+
+  if (obj.archivedTurns !== undefined) {
+    if (!Array.isArray(obj.archivedTurns)) {
+      return { valid: false, error: "存档 archivedTurns 字段格式无效" };
+    }
+
+    for (let i = 0; i < obj.archivedTurns.length; i++) {
+      const archivedTurnValidation = validateArchivedTurn(obj.archivedTurns[i]);
+      if (!archivedTurnValidation.valid) {
+        return {
+          valid: false,
+          error: `归档回合 ${i + 1}: ${archivedTurnValidation.error}`,
+        };
+      }
+    }
+  }
+
+  // 缺失字段安全默认值（导入阶段直接读取）
+  const normalizedSave: ExportedSave = {
+    ...(save as ExportedSave),
+    type: obj.type === "multiplayer" ? "multiplayer" : "solo",
+    ...(obj.currentTurnNumber === undefined ? { currentTurnNumber: 0 } : {}),
+  };
+
+  return { valid: true, data: normalizedSave };
 }
 
 /**
  * 验证会话数据
  */
 function validateConversation(
-  conv: unknown
+  conv: unknown,
 ): Omit<ValidationResult, "data"> & { data?: ExportedConversation } {
   if (!conv || typeof conv !== "object") {
     return { valid: false, error: "会话数据无效" };
@@ -195,7 +287,7 @@ function validateConversation(
  * 验证消息数据
  */
 function validateMessage(
-  msg: unknown
+  msg: unknown,
 ): Omit<ValidationResult, "data"> & { data?: ExportedMessage } {
   if (!msg || typeof msg !== "object") {
     return { valid: false, error: "消息数据无效" };
@@ -220,4 +312,74 @@ function validateMessage(
   }
 
   return { valid: true, data: msg as ExportedMessage };
+}
+
+/**
+ * 验证联机成员信息
+ */
+function validateMember(member: unknown): Omit<ValidationResult, "data"> & {
+  data?: { displayName: string; role: "host" | "guest" };
+} {
+  if (!member || typeof member !== "object") {
+    return { valid: false, error: "成员数据无效" };
+  }
+
+  const obj = member as Record<string, unknown>;
+
+  if (typeof obj.displayName !== "string" || !obj.displayName) {
+    return { valid: false, error: "成员 displayName 无效" };
+  }
+
+  if (obj.role !== "host" && obj.role !== "guest") {
+    return { valid: false, error: "成员 role 无效" };
+  }
+
+  return {
+    valid: true,
+    data: obj as { displayName: string; role: "host" | "guest" },
+  };
+}
+
+/**
+ * 验证归档回合数据
+ */
+function validateArchivedTurn(turn: unknown): Omit<ValidationResult, "data"> & {
+  data?: {
+    turnNumber: number;
+    completedAt: number;
+    actions: Record<string, unknown>;
+    aiResponseLength: number;
+  };
+} {
+  if (!turn || typeof turn !== "object") {
+    return { valid: false, error: "归档回合数据无效" };
+  }
+
+  const obj = turn as Record<string, unknown>;
+
+  if (typeof obj.turnNumber !== "number") {
+    return { valid: false, error: "turnNumber 无效" };
+  }
+
+  if (typeof obj.completedAt !== "number") {
+    return { valid: false, error: "completedAt 无效" };
+  }
+
+  if (!obj.actions || typeof obj.actions !== "object") {
+    return { valid: false, error: "actions 无效" };
+  }
+
+  if (typeof obj.aiResponseLength !== "number") {
+    return { valid: false, error: "aiResponseLength 无效" };
+  }
+
+  return {
+    valid: true,
+    data: obj as {
+      turnNumber: number;
+      completedAt: number;
+      actions: Record<string, unknown>;
+      aiResponseLength: number;
+    },
+  };
 }

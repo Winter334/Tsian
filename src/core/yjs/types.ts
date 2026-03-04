@@ -229,6 +229,30 @@ export interface ImportSaveData {
   name: string;
   /** 原始 ID（用于映射） */
   originalId: string;
+
+  /** 存档类型：单人或联机（缺省按 solo 处理） */
+  type?: SaveType;
+
+  // 联机元信息（可选，缺失时安全降级）
+  /** 上次使用的房间 ID（用于消息迁移判断） */
+  lastRoomId?: string;
+  /** 上次的房间码（仅参考） */
+  lastRoomCode?: string;
+  /** 上次的成员数 */
+  memberCount?: number;
+  /** 上次的成员列表 */
+  members?: SaveMemberInfo[];
+  /** 上次的最大玩家数 */
+  maxPlayers?: number;
+  /** 上次的回合时长（毫秒） */
+  turnDuration?: number;
+
+  // 游戏进度（可选，缺失时安全降级）
+  /** 当前回合号（0 = 未开始） */
+  currentTurnNumber?: number;
+  /** 归档回合数据（全量导出/导入） */
+  archivedTurns?: ArchivedTurn[];
+
   /** 会话列表 */
   conversations: ImportConversationData[];
   /** 消息（按原始会话 ID 索引） */
@@ -305,6 +329,30 @@ export interface ExportSaveData {
   createdAt: number;
   /** 更新时间 */
   updatedAt: number;
+
+  /** 存档类型：单人或联机 */
+  type: SaveType;
+
+  // 联机元信息
+  /** 上次使用的房间 ID（用于消息迁移判断） */
+  lastRoomId?: string;
+  /** 上次的房间码（仅参考） */
+  lastRoomCode?: string;
+  /** 上次的成员数 */
+  memberCount?: number;
+  /** 上次的成员列表 */
+  members?: SaveMemberInfo[];
+  /** 上次的最大玩家数 */
+  maxPlayers?: number;
+  /** 上次的回合时长（毫秒） */
+  turnDuration?: number;
+
+  // 游戏进度
+  /** 当前回合号（0 = 未开始） */
+  currentTurnNumber?: number;
+  /** 归档回合数据（全量导出） */
+  archivedTurns?: ArchivedTurn[];
+
   /** 会话列表 */
   conversations: ExportConversationData[];
   /** 消息（按会话 ID 索引） */

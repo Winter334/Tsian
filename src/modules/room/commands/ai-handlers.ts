@@ -45,6 +45,7 @@ import { applyStructuralChanges } from "@/modules/game/services/structural-chang
 import { prepareMemoryData } from "@/modules/memory/memory-injector";
 import { useSettingsStore } from "@/stores/settings";
 import * as Y from "yjs";
+import { ROOM_AI_HISTORY_WINDOW } from "../config/ai-history-window";
 
 // ===== 全局状态 =====
 
@@ -348,18 +349,33 @@ export async function processAiTurnHandler(
 
     // 9.2 计算联机模式记忆注入数据（从 HistoryDoc 获取 assistant 消息）
     const conversationId = `room:${roomId}:main`;
-    const historyResult = await subdocManager.getHistoryMessages(
+    const historyResult = await subdocManager.getRecentHistoryMessages(
       roomId,
       conversationId,
-      { limit: Number.MAX_SAFE_INTEGER },
+      ROOM_AI_HISTORY_WINDOW,
     );
-    const historyMessages = historyResult.items.reverse(); // getHistoryMessages 返回倒序，需要翻转为时间正序
-    const assistantMessages = historyMessages
-      .filter((m) => m.role === "assistant" && m.content.trim() !== "")
-      .map((m) => ({
-        id: m.id,
-        content: m.content,
-        messageIndex: historyMessages.indexOf(m),
+
+    // getRecentHistoryMessages 返回倒序（新→旧），先转为时间正序并显式补齐全局索引
+    const historyItems = [...historyResult.items].reverse();
+    const historyWindowStartIndex = Math.max(
+      historyResult.total - historyItems.length,
+      0,
+    );
+
+    const assistantMessages = historyItems
+      .map((message, windowIndex) => ({
+        message,
+        // 与单机 allMessages.indexOf(m) 语义对齐：messageIndex = 全局消息序号
+        messageIndex: historyWindowStartIndex + windowIndex,
+      }))
+      .filter(
+        ({ message }) =>
+          message.role === "assistant" && message.content.trim() !== "",
+      )
+      .map(({ message, messageIndex }) => ({
+        id: message.id,
+        content: message.content,
+        messageIndex,
       }));
 
     const memoryData = prepareMemoryData(

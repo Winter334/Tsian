@@ -109,7 +109,13 @@ export function useTurnMessages(roomId: string | null): UseTurnMessagesReturn {
         return [];
       }
 
-      const messages = messagesArray.toArray() as Message[];
+      const pageSize = 200;
+      const messages: Message[] = [];
+      for (let start = 0; start < messagesArray.length; start += pageSize) {
+        const end = Math.min(messagesArray.length, start + pageSize);
+        messages.push(...(messagesArray.slice(start, end) as Message[]));
+      }
+
       return messages;
     } catch {
       return [];
@@ -124,18 +130,36 @@ export function useTurnMessages(roomId: string | null): UseTurnMessagesReturn {
       return [];
     }
 
-    try {
-      const historyDoc = await subdocManager.loadHistoryDoc(roomId);
-      const messagesMap = historyDoc.getMap("messages") as Y.Map<
-        Y.Array<unknown>
-      >;
-      const messagesArray = messagesMap.get(conversationId);
+    // 分页读取并拼接，避免单次无上限读取
+    const pageSize = 200;
+    const allMessagesDesc: Message[] = [];
+    let cursor: number | undefined;
 
-      if (!messagesArray) {
-        return [];
+    try {
+      while (true) {
+        const result = await subdocManager.getHistoryMessages(
+          roomId,
+          conversationId,
+          {
+            limit: pageSize,
+            cursor,
+          },
+        );
+
+        if (result.items.length === 0) {
+          break;
+        }
+
+        allMessagesDesc.push(...(result.items as Message[]));
+
+        if (!result.hasMore || result.nextCursor === null) {
+          break;
+        }
+
+        cursor = result.nextCursor;
       }
 
-      return messagesArray.toArray() as Message[];
+      return allMessagesDesc.reverse();
     } catch {
       return [];
     }
@@ -168,7 +192,7 @@ export function useTurnMessages(roomId: string | null): UseTurnMessagesReturn {
 
     // 按创建时间排序
     const mergedMessages = Array.from(messageMap.values()).sort(
-      (a, b) => a.createdAt - b.createdAt
+      (a, b) => a.createdAt - b.createdAt,
     );
 
     return mergedMessages;

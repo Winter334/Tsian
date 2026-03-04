@@ -13,6 +13,7 @@ import { IndexeddbPersistence } from "y-indexeddb";
 import * as Y from "yjs";
 import { CURRENT_VERSION, runMigrations } from "./migrations";
 import type {
+  ArchivedTurn,
   CreateSaveParams,
   ExportConversationData,
   ExportMessageData,
@@ -499,6 +500,44 @@ export class YjsManager {
     saveMap.set("createdAt", now);
     saveMap.set("updatedAt", now);
 
+    // 恢复存档类型与联机元信息（缺失字段安全降级）
+    const saveType: SaveType =
+      data.type === "multiplayer" ? "multiplayer" : "solo";
+    saveMap.set("type", saveType);
+
+    if (data.lastRoomId) {
+      saveMap.set("lastRoomId", data.lastRoomId);
+    }
+    if (data.lastRoomCode) {
+      saveMap.set("lastRoomCode", data.lastRoomCode);
+    }
+    if (typeof data.memberCount === "number") {
+      saveMap.set("memberCount", data.memberCount);
+    }
+    if (Array.isArray(data.members)) {
+      saveMap.set("members", data.members);
+      if (typeof data.memberCount !== "number") {
+        saveMap.set("memberCount", data.members.length);
+      }
+    }
+    if (typeof data.maxPlayers === "number") {
+      saveMap.set("maxPlayers", data.maxPlayers);
+    }
+    if (typeof data.turnDuration === "number") {
+      saveMap.set("turnDuration", data.turnDuration);
+    }
+
+    // 恢复回合进度（缺失字段安全降级）
+    const safeCurrentTurnNumber =
+      typeof data.currentTurnNumber === "number" ? data.currentTurnNumber : 0;
+    saveMap.set("currentTurnNumber", safeCurrentTurnNumber);
+
+    if (Array.isArray(data.archivedTurns) && data.archivedTurns.length > 0) {
+      const archivedTurnsArray = new Y.Array<ArchivedTurn>();
+      archivedTurnsArray.push(data.archivedTurns);
+      saveMap.set("archivedTurns", archivedTurnsArray);
+    }
+
     // 创建会话 Map（值为普通对象，保持与 ChatRepository 结构一致）
     const conversationsMap = new Y.Map();
     for (const conv of data.conversations) {
@@ -604,6 +643,30 @@ export class YjsManager {
     const name = (saveMap.get("name") as string) || "未命名存档";
     const createdAt = (saveMap.get("createdAt") as number) || Date.now();
     const updatedAt = (saveMap.get("updatedAt") as number) || Date.now();
+
+    // 提取存档类型与联机元信息
+    const type = ((saveMap.get("type") as SaveType) || "solo") as SaveType;
+    const lastRoomId = saveMap.get("lastRoomId") as string | undefined;
+    const lastRoomCode = saveMap.get("lastRoomCode") as string | undefined;
+    const memberCount = saveMap.get("memberCount") as number | undefined;
+    const members = saveMap.get("members") as SaveMemberInfo[] | undefined;
+    const maxPlayers = saveMap.get("maxPlayers") as number | undefined;
+    const turnDuration = saveMap.get("turnDuration") as number | undefined;
+
+    // 提取回合进度
+    const currentTurnNumber = saveMap.get("currentTurnNumber") as
+      | number
+      | undefined;
+    const archivedTurnsValue = saveMap.get("archivedTurns") as
+      | Y.Array<ArchivedTurn>
+      | ArchivedTurn[]
+      | undefined;
+    const archivedTurns =
+      archivedTurnsValue instanceof Y.Array
+        ? archivedTurnsValue.toArray()
+        : Array.isArray(archivedTurnsValue)
+          ? archivedTurnsValue
+          : undefined;
 
     // 提取会话
     const conversationsMap = saveMap.get("conversations") as
@@ -727,6 +790,15 @@ export class YjsManager {
       name,
       createdAt,
       updatedAt,
+      type,
+      ...(lastRoomId && { lastRoomId }),
+      ...(lastRoomCode && { lastRoomCode }),
+      ...(memberCount !== undefined && { memberCount }),
+      ...(members && { members }),
+      ...(maxPlayers !== undefined && { maxPlayers }),
+      ...(turnDuration !== undefined && { turnDuration }),
+      ...(currentTurnNumber !== undefined && { currentTurnNumber }),
+      ...(archivedTurns && { archivedTurns }),
       conversations,
       messages,
       gameState,

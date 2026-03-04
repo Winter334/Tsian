@@ -63,6 +63,39 @@ export interface HistoryMessageItem {
 }
 
 /**
+ * 历史窗口读取选项
+ */
+export interface HistoryWindowOptions {
+  /** 期望读取条数 */
+  limit?: number;
+  /** 默认条数（limit 非法时使用） */
+  defaultLimit?: number;
+  /** 最大允许条数 */
+  maxLimit?: number;
+}
+
+function normalizePositiveInteger(
+  value: number | undefined,
+  fallback: number,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  const normalized = Math.floor(value);
+  return normalized > 0 ? normalized : fallback;
+}
+
+function normalizeCursor(cursor: number | undefined, total: number): number {
+  if (typeof cursor !== "number" || !Number.isFinite(cursor)) {
+    return total;
+  }
+
+  const normalized = Math.floor(cursor);
+  return Math.min(total, Math.max(0, normalized));
+}
+
+/**
  * 文档命名规范
  */
 const docNames = {
@@ -106,6 +139,15 @@ export class SubdocManager {
   /** HistoryDoc 空闲计时器 */
   private historyIdleTimers: Map<string, ReturnType<typeof setTimeout>> =
     new Map();
+
+  /** MainDoc 首次加载时间（roomId -> timestamp） */
+  private mainDocLoadedAt: Map<string, number> = new Map();
+
+  /** TurnDoc 首次加载时间（roomId:turnNumber -> timestamp） */
+  private turnDocLoadedAt: Map<string, number> = new Map();
+
+  /** HistoryDoc 首次加载时间（roomId -> timestamp） */
+  private historyDocLoadedAt: Map<string, number> = new Map();
 
   constructor(config: Partial<SubdocManagerConfig> = {}) {
     this.config = { ...DEFAULT_SUBDOC_CONFIG, ...config };
@@ -282,6 +324,7 @@ export class SubdocManager {
 
     // 缓存 MainDoc
     this.mainDocs.set(roomId, mainDoc);
+    this.mainDocLoadedAt.set(roomId, Date.now());
 
     return mainDoc;
   }
@@ -364,6 +407,7 @@ export class SubdocManager {
 
     // 缓存 MainDoc
     this.mainDocs.set(roomId, mainDoc);
+    this.mainDocLoadedAt.set(roomId, now);
 
     // 在 RootDoc 中注册房间引用
     const roomRef: RoomRef = {
@@ -385,9 +429,10 @@ export class SubdocManager {
   }
 
   /**
-   * 加载 MainDoc（本地或从网络）
+   * 加载 MainDoc（从缓存获取，或按 GUID 创建本地文档实例）
    *
-   * TODO: 集成 Hocuspocus 后实现网络同步
+   * 网络同步由 MultiplayerProvider 负责建立，
+   * SubdocManager 仅负责文档实例与生命周期管理。
    */
   async loadMainDoc(roomId: string): Promise<Y.Doc> {
     // 检查是否已加载
@@ -402,13 +447,12 @@ export class SubdocManager {
       throw new Error(`[SubdocManager] Room not found: ${roomId}`);
     }
 
-    // 创建 MainDoc 并加载（暂时只支持本地）
+    // 按房间引用中的 GUID 创建 MainDoc 本地实例
+    // 后续由 MultiplayerProvider 在 handlers 流程中建立同步连接
     const mainDoc = new Y.Doc({ guid: roomRef.mainDocGuid });
 
-    // TODO: 这里应该通过 Hocuspocus Provider 同步
-    // 目前只是创建空文档
-
     this.mainDocs.set(roomId, mainDoc);
+    this.mainDocLoadedAt.set(roomId, Date.now());
 
     return mainDoc;
   }
@@ -421,6 +465,7 @@ export class SubdocManager {
     if (mainDoc) {
       mainDoc.destroy();
       this.mainDocs.delete(roomId);
+      this.mainDocLoadedAt.delete(roomId);
     }
   }
 
@@ -480,6 +525,7 @@ export class SubdocManager {
 
     // 缓存
     this.turnDocs.set(key, turnDoc);
+    this.turnDocLoadedAt.set(key, Date.now());
 
     // 清理旧的 TurnDoc
     this.pruneOldTurnDocs(roomId, this.config.keepRecentTurns);
@@ -512,6 +558,7 @@ export class SubdocManager {
 
     // 缓存
     this.turnDocs.set(key, turnDoc);
+    this.turnDocLoadedAt.set(key, Date.now());
 
     return turnDoc;
   }
@@ -525,9 +572,10 @@ export class SubdocManager {
   }
 
   /**
-   * 按需加载回合文档
+   * 按需加载回合文档（从缓存获取，或按 GUID 创建本地文档实例）
    *
-   * TODO: 集成 Hocuspocus 后实现网络同步
+   * 网络同步由 TurnDocProvider 负责建立，
+   * SubdocManager 仅负责文档实例与生命周期管理。
    */
   async loadTurnDoc(roomId: string, turnNumber: number): Promise<Y.Doc> {
     const key = this.getTurnDocKey(roomId, turnNumber);
@@ -549,12 +597,12 @@ export class SubdocManager {
       );
     }
 
-    // 创建 TurnDoc 并加载
+    // 按 MainDoc 中记录的 GUID 创建 TurnDoc 本地实例
+    // 后续由 TurnDocProvider 在 handlers 流程中建立同步连接
     const turnDoc = new Y.Doc({ guid });
 
-    // TODO: 通过 Hocuspocus Provider 同步
-
     this.turnDocs.set(key, turnDoc);
+    this.turnDocLoadedAt.set(key, Date.now());
 
     return turnDoc;
   }
@@ -569,6 +617,7 @@ export class SubdocManager {
     if (turnDoc) {
       turnDoc.destroy();
       this.turnDocs.delete(key);
+      this.turnDocLoadedAt.delete(key);
     }
   }
 
@@ -609,7 +658,10 @@ export class SubdocManager {
   }
 
   /**
-   * 按需加载历史文档
+   * 按需加载历史文档（从缓存获取，或按 GUID 创建本地文档实例）
+   *
+   * 网络同步由 HistoryDocProvider 负责建立，
+   * SubdocManager 仅负责文档实例与生命周期管理。
    */
   async loadHistoryDoc(roomId: string): Promise<Y.Doc> {
     // 检查是否已加载
@@ -656,9 +708,9 @@ export class SubdocManager {
       worldArchiveRoot.set("metadata", metadata);
     }
 
-    // TODO: 通过 Hocuspocus Provider 同步
-
+    // 后续由 HistoryDocProvider 在 handlers 流程中建立同步连接
     this.historyDocs.set(roomId, historyDoc);
+    this.historyDocLoadedAt.set(roomId, Date.now());
     this.resetHistoryIdleTimer(roomId);
 
     return historyDoc;
@@ -680,6 +732,7 @@ export class SubdocManager {
     if (historyDoc) {
       historyDoc.destroy();
       this.historyDocs.delete(roomId);
+      this.historyDocLoadedAt.delete(roomId);
     }
   }
 
@@ -715,7 +768,8 @@ export class SubdocManager {
       result.push({
         guid: docNames.main(roomId),
         type: "main",
-        loadedAt: now, // TODO: 记录实际加载时间
+        // loadedAt 语义：当前进程内该文档首次进入缓存的时间戳
+        loadedAt: this.mainDocLoadedAt.get(roomId) ?? now,
       });
     }
 
@@ -727,7 +781,7 @@ export class SubdocManager {
         result.push({
           guid: doc.guid,
           type: "turn",
-          loadedAt: now,
+          loadedAt: this.turnDocLoadedAt.get(key) ?? now,
           turnNumber,
         });
       }
@@ -738,7 +792,7 @@ export class SubdocManager {
       result.push({
         guid: docNames.history(roomId),
         type: "history",
-        loadedAt: now,
+        loadedAt: this.historyDocLoadedAt.get(roomId) ?? now,
       });
     }
 
@@ -799,6 +853,10 @@ export class SubdocManager {
 
     this.mainDocs.forEach((doc) => doc.destroy());
     this.mainDocs.clear();
+
+    this.historyDocLoadedAt.clear();
+    this.turnDocLoadedAt.clear();
+    this.mainDocLoadedAt.clear();
   }
 
   // ===== 历史消息分页加载（只读） =====
@@ -817,7 +875,8 @@ export class SubdocManager {
     conversationId: string,
     options: PaginationOptions = {},
   ): Promise<PaginatedResult<HistoryMessageItem>> {
-    const { limit = 20, cursor } = options;
+    const { limit, cursor } = options;
+    const normalizedLimit = normalizePositiveInteger(limit, 20);
 
     // 加载 HistoryDoc（会自动重置空闲计时器）
     const historyDoc = await this.loadHistoryDoc(roomId);
@@ -837,15 +896,16 @@ export class SubdocManager {
       };
     }
 
-    const allMessages = messagesArray.toArray() as HistoryMessageItem[];
-    const total = allMessages.length;
+    const total = messagesArray.length;
 
     // 确定起始位置（从末尾开始倒序加载）
-    const startIndex = cursor !== undefined ? cursor : total;
-    const endIndex = Math.max(0, startIndex - limit);
+    const startIndex = normalizeCursor(cursor, total);
+    const endIndex = Math.max(0, startIndex - normalizedLimit);
 
     // 提取指定范围的消息（倒序）
-    const items = allMessages.slice(endIndex, startIndex).reverse();
+    const items = (
+      messagesArray.slice(endIndex, startIndex) as HistoryMessageItem[]
+    ).reverse();
 
     // 计算是否还有更多
     const hasMore = endIndex > 0;
@@ -860,6 +920,35 @@ export class SubdocManager {
   }
 
   /**
+   * 读取最近一段历史消息（受控窗口）
+   *
+   * @param roomId 房间 ID
+   * @param conversationId 会话 ID
+   * @param options 窗口选项（支持默认值和最大值约束）
+   */
+  async getRecentHistoryMessages(
+    roomId: string,
+    conversationId: string,
+    options: HistoryWindowOptions = {},
+  ): Promise<PaginatedResult<HistoryMessageItem>> {
+    const { limit, defaultLimit = 120, maxLimit = 400 } = options;
+
+    const normalizedMaxLimit = normalizePositiveInteger(maxLimit, 400);
+    const normalizedDefaultLimit = Math.min(
+      normalizePositiveInteger(defaultLimit, 120),
+      normalizedMaxLimit,
+    );
+    const normalizedLimit = Math.min(
+      normalizePositiveInteger(limit, normalizedDefaultLimit),
+      normalizedMaxLimit,
+    );
+
+    return this.getHistoryMessages(roomId, conversationId, {
+      limit: normalizedLimit,
+    });
+  }
+
+  /**
    * 分页加载归档回合
    *
    * @param roomId 房间 ID
@@ -869,7 +958,8 @@ export class SubdocManager {
     roomId: string,
     options: PaginationOptions = {},
   ): Promise<PaginatedResult<ArchivedTurn>> {
-    const { limit = 10, cursor } = options;
+    const { limit, cursor } = options;
+    const normalizedLimit = normalizePositiveInteger(limit, 10);
 
     // 加载 HistoryDoc
     const historyDoc = await this.loadHistoryDoc(roomId);
@@ -878,15 +968,14 @@ export class SubdocManager {
     const archivedTurns = historyDoc.getArray(
       "archivedTurns",
     ) as Y.Array<ArchivedTurn>;
-    const allTurns = archivedTurns.toArray();
-    const total = allTurns.length;
+    const total = archivedTurns.length;
 
     // 确定起始位置（从最新开始倒序）
-    const startIndex = cursor !== undefined ? cursor : total;
-    const endIndex = Math.max(0, startIndex - limit);
+    const startIndex = normalizeCursor(cursor, total);
+    const endIndex = Math.max(0, startIndex - normalizedLimit);
 
     // 提取指定范围（倒序）
-    const items = allTurns.slice(endIndex, startIndex).reverse();
+    const items = archivedTurns.slice(endIndex, startIndex).reverse();
 
     // 计算是否还有更多
     const hasMore = endIndex > 0;
