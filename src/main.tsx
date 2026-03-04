@@ -20,6 +20,7 @@ import {
 import { useLorebookStore } from "./lib/lorebook";
 import { usePresetStore } from "./lib/prompt";
 import { registerAllModules } from "./modules";
+import { initializeSessionStore } from "./stores";
 
 // 启用 Immer 的 Map/Set 支持
 enableMapSet();
@@ -144,7 +145,10 @@ async function bootstrap() {
   // 3. 注册所有模块（命令处理器、事件处理器等）
   await registerAllModules();
 
-  // 4. 初始化预设系统
+  // 4. 初始化 Session 聚合 Store（幂等）
+  initializeSessionStore();
+
+  // 5. 初始化预设系统
   try {
     await usePresetStore.getState().loadPresets();
   } catch (error) {
@@ -152,7 +156,7 @@ async function bootstrap() {
     // 预设加载失败不阻塞应用启动，会在使用时提示用户
   }
 
-  // 5. 初始化世界书系统
+  // 6. 初始化世界书系统
   try {
     await useLorebookStore.getState().initialize();
     // 预加载激活的世界书数据到缓存
@@ -162,7 +166,7 @@ async function bootstrap() {
     // 世界书加载失败不阻塞应用启动
   }
 
-  // 6. 渲染应用
+  // 7. 渲染应用
   renderApp();
 }
 

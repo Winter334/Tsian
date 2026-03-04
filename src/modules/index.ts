@@ -17,7 +17,7 @@ import { registerDirectorModule, unregisterDirectorModule } from "./director";
 import { registerGameModule, unregisterGameModule } from "./game";
 import { unregisterInventoryModule } from "./inventory";
 import { registerMemoryModule, unregisterMemoryModule } from "./memory";
-import { registerRoomModule } from "./room";
+import { registerRoomModule, unregisterRoomModule } from "./room";
 import { registerSaveModule, unregisterSaveModule } from "./save";
 import {
   registerWorldArchiveModule,
@@ -53,7 +53,7 @@ export async function registerAllModules(): Promise<void> {
   await registerCheckpointModule();
 
   // Phase 3: 联机模块
-  registerRoomModule(); // Room 模块（联机房间功能）
+  await registerRoomModule(); // Room 模块（联机房间功能）
 }
 
 /**
@@ -69,7 +69,8 @@ export async function unregisterAllModules(): Promise<void> {
   }
 
   // 按注册的逆序卸载
-  // Room 模块暂无 unregister（命令处理器会被覆盖）
+  await unregisterRoomModule();
+
   if (registry.hasModule("lyra.inventory")) {
     await unregisterInventoryModule();
   }

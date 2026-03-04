@@ -20,10 +20,10 @@ import {
   ActionInput,
   TurnNarrativeFlow,
   TurnTimeoutController,
-  useRoomStore,
   useTurnControl,
   useTurnMessages,
 } from "@/modules";
+import { selectIsOnline, useSessionStore } from "@/stores";
 import { useCallback } from "react";
 import { useMessages } from "../hooks";
 import { useChatUIStore } from "../store";
@@ -35,13 +35,74 @@ interface GameViewProps {
   className?: string;
 }
 
+interface OnlineGameViewContentProps {
+  roomId: string;
+  className?: string;
+  onSelectChoice: (choice: string) => void;
+}
+
+function OnlineGameViewContent({
+  roomId,
+  className,
+  onSelectChoice,
+}: OnlineGameViewContentProps) {
+  const turnMessagesResult = useTurnMessages(roomId);
+  const turnControl = useTurnControl(roomId);
+  const shouldLockInput = turnControl.allSubmitted || turnControl.isLocked;
+
+  return (
+    <div className={cn("flex flex-col h-full relative", className)}>
+      {/* 背景层 */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: "rgba(10, 20, 32, 0.6)",
+        }}
+      />
+
+      {/* 网格背景 */}
+      <div
+        className="absolute inset-0 opacity-[0.08] pointer-events-none"
+        style={{
+          backgroundImage: `
+              linear-gradient(rgba(0, 229, 204, 0.6) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(0, 229, 204, 0.6) 1px, transparent 1px)
+            `,
+          backgroundSize: "60px 60px",
+        }}
+      />
+
+      {/* 回合制叙事区（联机模式专用） */}
+      <TurnNarrativeFlow
+        roomId={roomId}
+        messages={turnMessagesResult.messages}
+        isStreaming={turnMessagesResult.isStreaming}
+        onSelectChoice={onSelectChoice}
+        loading={turnMessagesResult.loading}
+        currentTurn={turnMessagesResult.currentTurn}
+        className="flex-1 min-h-0 relative z-10"
+      />
+
+      {/* 超时控制器（负责 TimeoutDialog 生命周期） */}
+      <TurnTimeoutController roomId={roomId} />
+
+      {/* 联机模式行动输入区 */}
+      <ActionInput
+        roomId={roomId}
+        turnNumber={turnMessagesResult.currentTurn}
+        isLocked={shouldLockInput}
+        className="shrink-0 relative z-10"
+      />
+    </div>
+  );
+}
+
 export function GameView({ className }: GameViewProps) {
   const dispatch = useCommand();
 
-  // 检查是否为联机模式
-  const mode = useRoomStore((s) => s.mode);
-  const currentRoom = useRoomStore((s) => s.currentRoom);
-  const isOnlineMode = mode === "online" && currentRoom !== null;
+  // 检查是否为联机模式（roomId 单一来源：SessionStore）
+  const sessionRoomId = useSessionStore((s) => s.roomId);
+  const isOnlineMode = useSessionStore(selectIsOnline);
 
   // UI 状态（从 Zustand）- 单人模式使用
   const currentConversationId = useChatUIStore((s) => s.currentConversationId);
@@ -50,16 +111,6 @@ export function GameView({ className }: GameViewProps) {
 
   // 业务数据（从 Yjs）- 单人模式使用
   const soloMessages = useMessages(isOnlineMode ? null : currentConversationId);
-
-  // 联机模式数据
-  const turnMessagesResult = useTurnMessages(
-    isOnlineMode ? (currentRoom?.roomId ?? null) : null,
-  );
-
-  // 联机模式回合控制状态
-  const turnControl = useTurnControl(currentRoom?.roomId ?? "");
-  // 全员提交或已锁定时，锁定输入框
-  const shouldLockInput = turnControl.allSubmitted || turnControl.isLocked;
 
   // 发送消息 - 单人模式
   const handleSendMessage = useCallback(
@@ -85,52 +136,26 @@ export function GameView({ className }: GameViewProps) {
 
   // ===== 联机模式 =====
   if (isOnlineMode) {
+    if (!sessionRoomId) {
+      return (
+        <div
+          className={cn(
+            "flex-1 flex items-center justify-center",
+            "terminal-text text-lg",
+            className,
+          )}
+        >
+          <p className="opacity-60">正在连接房间...</p>
+        </div>
+      );
+    }
+
     return (
-      <div className={cn("flex flex-col h-full relative", className)}>
-        {/* 背景层 */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: "rgba(10, 20, 32, 0.6)",
-          }}
-        />
-
-        {/* 网格背景 */}
-        <div
-          className="absolute inset-0 opacity-[0.08] pointer-events-none"
-          style={{
-            backgroundImage: `
-              linear-gradient(rgba(0, 229, 204, 0.6) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(0, 229, 204, 0.6) 1px, transparent 1px)
-            `,
-            backgroundSize: "60px 60px",
-          }}
-        />
-
-        {/* 回合制叙事区（联机模式专用） */}
-        <TurnNarrativeFlow
-          roomId={currentRoom?.roomId}
-          messages={turnMessagesResult.messages}
-          isStreaming={turnMessagesResult.isStreaming}
-          onSelectChoice={handleSelectChoice}
-          loading={turnMessagesResult.loading}
-          currentTurn={turnMessagesResult.currentTurn}
-          className="flex-1 min-h-0 relative z-10"
-        />
-
-        {/* 超时控制器（负责 TimeoutDialog 生命周期） */}
-        {currentRoom?.roomId && (
-          <TurnTimeoutController roomId={currentRoom.roomId} />
-        )}
-
-        {/* 联机模式行动输入区 */}
-        <ActionInput
-          roomId={currentRoom?.roomId ?? ""}
-          turnNumber={turnMessagesResult.currentTurn}
-          isLocked={shouldLockInput}
-          className="shrink-0 relative z-10"
-        />
-      </div>
+      <OnlineGameViewContent
+        roomId={sessionRoomId}
+        className={className}
+        onSelectChoice={handleSelectChoice}
+      />
     );
   }
 

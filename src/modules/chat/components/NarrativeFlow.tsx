@@ -16,6 +16,7 @@ import {
   useCheckpoints,
 } from "@/modules/checkpoint";
 import { useRoomStore } from "@/modules/room";
+import { selectIsOnline, useSessionStore } from "@/stores";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   parseGameContent,
@@ -65,7 +66,7 @@ export function NarrativeFlow({
   const dispatch = useCommand();
   const checkpoints = useCheckpoints();
   const { warning, error: toastError } = useToast();
-  const mode = useRoomStore((s) => s.mode);
+  const isOnline = useSessionStore(selectIsOnline);
   const isHost = useRoomStore((s) => s.currentRoom?.isHost ?? false);
 
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(
@@ -108,11 +109,11 @@ export function NarrativeFlow({
   }, [lastAssistantMessage, streamingMessageId]);
 
   const canUseCheckpointActions = useMemo(() => {
-    if (mode !== "online") {
+    if (!isOnline) {
       return true;
     }
     return isHost;
-  }, [isHost, mode]);
+  }, [isHost, isOnline]);
 
   const handleRevertToCheckpoint = useCallback(
     (messageId: string) => {

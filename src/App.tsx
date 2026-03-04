@@ -42,12 +42,14 @@ import {
   GameView,
   MemoryManagerDialog,
   useCurrentSaveId,
-  useRoomStore,
   useSaveSlots,
 } from "./modules";
+import { selectIsOnline, useSessionStore } from "./stores";
 import { useSettingsStore } from "./stores/settings";
 
 type AppState = "splash" | "onboarding" | "title" | "wizard" | "hub" | "game";
+
+const RETURN_TO_TITLE_THROTTLE_MS = 800;
 
 /**
  * 房间事件监听器组件
@@ -63,10 +65,22 @@ function RoomEventListener({
 }) {
   const { toast } = useToast();
   const previousRoomRef = useRef<boolean>(false);
+  const hadOnlineContextRef = useRef<boolean>(false);
+  const lastReturnAtRef = useRef<number>(0);
+
+  const returnToTitleWithThrottle = useCallback(() => {
+    const now = Date.now();
+    if (now - lastReturnAtRef.current < RETURN_TO_TITLE_THROTTLE_MS) {
+      return;
+    }
+    lastReturnAtRef.current = now;
+    onReturnToTitle();
+  }, [onReturnToTitle]);
 
   // 监听联机房间状态 - 当在 wizard/hub/game 状态下房间突然变为 null 时返回标题界面
-  const currentRoom = useRoomStore((s) => s.currentRoom);
-  const mode = useRoomStore((s) => s.mode);
+  const roomId = useSessionStore((s) => s.roomId);
+  const isOnline = useSessionStore(selectIsOnline);
+  const connectionStatus = useSessionStore((s) => s.connectionStatus);
 
   // 监听房间解散事件（使用 useEvent hook 符合架构规范）
   useEvent(RoomEvents.ROOM_DELETED, () => {
@@ -74,7 +88,7 @@ function RoomEventListener({
     toast("info", "房间已解散", "房主解散了房间");
 
     // 返回标题界面
-    onReturnToTitle();
+    returnToTitleWithThrottle();
   });
 
   // 监听记忆压缩跳过提示（预设缺失等）
@@ -98,17 +112,37 @@ function RoomEventListener({
     // 只在 wizard、hub 或 game 状态下检查
     if (appState !== "wizard" && appState !== "hub" && appState !== "game") {
       previousRoomRef.current = false;
+      hadOnlineContextRef.current = false;
       return;
     }
 
-    // 如果之前有房间（联机模式），现在没有了，说明房间被解散或断开
-    if (previousRoomRef.current && !currentRoom && mode === "offline") {
-      onReturnToTitle();
+    const hasRoomContext = !!roomId;
+    const isConnectionUnavailable =
+      connectionStatus === "disconnected" || connectionStatus === "error";
+
+    // 只要出现过房间或联机态，就记录联机上下文（用于时序兜底）
+    if (hasRoomContext || isOnline) {
+      hadOnlineContextRef.current = true;
     }
 
-    // 更新追踪状态
-    previousRoomRef.current = !!currentRoom && mode === "online";
-  }, [currentRoom, mode, appState, onReturnToTitle]);
+    // 原主流程：如果之前有房间（联机模式），现在没有了，说明房间被解散或断开
+    if (previousRoomRef.current && !roomId && !isOnline) {
+      returnToTitleWithThrottle();
+    }
+
+    // 兜底分支：断连已明确不可用，且已无房间上下文，收口回标题
+    if (
+      hadOnlineContextRef.current &&
+      !hasRoomContext &&
+      isConnectionUnavailable
+    ) {
+      returnToTitleWithThrottle();
+      hadOnlineContextRef.current = false;
+    }
+
+    // 更新追踪状态（保持既有主判定）
+    previousRoomRef.current = hasRoomContext && isOnline;
+  }, [roomId, isOnline, connectionStatus, appState, returnToTitleWithThrottle]);
 
   return null;
 }
@@ -197,6 +231,10 @@ function AppContent() {
 
   // 通过 CommandBus 发送命令，符合架构规范
   const dispatch = useCommand();
+
+  // 当前联机会话状态（用于返回标题前的离房收口）
+  const roomId = useSessionStore((s) => s.roomId);
+  const isOnline = useSessionStore(selectIsOnline);
 
   // 开始新游戏 - 打开游戏向导
   const handleStart = () => {
@@ -448,9 +486,24 @@ function AppContent() {
     setAppState("hub");
   };
 
-  // 返回标题画面
-  const handleBackToTitle = () => {
-    setAppState("title");
+  // 返回标题画面（先尝试离房收口，再切回标题）
+  const handleBackToTitle = async () => {
+    try {
+      // 仅在联机且存在房间时执行离房；无房间时直接通过（幂等）
+      if (isOnline && roomId) {
+        await dispatch({
+          type: RoomCommands.LEAVE_ROOM,
+          payload: {
+            roomId,
+            userId: getOrCreateUserId(),
+          },
+        });
+      }
+    } catch {
+      // 离房失败不阻塞回标题
+    } finally {
+      setAppState("title");
+    }
   };
 
   return (

@@ -2,6 +2,15 @@
  * Stores 导出
  */
 
+export {
+  initializeSessionStore,
+  selectIsMultiplayer,
+  selectIsOnline,
+  selectSessionMode,
+  useSessionStore,
+  type SessionMode,
+  type SessionState,
+} from "./session";
 export { useSettingsStore, type AIConfig } from "./settings";
 
 // Room store 已移动到 modules/room/store.ts

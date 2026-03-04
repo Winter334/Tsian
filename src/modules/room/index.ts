@@ -10,8 +10,16 @@
  * - Yjs 文档变化通过 RoomSyncBridge 同步到 Store 并派生事件
  */
 
-import { commandBus } from "@/core/command-bus";
+import { ModuleManifest, registry } from "@/core";
+import {
+  commandBus,
+  type CommandContext,
+  type CommandHandler,
+  type CommandMiddleware,
+  type CommandResult,
+} from "@/core/command-bus";
 import { eventBus } from "@/core/event-bus";
+import { createRoomPermissionMiddleware } from "@/core/middleware/room-permission";
 import {
   historyDocProvider,
   multiplayerProvider,
@@ -67,6 +75,9 @@ let unsubscribers: Array<() => void> = [];
 
 // ===== RoomSyncBridge 实例 =====
 let roomSyncBridge: RoomSyncBridge | null = null;
+
+// ===== room 权限中间件引用（用于安装/卸载对称） =====
+let roomPermissionMiddleware: CommandMiddleware | null = null;
 
 /**
  * 设置 RoomSyncBridge
@@ -301,348 +312,246 @@ function setupEventSubscriptions(): void {
  */
 function setupProviderListeners(): void {
   // 监听连接状态变化
-  multiplayerProvider.on("onStatusChange", (status) => {
-    const store = useRoomStore.getState();
-    store.setConnectionStatus(status);
+  unsubscribers.push(
+    multiplayerProvider.on("onStatusChange", (status) => {
+      const store = useRoomStore.getState();
+      store.setConnectionStatus(status);
 
-    // disconnected 必须无条件清理 SyncBridge
-    // 因为 multiplayerProvider.disconnect() 会先清空 config，再触发 disconnected
-    if (status === "disconnected") {
-      cleanupRoomSyncBridge();
-    }
-
-    // 根据状态发布对应事件
-    const config = multiplayerProvider.getConfig();
-    if (!config) {
-      // disconnected 允许无 config，其余状态记日志便于排查
-      if (status !== "disconnected") {
-        console.warn("[RoomSyncDiag] onStatusChange without config", {
-          status,
-        });
+      // disconnected 必须无条件清理 SyncBridge
+      // 因为 multiplayerProvider.disconnect() 会先清空 config，再触发 disconnected
+      if (status === "disconnected") {
+        cleanupRoomSyncBridge();
       }
-      return;
-    }
 
-    const eventPayload = {
-      roomId: config.roomId,
-      userId: config.userId,
-      timestamp: Date.now(),
-    };
-
-    switch (status) {
-      case "connected":
-        eventBus.emit(eventBus.createEvent(RoomEvents.CONNECTED, eventPayload));
-        break;
-      case "synced":
-        // 同步完成后设置 RoomSyncBridge（幂等，重复调用安全）
-        setupRoomSyncBridge(config.roomId);
-        eventBus.emit(
-          eventBus.createEvent(RoomEvents.RECONNECTED, eventPayload),
-        );
-        break;
-      case "reconnecting":
-        // 通知 SyncBridge 重连中
-        if (roomSyncBridge) {
-          roomSyncBridge.onReconnect();
+      // 根据状态发布对应事件
+      const config = multiplayerProvider.getConfig();
+      if (!config) {
+        // disconnected 允许无 config，其余状态记日志便于排查
+        if (status !== "disconnected") {
+          console.warn("[RoomSyncDiag] onStatusChange without config", {
+            status,
+          });
         }
-        eventBus.emit(
-          eventBus.createEvent(RoomEvents.RECONNECTING, eventPayload),
-        );
-        break;
-      case "disconnected":
-        eventBus.emit(
-          eventBus.createEvent(RoomEvents.DISCONNECTED, eventPayload),
-        );
-        break;
-      case "error":
-        store.setError("连接错误");
-        break;
-    }
-  });
+        return;
+      }
+
+      const eventPayload = {
+        roomId: config.roomId,
+        userId: config.userId,
+        timestamp: Date.now(),
+      };
+
+      switch (status) {
+        case "connected":
+          eventBus.emit(
+            eventBus.createEvent(RoomEvents.CONNECTED, eventPayload),
+          );
+          break;
+        case "synced":
+          // 同步完成后设置 RoomSyncBridge（幂等，重复调用安全）
+          setupRoomSyncBridge(config.roomId);
+          eventBus.emit(
+            eventBus.createEvent(RoomEvents.RECONNECTED, eventPayload),
+          );
+          break;
+        case "reconnecting":
+          // 通知 SyncBridge 重连中
+          if (roomSyncBridge) {
+            roomSyncBridge.onReconnect();
+          }
+          eventBus.emit(
+            eventBus.createEvent(RoomEvents.RECONNECTING, eventPayload),
+          );
+          break;
+        case "disconnected":
+          eventBus.emit(
+            eventBus.createEvent(RoomEvents.DISCONNECTED, eventPayload),
+          );
+          break;
+        case "error":
+          store.setError("连接错误");
+          break;
+      }
+    }),
+  );
 
   // 监听同步完成（确保覆盖首次同步的情况）
-  multiplayerProvider.on("onSynced", () => {
-    const store = useRoomStore.getState();
-    store.setConnectionStatus("synced");
+  unsubscribers.push(
+    multiplayerProvider.on("onSynced", () => {
+      const store = useRoomStore.getState();
+      store.setConnectionStatus("synced");
 
-    // 幂等调用，重复触发安全
-    const config = multiplayerProvider.getConfig();
-    if (config) {
-      setupRoomSyncBridge(config.roomId);
-    }
-  });
+      // 幂等调用，重复触发安全
+      const config = multiplayerProvider.getConfig();
+      if (config) {
+        setupRoomSyncBridge(config.roomId);
+      }
+    }),
+  );
 
   // 监听错误
-  multiplayerProvider.on("onError", (error) => {
-    const store = useRoomStore.getState();
-    store.setError(error.message);
-    store.setConnectionStatus("error");
-  });
+  unsubscribers.push(
+    multiplayerProvider.on("onError", (error) => {
+      const store = useRoomStore.getState();
+      store.setError(error.message);
+      store.setConnectionStatus("error");
+    }),
+  );
 }
+
+/**
+ * 安装 room 权限中间件（幂等）
+ */
+function installRoomPermissionMiddleware(): void {
+  if (roomPermissionMiddleware) {
+    return;
+  }
+
+  const middleware = createRoomPermissionMiddleware({
+    getRoomSnapshot: (roomId) => {
+      const state = useRoomStore.getState();
+      const currentRoom = state.currentRoom;
+      const targetRoomId = roomId ?? currentRoom?.roomId ?? null;
+
+      if (!targetRoomId) {
+        return null;
+      }
+
+      if (currentRoom && currentRoom.roomId !== targetRoomId) {
+        return null;
+      }
+
+      const members = state.members.map((member) => ({
+        userId: member.userId,
+        role: member.role,
+      }));
+
+      return {
+        roomId: targetRoomId,
+        hostUserId:
+          members.find((member) => member.role === "host")?.userId ?? null,
+        localUserId: state.localUser.userId || null,
+        isLocalHost: currentRoom?.isHost ?? false,
+        members,
+      };
+    },
+    getDefaultSender: () => {
+      const sender = useRoomStore.getState().localUser.userId;
+      return sender || null;
+    },
+  });
+
+  commandBus.use(middleware);
+  roomPermissionMiddleware = middleware;
+}
+
+/**
+ * 卸载 room 权限中间件（与安装对称）
+ */
+function uninstallRoomPermissionMiddleware(): void {
+  if (!roomPermissionMiddleware) {
+    return;
+  }
+
+  commandBus.removeMiddleware(roomPermissionMiddleware);
+  roomPermissionMiddleware = null;
+}
+
+/**
+ * 构建房间命令处理器映射
+ */
+function createRoomCommandHandlers(): Record<
+  string,
+  CommandHandler<unknown, unknown>
+> {
+  const wrap = <TPayload, TResult>(
+    handler: (
+      payload: TPayload,
+      context: CommandContext,
+    ) => Promise<CommandResult<TResult>>,
+  ): CommandHandler<unknown, unknown> => {
+    return async (command, context) => {
+      return (await handler(
+        command.payload as TPayload,
+        context,
+      )) as CommandResult<unknown>;
+    };
+  };
+
+  return {
+    [RoomCommands.CREATE_ROOM]: async (command, context) => {
+      resetSyncBridgeState("before_create_room");
+      useRoomStore.getState().setLoading(true);
+      return (await createRoomHandler(
+        command.payload as Parameters<typeof createRoomHandler>[0],
+        context,
+      )) as CommandResult<unknown>;
+    },
+    [RoomCommands.JOIN_ROOM]: async (command, context) => {
+      resetSyncBridgeState("before_join_room");
+      useRoomStore.getState().setLoading(true);
+      return (await joinRoomHandler(
+        command.payload as Parameters<typeof joinRoomHandler>[0],
+        context,
+      )) as CommandResult<unknown>;
+    },
+    [RoomCommands.LEAVE_ROOM]: wrap(leaveRoomHandler),
+    [RoomCommands.UPDATE_MEMBER_STATUS]: wrap(updateMemberStatusHandler),
+    [RoomCommands.START_TURN]: wrap(startTurnHandler),
+    [RoomCommands.SUBMIT_ACTION]: wrap(submitActionHandler),
+    [RoomCommands.TRANSFER_HOST]: wrap(transferHostHandler),
+    [RoomCommands.QUERY_ROOM]: wrap(queryRoomHandler),
+    [RoomCommands.ENTER_PHASE]: wrap(enterPhaseHandler),
+    [RoomCommands.COMPLETE_PHASE]: wrap(completePhaseHandler),
+    [RoomCommands.ADVANCE_PHASE]: wrap(advancePhaseHandler),
+    [RoomCommands.START_GAME]: wrap(startGameHandler),
+    [RoomCommands.END_GAME]: wrap(endGameHandler),
+    [RoomCommands.EXTEND_TURN_DEADLINE]: wrap(extendTurnDeadlineHandler),
+    [RoomCommands.FORCE_START_TURN]: wrap(forceStartTurnHandler),
+    [RoomCommands.LOCK_ACTION]: wrap(lockActionHandler),
+    [RoomCommands.COMPLETE_TURN]: wrap(completeTurnHandler),
+    [RoomCommands.PROCESS_AI_TURN]: wrap(processAiTurnHandler),
+    [RoomCommands.CANCEL_AI_TURN]: wrap(cancelAiTurnHandler),
+    [RoomCommands.REGENERATE_AI_TURN]: wrap(regenerateAiTurnHandler),
+    [RoomCommands.CREATE_CHARACTER]: wrap(createCharacterHandler),
+    [RoomCommands.UPDATE_CHARACTER]: wrap(updateCharacterHandler),
+    [RoomCommands.KICK_MEMBER]: wrap(kickMemberHandler),
+    [RoomCommands.DELETE_ROOM]: wrap(deleteRoomHandler),
+    [RoomCommands.UPDATE_ROOM_SETTINGS]: wrap(updateRoomSettingsHandler),
+    [RoomCommands.UPDATE_ACTION]: wrap(updateActionHandler),
+    [RoomCommands.CREATE_NPC]: wrap(createNpcHandler),
+    [RoomCommands.UPDATE_NPC_STATUS]: wrap(updateNpcStatusHandler),
+    [RoomCommands.UPDATE_NPC_INFO]: wrap(updateNpcInfoHandler),
+  };
+}
+
+const manifest: ModuleManifest = {
+  id: "lyra.room",
+  version: "0.1.0",
+  commands: createRoomCommandHandlers(),
+  onInit: async () => {
+    installRoomPermissionMiddleware();
+    setupEventSubscriptions();
+    setupAiEventSubscriptions();
+    setupProviderListeners();
+  },
+  onStop: async () => {
+    unsubscribers.forEach((unsub) => unsub());
+    unsubscribers = [];
+    cleanupRoomSyncBridge();
+    multiplayerProvider.disconnect();
+    uninstallRoomPermissionMiddleware();
+  },
+  onUnload: async () => {
+    useRoomStore.getState().reset();
+  },
+};
 
 /**
  * 注册房间模块
  */
-export function registerRoomModule(): void {
-  // 注册命令处理器
-  commandBus.register(RoomCommands.CREATE_ROOM, async (command, context) => {
-    // 关键修复：新会话前强制重置，避免 setupCompleted 脏状态跳过 setup
-    resetSyncBridgeState("before_create_room");
-
-    // 设置加载状态
-    useRoomStore.getState().setLoading(true);
-    return createRoomHandler(
-      command.payload as Parameters<typeof createRoomHandler>[0],
-      context,
-    );
-  });
-
-  commandBus.register(RoomCommands.JOIN_ROOM, async (command, context) => {
-    // 关键修复：新会话前强制重置，避免 setupCompleted 脏状态跳过 setup
-    resetSyncBridgeState("before_join_room");
-
-    // 设置加载状态
-    useRoomStore.getState().setLoading(true);
-    return joinRoomHandler(
-      command.payload as Parameters<typeof joinRoomHandler>[0],
-      context,
-    );
-  });
-
-  commandBus.register(RoomCommands.LEAVE_ROOM, async (command, context) => {
-    return leaveRoomHandler(
-      command.payload as Parameters<typeof leaveRoomHandler>[0],
-      context,
-    );
-  });
-
-  commandBus.register(
-    RoomCommands.UPDATE_MEMBER_STATUS,
-    async (command, context) => {
-      return updateMemberStatusHandler(
-        command.payload as Parameters<typeof updateMemberStatusHandler>[0],
-        context,
-      );
-    },
-  );
-
-  commandBus.register(RoomCommands.START_TURN, async (command, context) => {
-    return startTurnHandler(
-      command.payload as Parameters<typeof startTurnHandler>[0],
-      context,
-    );
-  });
-
-  commandBus.register(RoomCommands.SUBMIT_ACTION, async (command, context) => {
-    return submitActionHandler(
-      command.payload as Parameters<typeof submitActionHandler>[0],
-      context,
-    );
-  });
-
-  commandBus.register(RoomCommands.TRANSFER_HOST, async (command, context) => {
-    return transferHostHandler(
-      command.payload as Parameters<typeof transferHostHandler>[0],
-      context,
-    );
-  });
-
-  commandBus.register(RoomCommands.QUERY_ROOM, async (command, context) => {
-    return queryRoomHandler(
-      command.payload as Parameters<typeof queryRoomHandler>[0],
-      context,
-    );
-  });
-
-  // Phase 相关命令
-  commandBus.register(RoomCommands.ENTER_PHASE, async (command, context) => {
-    return enterPhaseHandler(
-      command.payload as Parameters<typeof enterPhaseHandler>[0],
-      context,
-    );
-  });
-
-  commandBus.register(RoomCommands.COMPLETE_PHASE, async (command, context) => {
-    return completePhaseHandler(
-      command.payload as Parameters<typeof completePhaseHandler>[0],
-      context,
-    );
-  });
-
-  commandBus.register(RoomCommands.ADVANCE_PHASE, async (command, context) => {
-    return advancePhaseHandler(
-      command.payload as Parameters<typeof advancePhaseHandler>[0],
-      context,
-    );
-  });
-
-  commandBus.register(RoomCommands.START_GAME, async (command, context) => {
-    return startGameHandler(
-      command.payload as Parameters<typeof startGameHandler>[0],
-      context,
-    );
-  });
-
-  commandBus.register(RoomCommands.END_GAME, async (command, context) => {
-    return endGameHandler(
-      command.payload as Parameters<typeof endGameHandler>[0],
-      context,
-    );
-  });
-
-  // 回合控制命令
-  commandBus.register(
-    RoomCommands.EXTEND_TURN_DEADLINE,
-    async (command, context) => {
-      return extendTurnDeadlineHandler(
-        command.payload as Parameters<typeof extendTurnDeadlineHandler>[0],
-        context,
-      );
-    },
-  );
-
-  commandBus.register(
-    RoomCommands.FORCE_START_TURN,
-    async (command, context) => {
-      return forceStartTurnHandler(
-        command.payload as Parameters<typeof forceStartTurnHandler>[0],
-        context,
-      );
-    },
-  );
-
-  commandBus.register(RoomCommands.LOCK_ACTION, async (command, context) => {
-    return lockActionHandler(
-      command.payload as Parameters<typeof lockActionHandler>[0],
-      context,
-    );
-  });
-
-  commandBus.register(RoomCommands.COMPLETE_TURN, async (command, context) => {
-    return completeTurnHandler(
-      command.payload as Parameters<typeof completeTurnHandler>[0],
-      context,
-    );
-  });
-
-  // ===== AI 处理命令（2.4 新增） =====
-  commandBus.register(
-    RoomCommands.PROCESS_AI_TURN,
-    async (command, context) => {
-      return processAiTurnHandler(
-        command.payload as Parameters<typeof processAiTurnHandler>[0],
-        context,
-      );
-    },
-  );
-
-  commandBus.register(RoomCommands.CANCEL_AI_TURN, async (command, context) => {
-    return cancelAiTurnHandler(
-      command.payload as Parameters<typeof cancelAiTurnHandler>[0],
-      context,
-    );
-  });
-
-  commandBus.register(
-    RoomCommands.REGENERATE_AI_TURN,
-    async (command, context) => {
-      return regenerateAiTurnHandler(
-        command.payload as Parameters<typeof regenerateAiTurnHandler>[0],
-        context,
-      );
-    },
-  );
-
-  // ===== 角色管理命令 =====
-  commandBus.register(
-    RoomCommands.CREATE_CHARACTER,
-    async (command, context) => {
-      return createCharacterHandler(
-        command.payload as Parameters<typeof createCharacterHandler>[0],
-        context,
-      );
-    },
-  );
-
-  commandBus.register(
-    RoomCommands.UPDATE_CHARACTER,
-    async (command, context) => {
-      return updateCharacterHandler(
-        command.payload as Parameters<typeof updateCharacterHandler>[0],
-        context,
-      );
-    },
-  );
-
-  // ===== 踢出/删除命令 =====
-  commandBus.register(RoomCommands.KICK_MEMBER, async (command, context) => {
-    return kickMemberHandler(
-      command.payload as Parameters<typeof kickMemberHandler>[0],
-      context,
-    );
-  });
-
-  commandBus.register(RoomCommands.DELETE_ROOM, async (command, context) => {
-    return deleteRoomHandler(
-      command.payload as Parameters<typeof deleteRoomHandler>[0],
-      context,
-    );
-  });
-
-  // ===== 房间设置/行动命令 =====
-  commandBus.register(
-    RoomCommands.UPDATE_ROOM_SETTINGS,
-    async (command, context) => {
-      return updateRoomSettingsHandler(
-        command.payload as Parameters<typeof updateRoomSettingsHandler>[0],
-        context,
-      );
-    },
-  );
-
-  commandBus.register(RoomCommands.UPDATE_ACTION, async (command, context) => {
-    return updateActionHandler(
-      command.payload as Parameters<typeof updateActionHandler>[0],
-      context,
-    );
-  });
-
-  // ===== NPC 管理命令 =====
-  commandBus.register(RoomCommands.CREATE_NPC, async (command, context) => {
-    return createNpcHandler(
-      command.payload as Parameters<typeof createNpcHandler>[0],
-      context,
-    );
-  });
-
-  commandBus.register(
-    RoomCommands.UPDATE_NPC_STATUS,
-    async (command, context) => {
-      return updateNpcStatusHandler(
-        command.payload as Parameters<typeof updateNpcStatusHandler>[0],
-        context,
-      );
-    },
-  );
-
-  commandBus.register(
-    RoomCommands.UPDATE_NPC_INFO,
-    async (command, context) => {
-      return updateNpcInfoHandler(
-        command.payload as Parameters<typeof updateNpcInfoHandler>[0],
-        context,
-      );
-    },
-  );
-
-  // 设置事件订阅
-  setupEventSubscriptions();
-
-  // 设置 AI 事件订阅（2.4 新增）
-  setupAiEventSubscriptions();
-
-  // 设置 Provider 监听
-  setupProviderListeners();
+export async function registerRoomModule(): Promise<void> {
+  await registry.register(manifest);
 }
 
 /**
@@ -720,22 +629,9 @@ function setupAiEventSubscriptions(): void {
 
 /**
  * 注销房间模块
- *
- * 清理事件订阅和连接
  */
-export function unregisterRoomModule(): void {
-  // 取消所有事件订阅
-  unsubscribers.forEach((unsub) => unsub());
-  unsubscribers = [];
-
-  // 清理 RoomSyncBridge
-  cleanupRoomSyncBridge();
-
-  // 断开连接
-  multiplayerProvider.disconnect();
-
-  // 重置 Store
-  useRoomStore.getState().reset();
+export async function unregisterRoomModule(): Promise<void> {
+  await registry.unregister("lyra.room");
 }
 
 // 导出处理器（供测试使用）
