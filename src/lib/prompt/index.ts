@@ -38,6 +38,9 @@ export { defaultDirectorPreset } from "./presets/default-director";
 export { defaultParserPreset } from "./presets/default-parser";
 export { defaultSummarizerPreset } from "./presets/default-summarizer";
 
+// 协议冻结常量
+export * from "./constants";
+
 // 工具函数
 export { buildVariableContext, createQuickPreset } from "./utils";
 

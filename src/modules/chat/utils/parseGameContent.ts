@@ -1,5 +1,8 @@
-import { postProcessForRender } from "@/lib/post-process";
+import { postProcess, postProcessForRender } from "@/lib/post-process";
+import { BUILTIN_RULES } from "@/lib/post-process/builtin-rules";
+import { mergeRules } from "@/lib/post-process/merge";
 import type { PostProcessRule } from "@/lib/post-process/types";
+import { useFeatureFlagStore } from "@/stores/feature-flags";
 
 /**
  * 游戏内容解析器
@@ -21,7 +24,16 @@ export function parseGameContent(
   content: string,
   presetRules?: PostProcessRule[],
 ): ParsedContent {
-  const result = postProcessForRender(content, presetRules);
+  const useUnifiedPostProcess =
+    useFeatureFlagStore.getState().USE_UNIFIED_POSTPROCESS;
+
+  const result = useUnifiedPostProcess
+    ? postProcess({
+        rawText: content,
+        phase: "render",
+        rules: mergeRules(BUILTIN_RULES, presetRules),
+      })
+    : postProcessForRender(content, presetRules);
 
   // 从 extracted 中获取 choices
   const choicesRaw = result.extracted["choices"];
@@ -38,11 +50,4 @@ export function parseGameContent(
     narrative: result.text,
     choices,
   };
-}
-
-/**
- * 检查内容是否包含选项
- */
-export function hasChoices(content: string): boolean {
-  return /<choices>[\s\S]*?<\/choices>/.test(content);
 }

@@ -2,7 +2,10 @@ import { commandBus } from "@/core";
 import type { AgentDescriptor } from "@/core/pipeline";
 import { MemoryCommands } from "@/domain/commands";
 import type { PipelineBlackboard } from "@/domain/types";
-import { postProcessForPersist } from "@/lib/post-process";
+import { postProcess, postProcessForPersist } from "@/lib/post-process";
+import { BUILTIN_RULES } from "@/lib/post-process/builtin-rules";
+import { mergeRules } from "@/lib/post-process/merge";
+import { useFeatureFlagStore } from "@/stores/feature-flags";
 
 export const postProcessorAgent: AgentDescriptor<PipelineBlackboard> = {
   id: "post-processor",
@@ -19,10 +22,22 @@ export const postProcessorAgent: AgentDescriptor<PipelineBlackboard> = {
     let completionText = narrativeText;
 
     try {
-      const postProcessResult = postProcessForPersist(
-        narrativeText,
-        bb.presets.narrative.postProcessRules,
-      );
+      const useUnifiedPostProcess =
+        useFeatureFlagStore.getState().USE_UNIFIED_POSTPROCESS;
+
+      const postProcessResult = useUnifiedPostProcess
+        ? postProcess({
+            rawText: narrativeText,
+            phase: "persist",
+            rules: mergeRules(
+              BUILTIN_RULES,
+              bb.presets.narrative.postProcessRules,
+            ),
+          })
+        : postProcessForPersist(
+            narrativeText,
+            bb.presets.narrative.postProcessRules,
+          );
 
       bb.cleanNarrative = postProcessResult.text;
       completionText = postProcessResult.text;

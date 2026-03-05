@@ -1,3 +1,4 @@
+import { BUILTIN_RULE_IDS } from "@/lib/prompt/constants";
 import type { PostProcessRule } from "./types";
 
 /**
@@ -5,7 +6,7 @@ import type { PostProcessRule } from "./types";
  */
 export const BUILTIN_RULES: PostProcessRule[] = [
   {
-    id: "builtin:memory-summary",
+    id: BUILTIN_RULE_IDS.MEMORY_SUMMARY,
     name: "Memory Summary 提取",
     description: "提取 <memory_summary> 标签内容，并从正文移除",
     pattern: "<memory_summary>([\\s\\S]*?)</memory_summary>",
@@ -19,7 +20,7 @@ export const BUILTIN_RULES: PostProcessRule[] = [
     order: 0,
   },
   {
-    id: "builtin:choices",
+    id: BUILTIN_RULE_IDS.CHOICES,
     name: "选项提取",
     description: "提取 <choices> 标签内容，并从正文移除",
     pattern: "<choices>([\\s\\S]*?)</choices>",

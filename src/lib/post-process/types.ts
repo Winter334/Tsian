@@ -54,9 +54,21 @@ export interface PostProcessRule {
 }
 
 /**
- * 后处理执行结果
+ * 统一后处理输入契约（Prompt v2 Phase 1）
  */
-export interface PostProcessResult {
+export interface PostProcessInput {
+  /** 原始文本 */
+  rawText: string;
+  /** 执行阶段 */
+  phase: PostProcessPhase;
+  /** 规则列表 */
+  rules: PostProcessRule[];
+}
+
+/**
+ * 统一后处理输出契约（Prompt v2 Phase 1）
+ */
+export interface PostProcessOutput {
   /** 处理后的文本 */
   text: string;
   /** 提取到的结构化数据 */
@@ -64,3 +76,8 @@ export interface PostProcessResult {
   /** 执行警告 */
   warnings: string[];
 }
+
+/**
+ * 后处理执行结果（兼容别名）
+ */
+export type PostProcessResult = PostProcessOutput;

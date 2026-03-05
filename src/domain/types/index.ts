@@ -72,3 +72,13 @@ export * from "./pipeline-blackboard";
  * 轻量管线（Direct Pipeline）类型
  */
 export * from "./direct-action";
+
+/**
+ * Prompt v2 Envelope 协议类型
+ */
+export * from "./envelope";
+
+/**
+ * Prompt v2 Delta 协议类型
+ */
+export * from "./delta";
