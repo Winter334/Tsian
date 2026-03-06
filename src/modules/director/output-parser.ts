@@ -2,9 +2,10 @@ import type {
   ArchiveUpdate,
   EntityArchetype,
   EntityPresence,
-  EntityRelationshipInput,
 } from "@/modules/world-archive/types";
 import type { DirectorOutput, Foreshadow, Milestone, StoryArc } from "./types";
+
+// ─── 类型定义 ─────────────────────────────────────────────
 
 interface ParseOptions {
   ioContract?: {
@@ -13,6 +14,140 @@ interface ParseOptions {
   };
 }
 
+/**
+ * outline_updates 结构化解析结果
+ */
+export type OutlineUpdateInstruction =
+  | {
+      type: "append_arc_deviation";
+      deviation: string;
+    }
+  | {
+      type: "set_arc_status";
+      status: StoryArc["status"];
+    }
+  | {
+      type: "set_milestone_status";
+      milestoneRef: string;
+      status: Milestone["status"];
+    }
+  | {
+      type: "increment_foreshadow_hint";
+      foreshadowRef: string;
+      delta: number;
+    }
+  | {
+      type: "set_foreshadow_status";
+      foreshadowRef: string;
+      status: Foreshadow["status"];
+    }
+  | {
+      type: "add_foreshadow";
+      foreshadow: Omit<Foreshadow, "id">;
+    }
+  | {
+      type: "remove_foreshadow";
+      foreshadowRef: string;
+    };
+
+// ─── archive_updates JSON 条目类型 ─────────────────────────
+
+interface ArchiveCreateOp {
+  op: "create";
+  type: string;
+  name: string;
+  state: string;
+  id?: string;
+  essence?: string;
+  tags?: string[];
+}
+
+interface ArchiveUpdateOp {
+  op: "update";
+  ref: string;
+  state: string;
+}
+
+interface ArchiveEssenceOp {
+  op: "essence";
+  ref: string;
+  essence: string;
+}
+
+interface ArchivePresenceOp {
+  op: "presence";
+  ref: string;
+  presence: string;
+}
+
+interface ArchiveRelateOp {
+  op: "relate";
+  ref: string;
+  target: string;
+  relType: string;
+  relDesc: string;
+}
+
+type ArchiveJsonOp =
+  | ArchiveCreateOp
+  | ArchiveUpdateOp
+  | ArchiveEssenceOp
+  | ArchivePresenceOp
+  | ArchiveRelateOp;
+
+// ─── outline_updates JSON 条目类型 ─────────────────────────
+
+interface OutlineArcDeviationOp {
+  op: "arc_deviation";
+  desc: string;
+}
+
+interface OutlineArcStatusOp {
+  op: "arc_status";
+  status: string;
+}
+
+interface OutlineMilestoneOp {
+  op: "milestone";
+  ref: string;
+  status: string;
+}
+
+interface OutlineForeshadowHintOp {
+  op: "foreshadow_hint";
+  ref: string;
+  delta: number;
+}
+
+interface OutlineForeshadowStatusOp {
+  op: "foreshadow_status";
+  ref: string;
+  status: string;
+}
+
+interface OutlineAddForeshadowOp {
+  op: "add_foreshadow";
+  desc: string;
+  trigger?: string;
+  reveal?: string;
+}
+
+interface OutlineRemoveForeshadowOp {
+  op: "remove_foreshadow";
+  ref: string;
+}
+
+type OutlineJsonOp =
+  | OutlineArcDeviationOp
+  | OutlineArcStatusOp
+  | OutlineMilestoneOp
+  | OutlineForeshadowHintOp
+  | OutlineForeshadowStatusOp
+  | OutlineAddForeshadowOp
+  | OutlineRemoveForeshadowOp;
+
+// ─── 常量 ──────────────────────────────────────────────────
+
 const DEFAULT_REQUIRED_TAGS = [
   "plot_directives",
   "narrative_hints",
@@ -20,39 +155,45 @@ const DEFAULT_REQUIRED_TAGS = [
 ];
 const DEFAULT_OPTIONAL_TAGS = ["outline_updates"];
 
-function normalizeTags(tags?: string[]): string[] {
-  if (!tags) {
-    return [];
-  }
+const VALID_ARCHETYPES = new Set<string>([
+  "character",
+  "event",
+  "faction",
+  "location",
+  "item_unique",
+  "quest",
+  "mystery",
+  "custom",
+]);
 
-  const normalized: string[] = [];
-  for (const tag of tags) {
-    const trimmed = tag.trim();
-    if (!trimmed || normalized.includes(trimmed)) {
-      continue;
-    }
-    normalized.push(trimmed);
-  }
+const VALID_PRESENCES = new Set<string>([
+  "active",
+  "nearby",
+  "dormant",
+  "resolved",
+]);
 
-  return normalized;
-}
+const VALID_ARC_STATUSES = new Set<string>([
+  "active",
+  "completed",
+  "abandoned",
+  "modified",
+]);
 
-function resolveDirectorIoContract(options?: ParseOptions): {
-  requiredTags: string[];
-  optionalTags: string[];
-} {
-  if (!options?.ioContract) {
-    return {
-      requiredTags: [...DEFAULT_REQUIRED_TAGS],
-      optionalTags: [...DEFAULT_OPTIONAL_TAGS],
-    };
-  }
+const VALID_MILESTONE_STATUSES = new Set<string>([
+  "pending",
+  "triggered",
+  "skipped",
+]);
 
-  return {
-    requiredTags: normalizeTags(options.ioContract.requiredTags),
-    optionalTags: normalizeTags(options.ioContract.optionalTags),
-  };
-}
+const VALID_FORESHADOW_STATUSES = new Set<string>([
+  "planted",
+  "hinted",
+  "revealed",
+  "abandoned",
+]);
+
+// ─── 导演输出解析 ──────────────────────────────────────────
 
 /**
  * 解析导演 AI 的 XML 输出
@@ -95,315 +236,52 @@ export function parseDirectorOutput(
   };
 }
 
-/**
- * outline_updates 结构化解析结果
- */
-export type OutlineUpdateInstruction =
-  | {
-      type: "append_arc_deviation";
-      deviation: string;
-    }
-  | {
-      type: "set_arc_status";
-      status: StoryArc["status"];
-    }
-  | {
-      type: "set_milestone_status";
-      milestoneRef: string;
-      status: Milestone["status"];
-    }
-  | {
-      type: "increment_foreshadow_hint";
-      foreshadowRef: string;
-      delta: number;
-    }
-  | {
-      type: "set_foreshadow_status";
-      foreshadowRef: string;
-      status: Foreshadow["status"];
-    }
-  | {
-      type: "add_foreshadow";
-      foreshadow: Omit<Foreshadow, "id">;
-    }
-  | {
-      type: "remove_foreshadow";
-      foreshadowRef: string;
-    };
-
-/**
- * 从 outline_updates 原始文本解析结构化指令
- */
-export function parseOutlineUpdates(
-  raw: string,
-  currentTurn: number,
-): OutlineUpdateInstruction[] {
-  const lines = raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("-"));
-
-  const instructions: OutlineUpdateInstruction[] = [];
-
-  for (const line of lines) {
-    const content = stripWrappingQuotes(line.slice(1).trim());
-    if (!content) {
-      continue;
-    }
-
-    const deviationMatch = content.match(/^弧线偏离(?:记录)?[：:]\s*(.+)$/u);
-    if (deviationMatch) {
-      const deviation = stripWrappingQuotes(deviationMatch[1].trim());
-      if (deviation) {
-        instructions.push({
-          type: "append_arc_deviation",
-          deviation,
-        });
-      }
-      continue;
-    }
-
-    const arcStatusMatch = content.match(
-      /^弧线状态(?:变更)?[：:]\s*(active|completed|abandoned|modified|进行中|已完成|放弃|废弃|已废弃|已修改|改写)/iu,
-    );
-    if (arcStatusMatch) {
-      const status = mapStoryArcStatus(arcStatusMatch[1]);
-      if (status) {
-        instructions.push({
-          type: "set_arc_status",
-          status,
-        });
-      }
-      continue;
-    }
-
-    const milestoneMatch = content.match(
-      /^里程碑["“”'‘’]?([^：:]+?)["“”'‘’]?[：:]\s*(pending|triggered|skipped|待触发|未触发|已触发|触发|跳过|已跳过)/iu,
-    );
-    if (milestoneMatch) {
-      const milestoneRef = stripWrappingQuotes(milestoneMatch[1].trim());
-      const status = mapMilestoneStatus(milestoneMatch[2]);
-      if (milestoneRef && status) {
-        instructions.push({
-          type: "set_milestone_status",
-          milestoneRef,
-          status,
-        });
-      }
-      continue;
-    }
-
-    const foreshadowHintMatch = content.match(
-      /^伏笔["“”'‘’]?([^：:]+?)["“”'‘’]?[：:]\s*暗示次数\s*([+-])\s*(\d+)/iu,
-    );
-    if (foreshadowHintMatch) {
-      const foreshadowRef = stripWrappingQuotes(foreshadowHintMatch[1].trim());
-      const sign = foreshadowHintMatch[2];
-      const amount = Number.parseInt(foreshadowHintMatch[3], 10);
-      if (foreshadowRef && Number.isFinite(amount) && amount > 0) {
-        instructions.push({
-          type: "increment_foreshadow_hint",
-          foreshadowRef,
-          delta: sign === "-" ? -amount : amount,
-        });
-      }
-      continue;
-    }
-
-    const foreshadowStatusMatch = content.match(
-      /^伏笔["“”'‘’]?([^：:]+?)["“”'‘’]?[：:]\s*(?:状态(?:变更)?为?|status\s*(?:=|:|为))\s*(planted|hinted|revealed|abandoned|埋下|已埋下|暗示中|已暗示|揭示|已揭示|放弃|废弃|已放弃)/iu,
-    );
-    if (foreshadowStatusMatch) {
-      const foreshadowRef = stripWrappingQuotes(
-        foreshadowStatusMatch[1].trim(),
-      );
-      const status = mapForeshadowStatus(foreshadowStatusMatch[2]);
-      if (foreshadowRef && status) {
-        instructions.push({
-          type: "set_foreshadow_status",
-          foreshadowRef,
-          status,
-        });
-      }
-      continue;
-    }
-
-    const addForeshadowMatch = content.match(/^新增伏笔[：:]\s*(.+)$/u);
-    if (addForeshadowMatch) {
-      const seed = stripWrappingQuotes(addForeshadowMatch[1].trim());
-      if (seed) {
-        instructions.push({
-          type: "add_foreshadow",
-          foreshadow: {
-            description: seed,
-            plantedAtTurn: currentTurn,
-            triggerCondition: "待导演后续细化",
-            revealEffect: "待导演后续细化",
-            status: "planted",
-            hintCount: 0,
-            relatedEntityIds: [],
-          },
-        });
-      }
-      continue;
-    }
-
-    const removeForeshadowMatch = content.match(/^移除伏笔[：:]\s*(.+)$/u);
-    if (removeForeshadowMatch) {
-      const foreshadowRef = stripWrappingQuotes(
-        removeForeshadowMatch[1].trim(),
-      );
-      if (foreshadowRef) {
-        instructions.push({
-          type: "remove_foreshadow",
-          foreshadowRef,
-        });
-      }
-      continue;
-    }
-  }
-
-  return instructions;
-}
+// ─── archive_updates JSON 解析 ────────────────────────────
 
 /**
  * 从 archive_updates 原始文本解析 ArchiveUpdate 数组
  *
- * 支持格式：
- * - 实体名(entityId)：状态描述
- * - 实体名：状态描述
+ * 输入为 JSON 数组格式，每个元素包含 `op` 字段标识操作类型。
+ * `ref` 字段通过 `entityLookup` 做名称/ID 模糊匹配。
  *
- * 需要通过 entityLookup 做名称/ID 的模糊匹配。
+ * @throws {DirectorOutputParseError} 当 JSON 解析失败或类型校验不通过时
  */
 export function parseArchiveUpdates(
   raw: string,
   entityLookup: (nameOrId: string) => string | undefined,
   currentTurn: number,
 ): ArchiveUpdate[] {
-  const updates: ArchiveUpdate[] = [];
-  const parseErrors: string[] = [];
-
-  const normalizedRaw = normalizeArchiveUpdateMarkdown(raw);
-  const lines = normalizedRaw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("-"));
-
-  for (const line of lines) {
-    const content = line.slice(1).trim();
-    if (!content) {
-      continue;
-    }
-
-    const created = tryParseCreateEntity(content);
-    if (created) {
-      updates.push(created);
-      continue;
-    }
-
-    const match = content.match(/^(.+?)(?:\(([^)]+)\))?[：:]\s*(.+)$/u);
-    if (!match) {
-      parseErrors.push(`条目格式不匹配：${content}`);
-      continue;
-    }
-
-    const [, entityName, explicitId, description] = match;
-
-    const trimmedName = stripWrappingQuotes(entityName.trim());
-    const trimmedDesc = description.trim();
-    const normalizedDesc = stripWrappingQuotes(trimmedDesc);
-
-    const createdFromDescription = tryParseCreateEntity(
-      normalizedDesc,
-      trimmedName,
-      explicitId,
-    );
-    if (createdFromDescription) {
-      updates.push(createdFromDescription);
-      continue;
-    }
-
-    const entityId = resolveEntityId(trimmedName, explicitId, entityLookup);
-
-    if (!entityId) {
-      parseErrors.push(`无法匹配实体：${trimmedName}`);
-      continue;
-    }
-
-    const parsedPresence = tryParsePresence(normalizedDesc);
-    if (parsedPresence) {
-      pushPresenceChange(
-        updates,
-        entityId,
-        parsedPresence,
-        normalizedDesc,
-        currentTurn,
-      );
-      continue;
-    }
-
-    const parsedRelationship = tryParseRelationship(
-      normalizedDesc,
-      entityLookup,
-    );
-    if (parsedRelationship) {
-      pushRelationshipChange(
-        updates,
-        entityId,
-        parsedRelationship,
-        currentTurn,
-      );
-      continue;
-    }
-
-    if (hasPresenceKeyword(normalizedDesc)) {
-      parseErrors.push(`存在状态更新缺少有效值：${content}`);
-      continue;
-    }
-
-    if (hasRelationshipKeyword(normalizedDesc)) {
-      parseErrors.push(`关系更新无法解析目标或类型：${content}`);
-      continue;
-    }
-
-    if (
-      normalizedDesc.startsWith("状态更新为") ||
-      normalizedDesc.startsWith("状态更新：") ||
-      normalizedDesc.startsWith("状态更新:")
-    ) {
-      const newState = stripWrappingQuotes(
-        normalizedDesc.replace(/^状态更新[为：:]\s*/u, "").trim(),
-      );
-      if (!newState) {
-        parseErrors.push(`状态更新缺少状态文本：${content}`);
-        continue;
-      }
-      pushStateChange(updates, entityId, newState, currentTurn);
-      continue;
-    }
-
-    if (
-      normalizedDesc.startsWith("进展为") ||
-      normalizedDesc.startsWith("进展：") ||
-      normalizedDesc.startsWith("进展:")
-    ) {
-      const newState = stripWrappingQuotes(
-        normalizedDesc.replace(/^进展[为：:]\s*/u, "").trim(),
-      );
-      if (!newState) {
-        parseErrors.push(`进展更新缺少状态文本：${content}`);
-        continue;
-      }
-      pushStateChange(updates, entityId, newState, currentTurn);
-      continue;
-    }
-
-    pushStateChange(updates, entityId, normalizedDesc, currentTurn);
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === "[]") {
+    return [];
   }
 
-  if (parseErrors.length > 0) {
+  const items = parseJsonArray<ArchiveJsonOp>(trimmed, "archive_updates");
+  const updates: ArchiveUpdate[] = [];
+  const errors: string[] = [];
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (!item || typeof item !== "object" || !item.op) {
+      errors.push(`[${i}] 缺少 op 字段`);
+      continue;
+    }
+
+    try {
+      const update = mapArchiveOp(item, entityLookup, currentTurn);
+      if (update) {
+        updates.push(update);
+      }
+    } catch (error) {
+      errors.push(
+        `[${i}] op="${item.op}": ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  if (errors.length > 0) {
     throw new DirectorOutputParseError(
-      `archive_updates 解析失败：\n- ${parseErrors.join("\n- ")}`,
+      `archive_updates 解析失败：\n- ${errors.join("\n- ")}`,
       raw,
     );
   }
@@ -411,473 +289,497 @@ export function parseArchiveUpdates(
   return updates;
 }
 
-function resolveEntityId(
-  name: string,
-  explicitId: string | undefined,
+function mapArchiveOp(
+  item: ArchiveJsonOp,
   entityLookup: (nameOrId: string) => string | undefined,
-): string | undefined {
-  const normalizedExplicit = stripWrappingQuotes(explicitId?.trim() ?? "");
-  if (normalizedExplicit) {
-    return normalizedExplicit;
-  }
-
-  if (!name) {
-    return undefined;
-  }
-
-  return entityLookup(name);
-}
-
-function pushStateChange(
-  updates: ArchiveUpdate[],
-  entityId: string,
-  newState: string,
   _currentTurn: number,
-): void {
-  updates.push({ type: "update_state", entityId, newState });
-}
-
-function pushPresenceChange(
-  updates: ArchiveUpdate[],
-  entityId: string,
-  newPresence: EntityPresence,
-  _description: string,
-  _currentTurn: number,
-): void {
-  updates.push({ type: "update_presence", entityId, newPresence });
-}
-
-function pushRelationshipChange(
-  updates: ArchiveUpdate[],
-  entityId: string,
-  relationship: EntityRelationshipInput,
-  _currentTurn: number,
-): void {
-  updates.push({
-    type: "add_relationship",
-    entityId,
-    relationship,
-  });
-}
-
-function hasPresenceKeyword(description: string): boolean {
-  return /存在状态|presence\s*status|(?:→|->)\s*(?:active|nearby|dormant|resolved|活跃|附近|临近|休眠|潜伏|已解决|终结)|(?:变为|切换为|调整为)\s*(?:active|nearby|dormant|resolved|活跃|附近|临近|休眠|潜伏|已解决|终结)/iu.test(
-    description,
-  );
-}
-
-function hasRelationshipKeyword(description: string): boolean {
-  return /关系(?:更新|变更)?[：:]?|与.+建立了/u.test(description);
-}
-
-function tryParsePresence(description: string): EntityPresence | null {
-  const fromToMatch = description.match(
-    /从\s*[^，。；;]+?\s*变为\s*(active|nearby|dormant|resolved|活跃|附近|临近|休眠|潜伏|已解决|终结)/iu,
-  );
-  if (fromToMatch) {
-    return resolvePresence(fromToMatch[1]);
-  }
-
-  const directMatch = description.match(
-    /(?:存在状态(?:变更)?(?:为|：|:)?|presence(?:\s+status)?(?:\s*(?:为|to|:|：))?)\s*(active|nearby|dormant|resolved|活跃|附近|临近|休眠|潜伏|已解决|终结)/iu,
-  );
-  if (directMatch) {
-    return resolvePresence(directMatch[1]);
-  }
-
-  const arrowMatch = description.match(
-    /(?:→|->)\s*(active|nearby|dormant|resolved|活跃|附近|临近|休眠|潜伏|已解决|终结)/iu,
-  );
-  if (arrowMatch) {
-    return resolvePresence(arrowMatch[1]);
-  }
-
-  return null;
-}
-
-function resolvePresence(token: string): EntityPresence | null {
-  const normalized = token.trim().toLowerCase();
-
-  switch (normalized) {
-    case "active":
-    case "活跃":
-      return "active";
-    case "nearby":
-    case "附近":
-    case "临近":
-      return "nearby";
-    case "dormant":
-    case "休眠":
-    case "潜伏":
-      return "dormant";
-    case "resolved":
-    case "已解决":
-    case "终结":
-      return "resolved";
+): ArchiveUpdate | null {
+  switch (item.op) {
+    case "create":
+      return mapArchiveCreate(item);
+    case "update":
+      return mapArchiveUpdate(item, entityLookup);
+    case "essence":
+      return mapArchiveEssence(item, entityLookup);
+    case "presence":
+      return mapArchivePresence(item, entityLookup);
+    case "relate":
+      return mapArchiveRelate(item, entityLookup);
     default:
-      return null;
+      throw new Error(`未知操作类型: ${(item as { op: string }).op}`);
   }
 }
 
-function tryParseRelationship(
-  description: string,
-  entityLookup: (nameOrId: string) => string | undefined,
-): EntityRelationshipInput | null {
-  const establishMatch = description.match(
-    /与\s*([^\s，。；;：:()（）]+)(?:[（(]([^)）]+)[）)])?\s*建立了\s*([^，。；;：:]+?)\s*关系/u,
-  );
-  if (establishMatch) {
-    const targetName = stripWrappingQuotes(establishMatch[1].trim());
-    const targetEntityId = resolveEntityId(
-      targetName,
-      establishMatch[2],
-      entityLookup,
-    );
-    if (!targetEntityId) {
-      return null;
-    }
-
-    const type = stripWrappingQuotes(establishMatch[3].trim()) || "关系更新";
-    return {
-      targetEntityId,
-      type,
-      description,
-    };
+function mapArchiveCreate(item: ArchiveCreateOp): ArchiveUpdate {
+  if (!item.name || typeof item.name !== "string" || !item.name.trim()) {
+    throw new Error("create 操作缺少有效的 name 字段");
+  }
+  if (!item.type || typeof item.type !== "string" || !item.type.trim()) {
+    throw new Error("create 操作缺少有效的 type 字段");
+  }
+  if (!item.state || typeof item.state !== "string" || !item.state.trim()) {
+    throw new Error("create 操作缺少有效的 state 字段");
   }
 
-  if (!description.match(/^关系(?:更新|变更)?[：:]/u)) {
-    return null;
-  }
-
-  const payload = description
-    .replace(/^关系(?:更新|变更)?[：:]\s*/u, "")
-    .trim();
-
-  const targetMatch =
-    payload.match(
-      /(?:与|对)\s*([^\s，。；;：:()（）]+)(?:[（(]([^)）]+)[）)])?/u,
-    ) ??
-    payload.match(
-      /目标(?:实体)?[：:]\s*([^\s，。；;：:()（）]+)(?:[（(]([^)）]+)[）)])?/u,
-    );
-
-  if (!targetMatch) {
-    return null;
-  }
-
-  const targetName = stripWrappingQuotes(targetMatch[1].trim());
-  const targetEntityId = resolveEntityId(
-    targetName,
-    targetMatch[2],
-    entityLookup,
-  );
-  if (!targetEntityId) {
-    return null;
-  }
-
-  const typeMatch =
-    payload.match(/(?:关系类型|类型)[：:]\s*([^，。；;：:\n]+)/u) ??
-    payload.match(/建立了\s*([^，。；;：:]+?)\s*关系/u) ??
-    payload.match(/从\s*[^，。；;：:]+?\s*变为\s*([^，。；;：:\n]+)/u);
-
-  const type =
-    stripWrappingQuotes(typeMatch?.[1]?.trim() ?? "关系更新") || "关系更新";
-
-  return {
-    targetEntityId,
-    type,
-    description,
-  };
-}
-
-function tryParseCreateEntity(
-  content: string,
-  fallbackName?: string,
-  fallbackGameEntityId?: string,
-): Extract<ArchiveUpdate, { type: "create_entity" }> | null {
-  if (!/(新增实体|首次出现)/u.test(content)) {
-    return null;
-  }
-
-  const prefixedNameMatch = content.match(
-    /(?:新增实体|首次出现)(?:了|的)?(?:实体)?[：:]?\s*([^\s，。；;：:（）()[\]]+)/u,
-  );
-
-  const rawFallbackName =
-    fallbackName && !/^(新增实体|首次出现)$/u.test(fallbackName)
-      ? fallbackName.trim()
-      : "";
-  const fallbackNameParts = splitEntityRef(rawFallbackName);
-
-  const candidateName = stripWrappingQuotes(
-    prefixedNameMatch?.[1]?.trim() ?? fallbackNameParts.name,
-  );
-
-  if (!candidateName || !isMeaningfulEntityName(candidateName)) {
-    return null;
-  }
-
-  const archetype = parseEntityArchetype(content);
-
-  const initialStateMatch = content.match(
-    /(?:初始状态|当前状态|状态(?:为|：|:)|现状)[：:]\s*([^。；;，,\n]+)/u,
-  );
-  const essenceMatch = content.match(
-    /(?:本质|身份|设定|特征)[：:]\s*([^。；;，,\n]+)/u,
-  );
-
-  const initialState = stripWrappingQuotes(
-    initialStateMatch?.[1]?.trim() ?? `${candidateName}首次出现。`,
-  );
-  const essence = stripWrappingQuotes(
-    essenceMatch?.[1]?.trim() ?? initialState,
-  );
-
-  const normalizedFallbackGameEntityId = stripWrappingQuotes(
-    fallbackGameEntityId?.trim() ?? "",
-  );
-  const gameEntityId =
-    fallbackNameParts.gameEntityId ??
-    (isLikelyGameEntityId(normalizedFallbackGameEntityId)
-      ? normalizedFallbackGameEntityId
-      : undefined) ??
-    extractGameEntityIdFromText(content, candidateName);
+  const archetype = resolveArchetype(item.type);
 
   return {
     type: "create_entity",
     archetype,
-    name: candidateName,
-    essence,
-    initialState,
-    gameEntityId,
+    name: item.name.trim(),
+    essence:
+      item.essence && typeof item.essence === "string" && item.essence.trim()
+        ? item.essence.trim()
+        : item.state.trim(),
+    initialState: item.state.trim(),
+    gameEntityId:
+      item.id && typeof item.id === "string" && item.id.trim()
+        ? item.id.trim()
+        : undefined,
+    tags: Array.isArray(item.tags)
+      ? item.tags
+          .filter((t): t is string => typeof t === "string")
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+      : undefined,
   };
 }
 
-function splitEntityRef(raw: string): { name: string; gameEntityId?: string } {
-  const normalized = stripWrappingQuotes(raw.trim());
-  if (!normalized) {
-    return { name: "" };
+function mapArchiveUpdate(
+  item: ArchiveUpdateOp,
+  entityLookup: (nameOrId: string) => string | undefined,
+): ArchiveUpdate {
+  const entityId = resolveRef(item.ref, entityLookup);
+  if (!item.state || typeof item.state !== "string") {
+    throw new Error("update 操作缺少 state 字段");
   }
-
-  const match = normalized.match(/^(.+?)\s*[（(]\s*([^)）]+)\s*[）)]$/u);
-  if (!match) {
-    return { name: normalized };
-  }
-
-  const name = stripWrappingQuotes(match[1].trim());
-  const token = stripWrappingQuotes(match[2].trim());
-
-  if (!name || !isLikelyGameEntityId(token)) {
-    return { name: normalized };
-  }
-
-  return { name, gameEntityId: token };
+  return { type: "update_state", entityId, newState: item.state.trim() };
 }
 
-function extractGameEntityIdFromText(
-  content: string,
-  preferredName: string,
-): string | undefined {
-  const escapedName = escapeRegExp(preferredName);
-  const aroundName = content.match(
-    new RegExp(`${escapedName}\\s*[（(]\\s*([^)）]+)\\s*[）)]`, "u"),
-  );
-  const aroundNameId = stripWrappingQuotes(aroundName?.[1]?.trim() ?? "");
-  if (isLikelyGameEntityId(aroundNameId)) {
-    return aroundNameId;
+function mapArchiveEssence(
+  item: ArchiveEssenceOp,
+  entityLookup: (nameOrId: string) => string | undefined,
+): ArchiveUpdate {
+  const entityId = resolveRef(item.ref, entityLookup);
+  if (!item.essence || typeof item.essence !== "string") {
+    throw new Error("essence 操作缺少 essence 字段");
+  }
+  return {
+    type: "update_essence",
+    entityId,
+    newEssence: item.essence.trim(),
+  };
+}
+
+function mapArchivePresence(
+  item: ArchivePresenceOp,
+  entityLookup: (nameOrId: string) => string | undefined,
+): ArchiveUpdate {
+  const entityId = resolveRef(item.ref, entityLookup);
+  if (!item.presence || typeof item.presence !== "string") {
+    throw new Error("presence 操作缺少 presence 字段");
+  }
+  const presence = item.presence.trim().toLowerCase();
+  if (!VALID_PRESENCES.has(presence)) {
+    throw new Error(
+      `presence 值无效: "${item.presence}"，期望 active/nearby/dormant/resolved`,
+    );
+  }
+  return {
+    type: "update_presence",
+    entityId,
+    newPresence: presence as EntityPresence,
+  };
+}
+
+function mapArchiveRelate(
+  item: ArchiveRelateOp,
+  entityLookup: (nameOrId: string) => string | undefined,
+): ArchiveUpdate {
+  const entityId = resolveRef(item.ref, entityLookup);
+
+  if (!item.target || typeof item.target !== "string") {
+    throw new Error("relate 操作缺少 target 字段");
+  }
+  if (!item.relType || typeof item.relType !== "string") {
+    throw new Error("relate 操作缺少 relType 字段");
+  }
+  if (!item.relDesc || typeof item.relDesc !== "string") {
+    throw new Error("relate 操作缺少 relDesc 字段");
   }
 
-  const genericPattern = /[（(]\s*([^)）]+)\s*[）)]/gu;
-  for (const match of content.matchAll(genericPattern)) {
-    const candidate = stripWrappingQuotes(match[1].trim());
-    if (isLikelyGameEntityId(candidate)) {
-      return candidate;
+  const targetEntityId = resolveRef(item.target, entityLookup);
+
+  return {
+    type: "add_relationship",
+    entityId,
+    relationship: {
+      targetEntityId,
+      type: item.relType.trim(),
+      description: item.relDesc.trim(),
+    },
+  };
+}
+
+// ─── outline_updates JSON 解析 ────────────────────────────
+
+/**
+ * 从 outline_updates 原始文本解析结构化指令
+ *
+ * 输入为 JSON 数组格式，每个元素包含 `op` 字段标识操作类型。
+ *
+ * @throws {DirectorOutputParseError} 当 JSON 解析失败或类型校验不通过时
+ */
+export function parseOutlineUpdates(
+  raw: string,
+  currentTurn: number,
+): OutlineUpdateInstruction[] {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === "[]") {
+    return [];
+  }
+
+  const items = parseJsonArray<OutlineJsonOp>(trimmed, "outline_updates");
+  const instructions: OutlineUpdateInstruction[] = [];
+  const errors: string[] = [];
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (!item || typeof item !== "object" || !item.op) {
+      errors.push(`[${i}] 缺少 op 字段`);
+      continue;
+    }
+
+    try {
+      const instruction = mapOutlineOp(item, currentTurn);
+      if (instruction) {
+        instructions.push(instruction);
+      }
+    } catch (error) {
+      errors.push(
+        `[${i}] op="${item.op}": ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
-  return undefined;
+  if (errors.length > 0) {
+    throw new DirectorOutputParseError(
+      `outline_updates 解析失败：\n- ${errors.join("\n- ")}`,
+      raw,
+    );
+  }
+
+  return instructions;
 }
 
-function isLikelyGameEntityId(token: string): boolean {
-  const normalized = token.trim();
-  if (!normalized) {
-    return false;
+function mapOutlineOp(
+  item: OutlineJsonOp,
+  currentTurn: number,
+): OutlineUpdateInstruction | null {
+  switch (item.op) {
+    case "arc_deviation":
+      return mapArcDeviation(item);
+    case "arc_status":
+      return mapArcStatus(item);
+    case "milestone":
+      return mapMilestone(item);
+    case "foreshadow_hint":
+      return mapForeshadowHint(item);
+    case "foreshadow_status":
+      return mapForeshadowStatus(item);
+    case "add_foreshadow":
+      return mapAddForeshadow(item, currentTurn);
+    case "remove_foreshadow":
+      return mapRemoveForeshadow(item);
+    default:
+      throw new Error(`未知操作类型: ${(item as { op: string }).op}`);
+  }
+}
+
+function mapArcDeviation(
+  item: OutlineArcDeviationOp,
+): OutlineUpdateInstruction {
+  if (!item.desc || typeof item.desc !== "string") {
+    throw new Error("arc_deviation 操作缺少 desc 字段");
+  }
+  return { type: "append_arc_deviation", deviation: item.desc.trim() };
+}
+
+function mapArcStatus(item: OutlineArcStatusOp): OutlineUpdateInstruction {
+  if (!item.status || typeof item.status !== "string") {
+    throw new Error("arc_status 操作缺少 status 字段");
+  }
+  const status = item.status.trim().toLowerCase();
+  if (!VALID_ARC_STATUSES.has(status)) {
+    throw new Error(
+      `arc_status 值无效: "${item.status}"，期望 active/completed/abandoned/modified`,
+    );
+  }
+  return {
+    type: "set_arc_status",
+    status: status as StoryArc["status"],
+  };
+}
+
+function mapMilestone(item: OutlineMilestoneOp): OutlineUpdateInstruction {
+  if (!item.ref || typeof item.ref !== "string") {
+    throw new Error("milestone 操作缺少 ref 字段");
+  }
+  if (!item.status || typeof item.status !== "string") {
+    throw new Error("milestone 操作缺少 status 字段");
+  }
+  const status = item.status.trim().toLowerCase();
+  if (!VALID_MILESTONE_STATUSES.has(status)) {
+    throw new Error(
+      `milestone status 值无效: "${item.status}"，期望 pending/triggered/skipped`,
+    );
+  }
+  return {
+    type: "set_milestone_status",
+    milestoneRef: item.ref.trim(),
+    status: status as Milestone["status"],
+  };
+}
+
+function mapForeshadowHint(
+  item: OutlineForeshadowHintOp,
+): OutlineUpdateInstruction {
+  if (!item.ref || typeof item.ref !== "string") {
+    throw new Error("foreshadow_hint 操作缺少 ref 字段");
+  }
+  if (typeof item.delta !== "number" || !Number.isFinite(item.delta)) {
+    throw new Error("foreshadow_hint 操作的 delta 必须是有效数字");
+  }
+  return {
+    type: "increment_foreshadow_hint",
+    foreshadowRef: item.ref.trim(),
+    delta: item.delta,
+  };
+}
+
+function mapForeshadowStatus(
+  item: OutlineForeshadowStatusOp,
+): OutlineUpdateInstruction {
+  if (!item.ref || typeof item.ref !== "string") {
+    throw new Error("foreshadow_status 操作缺少 ref 字段");
+  }
+  if (!item.status || typeof item.status !== "string") {
+    throw new Error("foreshadow_status 操作缺少 status 字段");
+  }
+  const status = item.status.trim().toLowerCase();
+  if (!VALID_FORESHADOW_STATUSES.has(status)) {
+    throw new Error(
+      `foreshadow_status 值无效: "${item.status}"，期望 planted/hinted/revealed/abandoned`,
+    );
+  }
+  return {
+    type: "set_foreshadow_status",
+    foreshadowRef: item.ref.trim(),
+    status: status as Foreshadow["status"],
+  };
+}
+
+function mapAddForeshadow(
+  item: OutlineAddForeshadowOp,
+  currentTurn: number,
+): OutlineUpdateInstruction {
+  if (!item.desc || typeof item.desc !== "string") {
+    throw new Error("add_foreshadow 操作缺少 desc 字段");
+  }
+  return {
+    type: "add_foreshadow",
+    foreshadow: {
+      description: item.desc.trim(),
+      plantedAtTurn: currentTurn,
+      triggerCondition:
+        item.trigger && typeof item.trigger === "string"
+          ? item.trigger.trim()
+          : "待导演后续细化",
+      revealEffect:
+        item.reveal && typeof item.reveal === "string"
+          ? item.reveal.trim()
+          : "待导演后续细化",
+      status: "planted",
+      hintCount: 0,
+      relatedEntityIds: [],
+    },
+  };
+}
+
+function mapRemoveForeshadow(
+  item: OutlineRemoveForeshadowOp,
+): OutlineUpdateInstruction {
+  if (!item.ref || typeof item.ref !== "string") {
+    throw new Error("remove_foreshadow 操作缺少 ref 字段");
+  }
+  return {
+    type: "remove_foreshadow",
+    foreshadowRef: item.ref.trim(),
+  };
+}
+
+// ─── 共用工具函数 ──────────────────────────────────────────
+
+/**
+ * 解析 JSON 数组，包含容错修复层
+ *
+ * 容错策略：
+ * 1. 首先尝试直接 JSON.parse
+ * 2. 失败时自动修复常见 AI 错误（尾逗号、单引号、未转义换行）后重试
+ * 3. 仍然失败则抛出 DirectorOutputParseError
+ */
+function parseJsonArray<T>(raw: string, context: string): T[] {
+  // 第一次尝试：直接解析
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      throw new DirectorOutputParseError(
+        `${context} 期望 JSON 数组，实际为 ${typeof parsed}`,
+        raw,
+      );
+    }
+    return parsed as T[];
+  } catch (error) {
+    if (error instanceof DirectorOutputParseError) {
+      throw error;
+    }
+    // 继续尝试修复
   }
 
-  const lower = normalized.toLowerCase();
-  if (
-    lower === "character" ||
-    lower === "event" ||
-    lower === "faction" ||
-    lower === "location" ||
-    lower === "item_unique" ||
-    lower === "quest" ||
-    lower === "mystery" ||
-    lower === "custom"
-  ) {
-    return false;
+  // 第二次尝试：自动修复后重试
+  const fixed = repairJson(raw);
+  try {
+    const parsed: unknown = JSON.parse(fixed);
+    if (!Array.isArray(parsed)) {
+      throw new DirectorOutputParseError(
+        `${context} 期望 JSON 数组，修复后仍为 ${typeof parsed}`,
+        raw,
+      );
+    }
+    return parsed as T[];
+  } catch (error) {
+    if (error instanceof DirectorOutputParseError) {
+      throw error;
+    }
+    throw new DirectorOutputParseError(
+      `${context} JSON 解析失败（修复后仍无法解析）: ${error instanceof Error ? error.message : String(error)}`,
+      raw,
+    );
+  }
+}
+
+/**
+ * 尝试修复常见的 AI JSON 输出错误
+ *
+ * 修复项：
+ * - 移除尾逗号（对象末尾和数组末尾的逗号）
+ * - 将单引号替换为双引号（仅在 JSON 值/键的位置）
+ * - 移除 JSON 字符串值中未转义的换行符
+ * - 移除 BOM 和不可见字符
+ * - 移除 JSON 前后的非 JSON 文本（如 markdown code fence）
+ */
+export function repairJson(raw: string): string {
+  let text = raw;
+
+  // 移除 BOM
+  text = text.replace(/^\uFEFF/, "");
+
+  // 移除 markdown code fence 包裹
+  text = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/, "");
+
+  // 提取第一个 [ 到最后一个 ] 之间的内容
+  const firstBracket = text.indexOf("[");
+  const lastBracket = text.lastIndexOf("]");
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    text = text.slice(firstBracket, lastBracket + 1);
   }
 
-  return (
-    /^(?:chr|npc|entity|char|pc|monster|mob|item|loc|location|faction|quest|event|evt)(?:[_-][a-z0-9_-]+|\d+)$/iu.test(
-      normalized,
-    ) || /^[a-z][a-z0-9]*_[a-z0-9_-]+$/iu.test(normalized)
+  // 将单引号键值替换为双引号（简单启发式：不在双引号字符串内的单引号）
+  text = text.replace(/(?<=[[{,]\s*)'([^']*?)'(?=\s*:)/g, '"$1"');
+  text = text.replace(/(?<=:\s*)'([^']*?)'/g, '"$1"');
+
+  // 移除字符串值中的未转义换行
+  text = text.replace(/(?<=:\s*"[^"]*)\n(?=[^"]*")/g, "\\n");
+
+  // 移除尾逗号（],} 或 ],] 前的逗号）
+  text = text.replace(/,\s*([}\]])/g, "$1");
+
+  return text.trim();
+}
+
+/**
+ * 解析 ref 字段：通过 entityLookup 做名称/ID 模糊匹配
+ */
+function resolveRef(
+  ref: unknown,
+  entityLookup: (nameOrId: string) => string | undefined,
+): string {
+  if (!ref || typeof ref !== "string") {
+    throw new Error("缺少 ref 字段");
+  }
+  const trimmed = ref.trim();
+  if (!trimmed) {
+    throw new Error("ref 字段为空");
+  }
+
+  const resolved = entityLookup(trimmed);
+  if (!resolved) {
+    throw new Error(`无法匹配实体引用: ${trimmed}`);
+  }
+
+  return resolved;
+}
+
+/**
+ * 解析实体原型
+ */
+function resolveArchetype(raw: unknown): EntityArchetype {
+  if (!raw || typeof raw !== "string") {
+    throw new Error("缺少 type 字段");
+  }
+  const normalized = raw.trim().toLowerCase();
+  if (VALID_ARCHETYPES.has(normalized)) {
+    return normalized as EntityArchetype;
+  }
+  throw new Error(
+    `type 值无效: "${raw}"，期望 character/event/faction/location/item_unique/quest/mystery/custom`,
   );
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+// ─── IO Contract / XML 提取 ───────────────────────────────
 
-function mapStoryArcStatus(token: string): StoryArc["status"] | null {
-  const normalized = token.trim().toLowerCase();
-
-  switch (normalized) {
-    case "active":
-    case "进行中":
-      return "active";
-    case "completed":
-    case "已完成":
-      return "completed";
-    case "abandoned":
-    case "放弃":
-    case "废弃":
-    case "已废弃":
-      return "abandoned";
-    case "modified":
-    case "已修改":
-    case "改写":
-      return "modified";
-    default:
-      return null;
-  }
-}
-
-function mapMilestoneStatus(token: string): Milestone["status"] | null {
-  const normalized = token.trim().toLowerCase();
-
-  switch (normalized) {
-    case "pending":
-    case "待触发":
-    case "未触发":
-      return "pending";
-    case "triggered":
-    case "触发":
-    case "已触发":
-      return "triggered";
-    case "skipped":
-    case "跳过":
-    case "已跳过":
-      return "skipped";
-    default:
-      return null;
-  }
-}
-
-function mapForeshadowStatus(token: string): Foreshadow["status"] | null {
-  const normalized = token.trim().toLowerCase();
-
-  switch (normalized) {
-    case "planted":
-    case "埋下":
-    case "已埋下":
-      return "planted";
-    case "hinted":
-    case "暗示中":
-    case "已暗示":
-      return "hinted";
-    case "revealed":
-    case "揭示":
-    case "已揭示":
-      return "revealed";
-    case "abandoned":
-    case "放弃":
-    case "废弃":
-    case "已放弃":
-      return "abandoned";
-    default:
-      return null;
-  }
-}
-
-function parseEntityArchetype(content: string): EntityArchetype {
-  const mappedFromType = mapArchetypeToken(
-    content.match(
-      /(?:类型|archetype)[：:]\s*(character|event|faction|location|item_unique|quest|mystery|custom|角色|人物|事件|势力|地点|道具|物品|任务|谜团|自定义)/iu,
-    )?.[1],
-  );
-  if (mappedFromType) {
-    return mappedFromType;
+function normalizeTags(tags?: string[]): string[] {
+  if (!tags) {
+    return [];
   }
 
-  const mappedFromBracket = mapArchetypeToken(
-    content.match(
-      /[（(]\s*(character|event|faction|location|item_unique|quest|mystery|custom|角色|人物|事件|势力|地点|道具|物品|任务|谜团|自定义)\s*[）)]/iu,
-    )?.[1],
-  );
-  if (mappedFromBracket) {
-    return mappedFromBracket;
+  const normalized: string[] = [];
+  for (const tag of tags) {
+    const trimmed = tag.trim();
+    if (!trimmed || normalized.includes(trimmed)) {
+      continue;
+    }
+    normalized.push(trimmed);
   }
 
-  return "character";
+  return normalized;
 }
 
-function mapArchetypeToken(token: string | undefined): EntityArchetype | null {
-  if (!token) {
-    return null;
+function resolveDirectorIoContract(options?: ParseOptions): {
+  requiredTags: string[];
+  optionalTags: string[];
+} {
+  if (!options?.ioContract) {
+    return {
+      requiredTags: [...DEFAULT_REQUIRED_TAGS],
+      optionalTags: [...DEFAULT_OPTIONAL_TAGS],
+    };
   }
 
-  const normalized = token.trim().toLowerCase();
-
-  switch (normalized) {
-    case "character":
-    case "角色":
-    case "人物":
-      return "character";
-    case "event":
-    case "事件":
-      return "event";
-    case "faction":
-    case "势力":
-      return "faction";
-    case "location":
-    case "地点":
-      return "location";
-    case "item_unique":
-    case "道具":
-    case "物品":
-      return "item_unique";
-    case "quest":
-    case "任务":
-      return "quest";
-    case "mystery":
-    case "谜团":
-      return "mystery";
-    case "custom":
-    case "自定义":
-      return "custom";
-    default:
-      return null;
-  }
-}
-
-function normalizeArchiveUpdateMarkdown(raw: string): string {
-  return raw
-    .replace(/\[([^\]\n]+)\]\(([^)\n]+)\)/gu, "$1($2)")
-    .replace(/\*\*([^*\n]+)\*\*/gu, "$1")
-    .replace(/__([^_\n]+)__/gu, "$1")
-    .replace(/\*([^*\n]+)\*/gu, "$1")
-    .replace(/_([^_\n]+)_/gu, "$1")
-    .replace(/`([^`\n]+)`/gu, "$1")
-    .replace(/[\[\]]/gu, "");
-}
-
-function isMeaningfulEntityName(name: string): boolean {
-  return /[\p{L}\p{N}]/u.test(name);
-}
-
-function stripWrappingQuotes(input: string): string {
-  return input.replace(/^[\["'“”‘’`]+|[\]"'“”‘’`]+$/gu, "");
+  return {
+    requiredTags: normalizeTags(options.ioContract.requiredTags),
+    optionalTags: normalizeTags(options.ioContract.optionalTags),
+  };
 }
 
 /**
@@ -888,6 +790,8 @@ function extractXmlContent(text: string, tagName: string): string | null {
   const match = text.match(regex);
   return match ? match[1] : null;
 }
+
+// ─── 错误类 ───────────────────────────────────────────────
 
 /**
  * 导演 AI 输出解析错误
