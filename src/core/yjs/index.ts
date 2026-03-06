@@ -69,6 +69,7 @@ export type {
 export {
   updateResolveStatus,
   writeResultFrameToTurnDoc,
+  writeTurnDeltasToTurnDoc,
   type WritableResultFrame,
 } from "./result-frame-accessor";
 

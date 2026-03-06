@@ -4,6 +4,7 @@
  * 用于在不同模块间复用同一写入入口，避免写入逻辑分叉。
  */
 
+import { TurnDelta } from "@/domain";
 import type { ResolveStatus } from "./room/types";
 import { subdocManager } from "./subdoc-manager";
 
@@ -15,7 +16,7 @@ export interface WritableResultFrame {
 export function writeResultFrameToTurnDoc<T extends WritableResultFrame>(
   roomId: string,
   turnNumber: number,
-  frame: T
+  frame: T,
 ): boolean {
   const turnDoc = subdocManager.getTurnDoc(roomId, turnNumber);
   if (!turnDoc) return false;
@@ -33,10 +34,32 @@ export function writeResultFrameToTurnDoc<T extends WritableResultFrame>(
   return true;
 }
 
+export function writeTurnDeltasToTurnDoc(
+  roomId: string,
+  turnNumber: number,
+  deltas: readonly TurnDelta[],
+): boolean {
+  const turnDoc = subdocManager.getTurnDoc(roomId, turnNumber);
+  if (!turnDoc) return false;
+
+  turnDoc.transact(() => {
+    const deltaArray = turnDoc.getArray("deltas");
+    if (deltaArray.length > 0) {
+      deltaArray.delete(0, deltaArray.length);
+    }
+
+    if (deltas.length > 0) {
+      deltaArray.push([...deltas]);
+    }
+  });
+
+  return true;
+}
+
 export function updateResolveStatus(
   roomId: string,
   turnNumber: number,
-  status: ResolveStatus
+  status: ResolveStatus,
 ): boolean {
   const turnDoc = subdocManager.getTurnDoc(roomId, turnNumber);
   if (!turnDoc) return false;

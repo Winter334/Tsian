@@ -1,9 +1,11 @@
 import type { BlackboardBase } from "@/core/pipeline";
+import type { WarningRecord } from "@/domain/constants/warning-codes";
 import type { AIConfig } from "@/lib/ai/types";
 import type { Preset, VariableContext } from "@/lib/prompt/types";
 import type { EntityAliasMap } from "@/lib/rules/schema";
 import type { WorldConfig } from "@/lib/world";
 
+import { TurnDelta } from "..";
 import type {
   CreatedNpcData,
   EntityAccessor,
@@ -64,8 +66,14 @@ export interface PipelineBlackboard extends BlackboardBase {
   narrativeHints?: string;
   /** 世界档案更新指令（实际类型为 ArchiveUpdate[]，此处避免 domain 依赖 modules） */
   archiveUpdates?: unknown[];
+  /** Envelope V2 上下文信封（USE_ENVELOPE_V2 开启时由管线初始化注入） */
+  envelope?: import("./envelope").ContextEnvelope;
   /** 各 Agent 的原始 AI 响应（用于 AI 洞察面板） */
   _agentRawOutputs?: Record<string, string>;
+  /** Prompt v2 Delta 链（USE_DELTA_PROTOCOL 开启时由服务层只读生成） */
+  deltas?: TurnDelta[];
+  /** 管线执行过程中收集的警告记录 */
+  warnings?: WarningRecord[];
 
   narrativeText?: string;
   cleanNarrative?: string;

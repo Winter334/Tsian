@@ -122,6 +122,10 @@ export const defaultDirectorPreset: Preset = {
   name: "默认导演预设",
   description: "导演 AI — 世界推演与剧情编排",
   purpose: "director",
+  ioContract: {
+    requiredTags: ["plot_directives", "narrative_hints", "archive_updates"],
+    optionalTags: ["outline_updates"],
+  },
   blocks: [
     {
       id: "director-system",

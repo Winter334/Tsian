@@ -2,12 +2,7 @@
  * 提示词系统工具函数
  */
 
-import type {
-  CharacterInfo,
-  Preset,
-  PromptBlock,
-  VariableContext,
-} from "./types";
+import type { Preset, PromptBlock } from "./types";
 
 /**
  * 创建快速预设（用于测试/调试）
@@ -65,57 +60,5 @@ export function createQuickPreset(
       createdAt: Date.now(),
       updatedAt: Date.now(),
     },
-  };
-}
-
-/**
- * 构建变量上下文的辅助函数
- */
-export function buildVariableContext(
-  mode: "solo" | "multiplayer",
-  data: {
-    user: { name: string; character?: CharacterInfo };
-    players?: Array<{
-      name: string;
-      character?: CharacterInfo;
-    }>;
-    chatHistory: Array<{
-      role: "system" | "user" | "assistant";
-      content: string;
-    }>;
-    scenario?: string;
-    worldInfo?: string;
-    turn?: {
-      number: number;
-      actions: Array<{ content: string; timestamp: number }>;
-    };
-    gameState?: VariableContext["gameState"];
-    resultFrame?: VariableContext["resultFrame"];
-    operationDefinitions?: string;
-    worldConfig?: VariableContext["worldConfig"];
-    activeNpcs?: VariableContext["activeNpcs"];
-    inventoryData?: VariableContext["inventoryData"];
-    memoryData?: VariableContext["memoryData"];
-    manualMemories?: VariableContext["manualMemories"];
-    userInput?: string;
-  },
-): VariableContext {
-  return {
-    mode,
-    user: data.user,
-    players: data.players,
-    chatHistory: data.chatHistory,
-    userInput: data.userInput,
-    scenario: data.scenario,
-    worldInfo: data.worldInfo,
-    turn: data.turn,
-    gameState: data.gameState,
-    resultFrame: data.resultFrame,
-    operationDefinitions: data.operationDefinitions,
-    worldConfig: data.worldConfig,
-    activeNpcs: data.activeNpcs,
-    inventoryData: data.inventoryData,
-    memoryData: data.memoryData,
-    manualMemories: data.manualMemories,
   };
 }

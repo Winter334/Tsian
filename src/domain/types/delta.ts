@@ -1,26 +1,40 @@
 /**
- * Prompt v2 Turn Delta（P0 MVP）
+ * Prompt v2 Turn Delta 协议类型
  *
- * 仅冻结最小交换子集的类型边界，后续阶段可增量扩展 patch 语义。
+ * 保持最小交换子集稳定，同时为 Phase 5 的统一 Delta Builder
+ * 提供必需的 source / patch / commitStatus 边界。
  */
 
-/** Delta 来源 Agent */
+/** Delta 来源 Agent / 系统阶段 */
 export type DeltaSource =
   | "director"
   | "parser"
+  | "engine"
   | "narrator"
+  | "postprocess"
   | "summarizer"
   | "system";
 
 /** Delta 提交状态 */
 export type DeltaCommitStatus = "buffered" | "committed" | "discarded";
 
+/** Delta 终态（Phase 5 最小闭环） */
+export type DeltaTerminalCommitStatus = Extract<
+  DeltaCommitStatus,
+  "committed" | "discarded"
+>;
+
 /** Delta patch 操作符（MVP 预置 + 扩展位） */
 export type DeltaPatchOp =
   | "directives.replace"
   | "rulescript.replace"
+  | "resultFrame.replace"
   | "narrative.replace"
+  | "postprocess.extracted"
+  | "memory.appendMini"
   | "memory.appendMega"
+  | "archive.apply"
+  | "entities.patch"
   | (string & {});
 
 /** Delta patch */

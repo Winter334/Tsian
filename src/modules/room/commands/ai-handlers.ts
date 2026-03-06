@@ -17,6 +17,7 @@ import {
   subdocManager,
   updateResolveStatus,
   writeResultFrameToTurnDoc,
+  writeTurnDeltasToTurnDoc,
 } from "@/core/yjs";
 import type {
   AiAbortReason,
@@ -39,10 +40,14 @@ import { type ResultFrame } from "@/domain/types";
 import { createAiExecutor, type AiExecutor } from "@/lib/ai/executor";
 import { resolveAIConfig } from "@/lib/ai/resolve-config";
 import type { AdvancedSettings, AIConfig } from "@/lib/ai/types";
-import { buildVariableContext, usePresetStore } from "@/lib/prompt";
+import { usePresetStore, type VariableContext } from "@/lib/prompt";
+import { buildEnvelope, toVariableContext } from "@/lib/prompt/envelope";
 import { createGameStateRepository } from "@/modules/game/repository/game-state-repository";
 import { applyStructuralChanges } from "@/modules/game/services/structural-change-consumer";
-import { prepareMemoryData } from "@/modules/memory/memory-injector";
+import {
+  parseMemoryMarkerConfig,
+  prepareMemoryData,
+} from "@/modules/memory/memory-injector";
 import { useSettingsStore } from "@/stores/settings";
 import * as Y from "yjs";
 import { ROOM_AI_HISTORY_WINDOW } from "../config/ai-history-window";
@@ -355,14 +360,14 @@ export async function processAiTurnHandler(
       ROOM_AI_HISTORY_WINDOW,
     );
 
-    // getRecentHistoryMessages 返回倒序（新→旧），先转为时间正序并显式补齐全局索引
-    const historyItems = [...historyResult.items].reverse();
+    // getRecentHistoryMessages 返回倒序（新→旧），转为时间正序并提取消息体
+    const chatHistory = historyResult.items.slice().reverse();
     const historyWindowStartIndex = Math.max(
-      historyResult.total - historyItems.length,
+      historyResult.total - chatHistory.length,
       0,
     );
 
-    const assistantMessages = historyItems
+    const assistantMessages = chatHistory
       .map((message, windowIndex) => ({
         message,
         // 与单机 allMessages.indexOf(m) 语义对齐：messageIndex = 全局消息序号
@@ -384,18 +389,48 @@ export async function processAiTurnHandler(
       assistantMessages,
     );
 
-    const variableContext = buildVariableContext("multiplayer", {
+    const chatHistoryBlock = narrativePreset.blocks.find(
+      (b) => b.markerType === "chatHistory",
+    );
+    const maxMessages = (
+      chatHistoryBlock?.markerConfig as Record<string, unknown>
+    )?.maxMessages;
+    const historyLimit =
+      typeof maxMessages === "number"
+        ? maxMessages
+        : ROOM_AI_HISTORY_WINDOW.defaultLimit;
+
+    const memoryBlock = narrativePreset.blocks.find(
+      (b) => b.markerType === "memorySummary",
+    );
+    const memoryConfig = memoryBlock
+      ? parseMemoryMarkerConfig(memoryBlock.markerConfig)
+      : undefined;
+
+    const envelope: import("@/domain/types").ContextEnvelope = buildEnvelope(
+      "multiplayer",
+      {
+        chatHistory,
+        historyTotal: historyResult.total,
+        historyLimit,
+        userInput: mergedUserInput,
+        turnNumber,
+        sessionId: conversationId,
+        roomId,
+        memoryData,
+        memoryConfig,
+      },
+    );
+
+    const variableContext: VariableContext = toVariableContext(envelope, {
       user: { name: roomName },
       players: playersList,
-      turn: {
-        number: turnNumber,
-        actions: actionsList,
-      },
-      chatHistory: [],
-      memoryData,
       activeNpcs: activeNpcs.length > 0 ? activeNpcs : undefined,
-      userInput: mergedUserInput,
     });
+    variableContext.turn = {
+      number: turnNumber,
+      actions: actionsList,
+    };
 
     // 10. 更新状态为 processing
     updateAiStatus(turnDoc, "processing");
@@ -466,6 +501,7 @@ export async function processAiTurnHandler(
         onNarrativeChunk: (chunk: string) => {
           aiResponseText.insert(aiResponseText.length, chunk);
         },
+        envelope,
       })) as {
         success: boolean;
         error?: string;
@@ -478,9 +514,14 @@ export async function processAiTurnHandler(
         }>;
         createdNpcs?: CreatedNpcData[];
         archiveUpdates?: unknown[];
+        deltas?: import("@/domain/types").TurnDelta[];
       };
 
       if (irnrResult.success) {
+        if (irnrResult.deltas) {
+          writeTurnDeltasToTurnDoc(roomId, turnNumber, irnrResult.deltas);
+        }
+
         if (irnrResult.resultFrame) {
           writeResultFrameToTurnDoc(roomId, turnNumber, irnrResult.resultFrame);
         } else {

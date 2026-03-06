@@ -27,6 +27,7 @@ const FILTER_TABS: FilterTab[] = [
   { key: "parser", label: "解析" },
   { key: "narrator", label: "叙事" },
   { key: "summarizer", label: "总结" },
+  { key: "system", label: "Delta" },
 ];
 
 export function AiInsightDialog({ open, onOpenChange }: AiInsightDialogProps) {

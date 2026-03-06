@@ -1,12 +1,5 @@
-import { BUILTIN_RULES } from "./builtin-rules";
-import { mergeRules } from "./merge";
 import { executePostProcessPipeline } from "./pipeline";
-import type {
-  PostProcessInput,
-  PostProcessOutput,
-  PostProcessResult,
-  PostProcessRule,
-} from "./types";
+import type { PostProcessInput, PostProcessOutput } from "./types";
 
 export { BUILTIN_RULES } from "./builtin-rules";
 export { mergeRules } from "./merge";
@@ -42,40 +35,4 @@ export {
 export function postProcess(input: PostProcessInput): PostProcessOutput {
   const { rawText, rules, phase } = input;
   return executePostProcessPipeline(rawText, rules, phase);
-}
-
-/**
- * 持久化阶段后处理便捷入口。
- *
- * @param rawText 原始文本
- * @param presetRules 预设规则（可选）
- */
-export function postProcessForPersist(
-  rawText: string,
-  presetRules?: PostProcessRule[],
-): PostProcessResult {
-  const rules = mergeRules(BUILTIN_RULES, presetRules);
-  return postProcess({
-    rawText,
-    phase: "persist",
-    rules,
-  });
-}
-
-/**
- * 渲染阶段后处理便捷入口。
- *
- * @param text 待渲染文本
- * @param presetRules 预设规则（可选）
- */
-export function postProcessForRender(
-  text: string,
-  presetRules?: PostProcessRule[],
-): PostProcessResult {
-  const rules = mergeRules(BUILTIN_RULES, presetRules);
-  return postProcess({
-    rawText: text,
-    phase: "render",
-    rules,
-  });
 }

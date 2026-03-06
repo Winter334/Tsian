@@ -1,4 +1,8 @@
 import type { AgentDescriptor } from "@/core/pipeline";
+import {
+  WARNING_CODES,
+  type WarningRecord,
+} from "@/domain/constants/warning-codes";
 import type { PipelineBlackboard } from "@/domain/types";
 import { createAiExecutor } from "@/lib/ai/executor";
 import type { VariableContext } from "@/lib/prompt/types";
@@ -16,18 +20,41 @@ export const narratorAgent: AgentDescriptor<PipelineBlackboard> = {
   requires: ["resultFrame", "entityAccessor", "aliasMap"],
   produces: ["narrativeText"],
   execute: async (bb) => {
+    const pushWarning = (warning: WarningRecord): void => {
+      bb.warnings ??= [];
+      bb.warnings.push(warning);
+    };
+
     const resultFrame = bb.resultFrame;
     if (!resultFrame) {
+      pushWarning({
+        code: WARNING_CODES.NARRATOR_MISSING_RESULT_FRAME,
+        message: "Narrator Agent 缺少 resultFrame",
+        stage: "narrator",
+        timestamp: Date.now(),
+      });
       throw new Error("Narrator Agent 缺少 resultFrame");
     }
 
     const entityAccessor = bb.entityAccessor as MapEntityAccessor | undefined;
     if (!entityAccessor) {
+      pushWarning({
+        code: WARNING_CODES.NARRATOR_MISSING_ACCESSOR,
+        message: "Narrator Agent 缺少 entityAccessor",
+        stage: "narrator",
+        timestamp: Date.now(),
+      });
       throw new Error("Narrator Agent 缺少 entityAccessor");
     }
 
     const aliasMap = bb.aliasMap;
     if (!aliasMap) {
+      pushWarning({
+        code: WARNING_CODES.NARRATOR_MISSING_ALIAS_MAP,
+        message: "Narrator Agent 缺少 aliasMap",
+        stage: "narrator",
+        timestamp: Date.now(),
+      });
       throw new Error("Narrator Agent 缺少 aliasMap");
     }
 
@@ -41,6 +68,9 @@ export const narratorAgent: AgentDescriptor<PipelineBlackboard> = {
         }
       : computeArchiveData();
 
+    const narrativeHints =
+      bb.envelope?.directives?.narrativeHints ?? bb.narrativeHints;
+
     const narrativeContext: VariableContext = {
       ...bb.baseVariableContext,
       worldConfig: bb.worldConfig,
@@ -50,7 +80,7 @@ export const narratorAgent: AgentDescriptor<PipelineBlackboard> = {
       entityEffects: buildEntityEffects(entityAccessor, aliasMap),
       entityDisplayNames: aliasMap.displayNames,
       inventoryData: narrativeInventoryData,
-      narrativeHints: bb.narrativeHints,
+      narrativeHints,
     };
 
     let narrativeText = "";
@@ -67,9 +97,17 @@ export const narratorAgent: AgentDescriptor<PipelineBlackboard> = {
     });
 
     if (!narrativeResult.success) {
-      throw new Error(
-        `叙事 AI 调用失败: ${narrativeResult.error?.message ?? "未知错误"}`,
-      );
+      const message = `叙事 AI 调用失败: ${narrativeResult.error?.message ?? "未知错误"}`;
+      pushWarning({
+        code: WARNING_CODES.NARRATOR_AI_CALL_FAILED,
+        message,
+        stage: "narrator",
+        details: {
+          error: narrativeResult.error?.message ?? "未知错误",
+        },
+        timestamp: Date.now(),
+      });
+      throw new Error(message);
     }
 
     bb._agentRawOutputs ??= {};

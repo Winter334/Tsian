@@ -5,6 +5,7 @@
  * 和 2.3-turn-system-design.md Phase 系统设计
  */
 
+import { TurnDelta } from "@/domain";
 import type { Character } from "@/domain/entities/character";
 import type { ItemInstance } from "@/domain/entities/item";
 import type { FlowTemplate, PhaseInstance } from "@/domain/entities/phase";
@@ -150,6 +151,8 @@ export interface TurnData {
   readyPlayers: string[];
   /** AI 响应（流式） */
   aiResponse: string;
+  /** Prompt v2 Delta 链 */
+  deltas?: TurnDelta[];
 }
 
 // ===== 历史归档 =====
@@ -162,6 +165,8 @@ export interface ArchivedTurn {
   turnNumber: number;
   /** 完成时间 */
   completedAt: number;
+  /** Prompt v2 Delta 链（Phase 5 起可选） */
+  deltas?: TurnDelta[];
   /** 压缩的回合数据（JSON + gzip base64） */
   compressedData: string;
 }
@@ -318,6 +323,8 @@ export interface TurnDocStructure {
 
   /** ResultFrame 数据（data: ResultFrame, frameId: string, generatedAt: number） */
   resultFrame: Y.Map<unknown>;
+  /** Prompt v2 Delta 链 */
+  deltas: Y.Array<TurnDelta>;
   /** 结算状态 */
   resolveStatus: ResolveStatus;
 

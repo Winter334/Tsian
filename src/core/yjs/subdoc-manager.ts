@@ -514,6 +514,9 @@ export class SubdocManager {
     // 初始化 resultFrame Map（IRNR 结算帧）
     turnDoc.getMap("resultFrame");
 
+    // 初始化 Delta 链
+    turnDoc.getArray("deltas");
+
     // 初始化 resolveStatus
     turnDoc.getMap("config").set("resolveStatus", "idle");
 

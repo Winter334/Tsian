@@ -6,7 +6,12 @@
 
 import type { BlackboardInput } from "@/core/pipeline";
 import { PipelineError } from "@/core/pipeline";
+import {
+  WARNING_CODES,
+  type WarningRecord,
+} from "@/domain/constants/warning-codes";
 import type {
+  DeltaTerminalCommitStatus,
   EntityFinalState,
   IrnrPipelineResult,
   IrnrPipelineServiceContract,
@@ -20,6 +25,7 @@ import { getRuntimeWorldConfig } from "@/lib/world/resolve-config";
 import { createGamePipeline } from "@/modules/game/agents";
 import { useWorldArchiveStore } from "@/modules/world-archive/store";
 import { useAiOutputLogStore, type AiOutputSource } from "@/stores";
+import { buildTurnDeltaChain, hasDeltaTerminalState } from "./delta-builder";
 
 // ─── 输入/输出类型（从 domain 层 re-export，保持向后兼容） ───
 
@@ -109,6 +115,7 @@ function buildBlackboardInput(
             messageIndex: input.messageIndex,
           }
         : undefined,
+    envelope: input.envelope,
   };
 }
 
@@ -121,6 +128,7 @@ function mapBlackboardToResult(bb: PipelineBlackboard): IrnrPipelineResult {
     finalEntityStates: bb.finalEntityStates,
     createdNpcs: bb.createdNpcs,
     archiveUpdates: bb.archiveUpdates,
+    deltas: bb.deltas,
   };
 }
 
@@ -129,6 +137,7 @@ const AI_OUTPUT_SOURCE_SET: ReadonlySet<AiOutputSource> = new Set([
   "parser",
   "narrator",
   "summarizer",
+  "system",
 ]);
 
 function isAiOutputSource(source: string): source is AiOutputSource {
@@ -150,6 +159,32 @@ function getFallbackRawOutput(input: {
     : `[${input.source}] 执行失败，未产出原始输出`;
 }
 
+function pushPipelineWarning(
+  bb: Partial<PipelineBlackboard>,
+  warning: WarningRecord,
+): void {
+  bb.warnings ??= [];
+  bb.warnings.push(warning);
+}
+
+function recordMissingDeltaTerminalWarning(
+  bb: Partial<PipelineBlackboard>,
+  terminalStatus: DeltaTerminalCommitStatus,
+  error?: string,
+): void {
+  pushPipelineWarning(bb, {
+    code: WARNING_CODES.PIPELINE_DELTA_MISSING_TERMINAL,
+    message: "Delta 链缺少终态记录",
+    stage: "pipeline",
+    details: {
+      terminalStatus,
+      error,
+    },
+    timestamp: Date.now(),
+  });
+  console.warn("[IRNR Pipeline] Delta 链缺少终态记录");
+}
+
 /**
  * 从管线黑板中采集各 AI Agent 的输出，写入 AiOutputLogStore。
  *
@@ -165,6 +200,7 @@ function collectAiOutputs(
   const trace = bb._trace ?? [];
   const rawOutputs = bb._agentRawOutputs ?? {};
   const timestamp = Date.now();
+  const correlationId = bb.envelope?.trace?.correlationId;
 
   const collectedSources = new Set<AiOutputSource>();
 
@@ -189,6 +225,7 @@ function collectAiOutputs(
       success: traceEntry.success,
       error: traceEntry.error,
       timestamp,
+      correlationId,
     });
 
     collectedSources.add(source);
@@ -211,6 +248,7 @@ function collectAiOutputs(
       }),
       success: true,
       timestamp,
+      correlationId,
     });
 
     collectedSources.add(agentId);
@@ -232,20 +270,77 @@ function collectAiOutputs(
         success: false,
         error: failedAgent.error,
         timestamp,
+        correlationId,
       });
     }
+  }
+
+  if (bb.warnings && bb.warnings.length > 0) {
+    const warningSource = isAiOutputSource(bb.warnings[0].stage)
+      ? bb.warnings[0].stage
+      : "system";
+    const warningsSummary = bb.warnings
+      .map((warning) => {
+        const details = warning.details
+          ? ` | ${JSON.stringify(warning.details)}`
+          : "";
+        return `[${warning.code}] ${warning.message}${details}`;
+      })
+      .join("\n");
+
+    store.appendEntry({
+      turn: turnNumber,
+      source: warningSource,
+      sequenceIndex: -1,
+      rawOutput: `⚠️ Pipeline Warnings:\n${warningsSummary}`,
+      success: true,
+      timestamp: Date.now(),
+      correlationId,
+    });
+  }
+
+  if (bb.deltas && bb.deltas.length > 0) {
+    store.appendEntry({
+      turn: turnNumber,
+      source: "system",
+      sequenceIndex: bb.deltas[0]?.sequence ?? trace.length,
+      rawOutput: JSON.stringify(bb.deltas, null, 2),
+      deltas: bb.deltas,
+      success: hasDeltaTerminalState(bb.deltas),
+      timestamp: Date.now(),
+      correlationId,
+    });
+  }
+}
+
+function attachTurnDeltas(
+  bb: PipelineBlackboard,
+  terminalStatus: DeltaTerminalCommitStatus,
+  error?: string,
+): void {
+  bb.deltas = buildTurnDeltaChain(bb, terminalStatus, { error });
+
+  if (!hasDeltaTerminalState(bb.deltas)) {
+    recordMissingDeltaTerminalWarning(bb, terminalStatus, error);
   }
 }
 
 function handlePipelineError(error: unknown): IrnrPipelineResult {
   if (error instanceof PipelineError) {
     const bb = error.blackboard as Partial<PipelineBlackboard>;
+    bb.deltas = buildTurnDeltaChain(bb, "discarded", {
+      error: error.message,
+    });
+    if (!hasDeltaTerminalState(bb.deltas)) {
+      recordMissingDeltaTerminalWarning(bb, "discarded", error.message);
+    }
     collectAiOutputs(bb, { agentId: error.agentId, error: error.message });
     return {
       success: false,
       error: error.message,
       ruleScript: bb.ruleScript,
       resultFrame: bb.resultFrame,
+      deltas: bb.deltas,
     };
   }
 
@@ -259,6 +354,7 @@ class IrnrPipelineServiceImpl implements IrnrPipelineServiceContract {
 
     try {
       const bb = await pipeline.execute(blackboardInput);
+      attachTurnDeltas(bb, "committed");
       collectAiOutputs(bb);
       return mapBlackboardToResult(bb);
     } catch (error) {
@@ -274,6 +370,7 @@ class IrnrPipelineServiceImpl implements IrnrPipelineServiceContract {
 
     try {
       const bb = await pipeline.execute(blackboardInput);
+      attachTurnDeltas(bb, "committed");
       collectAiOutputs(bb);
       return mapBlackboardToResult(bb);
     } catch (error) {

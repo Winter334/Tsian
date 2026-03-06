@@ -97,6 +97,7 @@ const addMiniSummaryHandler: CommandHandler<
     void checkAndTriggerCompression(
       conversationId,
       command.payload.roomId,
+      context.commandId,
     ).catch((error) => {
       console.warn(
         "[Memory] Failed to trigger compression check:",

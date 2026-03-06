@@ -2,11 +2,17 @@
  * AI 输出日志 Store（会话级，纯内存）
  */
 
+import type { TurnDelta } from "@/domain/types";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 
 /** AI 来源 */
-export type AiOutputSource = "director" | "parser" | "narrator" | "summarizer";
+export type AiOutputSource =
+  | "director"
+  | "parser"
+  | "narrator"
+  | "summarizer"
+  | "system";
 
 /** AI 输出日志条目 */
 export interface AiOutputEntry {
@@ -20,6 +26,8 @@ export interface AiOutputEntry {
   sequenceIndex: number;
   /** AI 原始输出（完整文本） */
   rawOutput: string;
+  /** Delta 链快照（最小可观测接入） */
+  deltas?: TurnDelta[];
   /** 耗时（ms） */
   duration?: number;
   /** 是否成功 */
@@ -28,6 +36,8 @@ export interface AiOutputEntry {
   error?: string;
   /** 时间戳 */
   timestamp: number;
+  /** 关联 ID（用于追踪因果链，贯穿同一回合的所有日志） */
+  correlationId?: string;
 }
 
 interface AiOutputLogState {

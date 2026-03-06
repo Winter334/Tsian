@@ -7,16 +7,23 @@
 import { commandBus, eventBus } from "@/core";
 import { MemoryCommands } from "@/domain/commands";
 import type { TriggerCompressionPayload } from "@/domain/commands/memory";
+import {
+  WARNING_CODES,
+  type WarningCode,
+} from "@/domain/constants/warning-codes";
 import type { MegaSummary, MiniSummary } from "@/domain/entities/memory";
 import { MemoryEvents } from "@/domain/events";
 import type {
   CompressionFailedPayload,
   CompressionSkippedPayload,
 } from "@/domain/events/memory";
-import { aiManager } from "@/lib/ai/manager";
+import { createAiExecutor } from "@/lib/ai";
 import { resolveAIConfig } from "@/lib/ai/resolve-config";
-import type { Message } from "@/lib/ai/types";
-import { usePresetStore } from "@/lib/prompt";
+import {
+  messageAssembler,
+  usePresetStore,
+  type VariableContext,
+} from "@/lib/prompt";
 import { useAiOutputLogStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings";
 import { parseMemoryMarkerConfig } from "./memory-injector";
@@ -24,6 +31,19 @@ import { useMemoryStore } from "./store";
 
 /** 正在压缩中的会话（并发锁） */
 const compressingConversationIds = new Set<string>();
+
+interface SummarizerAppendMegaDelta {
+  content: string;
+  sourceMiniSummaryIds: string[];
+  messageRange: MegaSummary["messageRange"];
+}
+
+interface SummarizerStructuredOutput {
+  memoryDelta: {
+    appendMega: SummarizerAppendMegaDelta[];
+  };
+  warnings?: string[];
+}
 
 function getCompressionThresholdFromNarrativePreset(): number {
   const presetStore = usePresetStore.getState();
@@ -104,6 +124,77 @@ function buildSummarizerUserMessage(
   ].join("\n");
 }
 
+function buildSummarizerVariableContext(
+  miniSummaries: MiniSummary[],
+  megaSummaries: MegaSummary[],
+): VariableContext {
+  return {
+    mode: "solo",
+    user: { name: "Summarizer" },
+    chatHistory: [],
+    userInput: buildSummarizerUserMessage(miniSummaries, megaSummaries),
+  };
+}
+
+function buildSummarizerMessageRange(
+  miniSummaries: MiniSummary[],
+): MegaSummary["messageRange"] {
+  const first = miniSummaries[0];
+  const last = miniSummaries[miniSummaries.length - 1];
+
+  if (!first || !last) {
+    throw new Error("Summarizer 压缩输入为空，无法计算 messageRange。");
+  }
+
+  return {
+    from: first.messageIndex,
+    to: last.messageIndex,
+  };
+}
+
+function parseSummarizerStructuredOutput(
+  rawOutput: string,
+  miniSummaries: MiniSummary[],
+): SummarizerStructuredOutput | null {
+  const content = rawOutput.trim();
+
+  if (!content) {
+    return null;
+  }
+
+  return {
+    memoryDelta: {
+      appendMega: [
+        {
+          content,
+          sourceMiniSummaryIds: miniSummaries.map((summary) => summary.id),
+          messageRange: buildSummarizerMessageRange(miniSummaries),
+        },
+      ],
+    },
+  };
+}
+
+function mapAppendMegaToCompressionPayload(
+  conversationId: string,
+  appendMega: SummarizerAppendMegaDelta,
+  roomId?: string,
+): TriggerCompressionPayload | null {
+  const megaSummaryContent = appendMega.content.trim();
+
+  if (!megaSummaryContent) {
+    return null;
+  }
+
+  return {
+    conversationId,
+    miniSummaryIds: [...appendMega.sourceMiniSummaryIds],
+    megaSummaryContent,
+    messageRange: appendMega.messageRange,
+    roomId,
+  };
+}
+
 function getSummarizerTurn(miniSummaries: MiniSummary[]): number {
   if (miniSummaries.length === 0) {
     return 0;
@@ -129,12 +220,20 @@ function getNextSequenceIndexForTurn(turn: number): number {
   return maxSequenceIndex + 1;
 }
 
+function formatSummarizerWarning(
+  warningCode: WarningCode,
+  warning: string,
+): string {
+  return `[${warningCode}] ${warning}`;
+}
+
 function appendSummarizerAiOutput(entry: {
   turn: number;
   rawOutput: string;
   success: boolean;
   duration?: number;
   error?: string;
+  correlationId?: string;
 }): void {
   useAiOutputLogStore.getState().appendEntry({
     turn: entry.turn,
@@ -145,7 +244,64 @@ function appendSummarizerAiOutput(entry: {
     success: entry.success,
     error: entry.error,
     timestamp: Date.now(),
+    correlationId: entry.correlationId,
   });
+}
+
+function reportSummarizerFailure(params: {
+  conversationId: string;
+  turn: number;
+  warningCode: WarningCode;
+  warning: string;
+  duration: number;
+  rawOutput?: string;
+  error?: string;
+  correlationId?: string;
+}): void {
+  const formattedWarning = formatSummarizerWarning(
+    params.warningCode,
+    params.warning,
+  );
+  console.warn(`[MemoryCompression] ${formattedWarning}`);
+  appendSummarizerAiOutput({
+    turn: params.turn,
+    rawOutput:
+      params.rawOutput && params.rawOutput.trim().length > 0
+        ? `${formattedWarning}\n\n${params.rawOutput}`
+        : formattedWarning,
+    success: false,
+    duration: params.duration,
+    error:
+      params.error != null && params.error.length > 0
+        ? `[${params.warningCode}] ${params.error}`
+        : formattedWarning,
+    correlationId: params.correlationId,
+  });
+  emitCompressionFailedToast(params.conversationId, params.warning);
+}
+
+function reportSummarizerSkipped(params: {
+  conversationId: string;
+  turn: number;
+  warningCode: WarningCode;
+  warning: string;
+  duration?: number;
+  correlationId?: string;
+}): void {
+  const formattedWarning = formatSummarizerWarning(
+    params.warningCode,
+    params.warning,
+  );
+  console.warn(`[MemoryCompression] ${formattedWarning}`);
+  appendSummarizerAiOutput({
+    turn: params.turn,
+    rawOutput: formattedWarning,
+    success: false,
+    duration: params.duration,
+    error: formattedWarning,
+    correlationId: params.correlationId,
+  });
+  emitCompressionSkippedToast(params.conversationId, params.warning);
 }
 
 /**
@@ -159,6 +315,7 @@ function appendSummarizerAiOutput(entry: {
 export async function checkAndTriggerCompression(
   conversationId: string,
   roomId?: string,
+  correlationId?: string,
 ): Promise<void> {
   // 联机模式下，只有房主执行压缩
   if (roomId) {
@@ -194,24 +351,23 @@ export async function checkAndTriggerCompression(
     }
 
     const toCompress = refreshed.slice(0, threshold);
+    const summarizerTurn = getSummarizerTurn(toCompress);
+    const startedAt = performance.now();
 
     const summarizerPreset = await usePresetStore
       .getState()
       .getPresetForPurpose("summarizer");
 
     if (!summarizerPreset) {
-      const warning =
-        "未找到 Summarizer 预设，已跳过记忆压缩。请在预设设置中配置 Summarizer 预设。";
-      console.warn(`[MemoryCompression] ${warning}`);
-      emitCompressionSkippedToast(conversationId, warning);
-      return;
-    }
-
-    const systemPrompt = summarizerPreset.blocks[0]?.content?.trim();
-    if (!systemPrompt) {
-      const warning = `Summarizer 预设"${summarizerPreset.name}"缺少系统提示词，已跳过记忆压缩。`;
-      console.warn(`[MemoryCompression] ${warning}`);
-      emitCompressionSkippedToast(conversationId, warning);
+      reportSummarizerSkipped({
+        conversationId,
+        turn: summarizerTurn,
+        warningCode: WARNING_CODES.SUMMARIZER_PRESET_NOT_FOUND,
+        warning:
+          "未找到 Summarizer 预设，已跳过记忆压缩。请在预设设置中配置 Summarizer 预设。",
+        duration: performance.now() - startedAt,
+        correlationId,
+      });
       return;
     }
 
@@ -221,35 +377,125 @@ export async function checkAndTriggerCompression(
     const config = resolveAIConfig(profile, summarizerPreset.aiSettings);
 
     const existingMegaSummaries = getExistingMegaSummaries(conversationId);
-    const messages: Message[] = [
-      { role: "system", content: systemPrompt },
-      {
-        role: "user",
-        content: buildSummarizerUserMessage(toCompress, existingMegaSummaries),
-      },
-    ];
 
-    let compressedContent = "";
-    const summarizerTurn = getSummarizerTurn(toCompress);
-    const startedAt = performance.now();
+    let compressionPayload: TriggerCompressionPayload | null = null;
+    let rawOutput = "";
 
     try {
-      const response = await aiManager.chat(config, messages);
-      const duration = performance.now() - startedAt;
-      const rawOutput = response.content ?? "";
-      compressedContent = rawOutput.trim();
+      const variableContext = buildSummarizerVariableContext(
+        toCompress,
+        existingMegaSummaries,
+      );
+      const assembledMessages = messageAssembler.assemble(
+        summarizerPreset,
+        variableContext,
+      );
+      const hasUserMessage = assembledMessages.some(
+        (message) =>
+          message.role === "user" && message.content.trim().length > 0,
+      );
 
-      if (!compressedContent) {
-        const warning = "Summarizer 返回空内容，已跳过本次压缩。";
-        console.warn(`[MemoryCompression] ${warning}`);
-        appendSummarizerAiOutput({
+      if (!hasUserMessage) {
+        const duration = performance.now() - startedAt;
+        reportSummarizerFailure({
+          conversationId,
           turn: summarizerTurn,
-          rawOutput: rawOutput || "[summarizer] Summarizer 返回空内容",
-          success: false,
+          warningCode: WARNING_CODES.SUMMARIZER_NO_VALID_MESSAGES,
+          warning: "Summarizer 统一链路未组装出有效用户消息，已跳过本次压缩。",
           duration,
-          error: warning,
+          error: "assembler_missing_user_message",
+          correlationId,
         });
-        emitCompressionFailedToast(conversationId, warning);
+        return;
+      }
+
+      const executor = createAiExecutor(config);
+      const result = await executor.execute({
+        preset: summarizerPreset,
+        variableContext,
+      });
+      const duration = performance.now() - startedAt;
+
+      if (result.aborted) {
+        reportSummarizerFailure({
+          conversationId,
+          turn: summarizerTurn,
+          warningCode: WARNING_CODES.SUMMARIZER_AI_CALL_FAILED,
+          warning: "记忆压缩已中止，已跳过本次压缩。",
+          duration,
+          error: "summarizer_aborted",
+          correlationId,
+        });
+        return;
+      }
+
+      if (!result.success) {
+        reportSummarizerFailure({
+          conversationId,
+          turn: summarizerTurn,
+          warningCode: WARNING_CODES.SUMMARIZER_AI_CALL_FAILED,
+          warning: "记忆压缩失败，已跳过本次压缩。",
+          duration,
+          error: result.error?.message ?? "Summarizer executor failed",
+          correlationId,
+        });
+        return;
+      }
+
+      rawOutput = result.content ?? "";
+      const structuredOutput = parseSummarizerStructuredOutput(
+        rawOutput,
+        toCompress,
+      );
+
+      if (!structuredOutput) {
+        reportSummarizerFailure({
+          conversationId,
+          turn: summarizerTurn,
+          warningCode: WARNING_CODES.SUMMARIZER_EMPTY_RESPONSE,
+          warning: "Summarizer 返回空内容，已跳过本次压缩。",
+          duration,
+          rawOutput,
+          error: "summarizer_empty",
+          correlationId,
+        });
+        return;
+      }
+
+      const appendMega = structuredOutput.memoryDelta.appendMega[0];
+      if (!appendMega) {
+        reportSummarizerFailure({
+          conversationId,
+          turn: summarizerTurn,
+          warningCode: WARNING_CODES.SUMMARIZER_NO_MEGA_DELTA,
+          warning:
+            "Summarizer 统一链路未生成 memoryDelta.appendMega，已跳过本次压缩。",
+          duration,
+          rawOutput,
+          error: "summarizer_missing_appendMega",
+          correlationId,
+        });
+        return;
+      }
+
+      compressionPayload = mapAppendMegaToCompressionPayload(
+        conversationId,
+        appendMega,
+        roomId,
+      );
+
+      if (!compressionPayload) {
+        reportSummarizerFailure({
+          conversationId,
+          turn: summarizerTurn,
+          warningCode: WARNING_CODES.SUMMARIZER_NO_MEGA_DELTA,
+          warning:
+            "Summarizer 统一链路生成的 memoryDelta.appendMega 无效，已跳过本次压缩。",
+          duration,
+          rawOutput,
+          error: "summarizer_invalid_appendMega",
+          correlationId,
+        });
         return;
       }
 
@@ -258,46 +504,54 @@ export async function checkAndTriggerCompression(
         rawOutput,
         success: true,
         duration,
+        correlationId,
       });
     } catch (error) {
-      const warning = "记忆压缩失败，已跳过本次压缩。";
       const duration = performance.now() - startedAt;
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      console.warn("[MemoryCompression] AI compression failed:", error);
-      appendSummarizerAiOutput({
+      console.warn(
+        `[MemoryCompression] ${WARNING_CODES.SUMMARIZER_AI_CALL_FAILED}: Unified summarizer failed:`,
+        error,
+      );
+      reportSummarizerFailure({
+        conversationId,
         turn: summarizerTurn,
-        rawOutput: "[summarizer] 执行失败，未产出原始输出",
-        success: false,
+        warningCode: WARNING_CODES.SUMMARIZER_AI_CALL_FAILED,
+        warning: "记忆压缩失败，已跳过本次压缩。",
         duration,
         error: errorMessage,
+        correlationId,
       });
-      emitCompressionFailedToast(conversationId, warning);
       return;
     }
 
-    const payload: TriggerCompressionPayload = {
-      conversationId,
-      miniSummaryIds: toCompress.map((summary) => summary.id),
-      megaSummaryContent: compressedContent,
-      messageRange: {
-        from: toCompress[0].messageIndex,
-        to: toCompress[toCompress.length - 1].messageIndex,
-      },
-      roomId,
-    };
+    if (!compressionPayload) {
+      return;
+    }
 
     const dispatchResult = await commandBus.dispatch<
       TriggerCompressionPayload,
       { megaSummaryId: string }
     >({
       type: MemoryCommands.TRIGGER_COMPRESSION,
-      payload,
+      payload: compressionPayload,
     });
 
     if (!dispatchResult.success) {
       const warning = `写入压缩结果失败：${dispatchResult.error ?? "未知错误"}`;
-      console.warn(`[MemoryCompression] ${warning}`);
+      const formattedWarning = formatSummarizerWarning(
+        WARNING_CODES.SUMMARIZER_WRITE_FAILED,
+        warning,
+      );
+      console.warn(`[MemoryCompression] ${formattedWarning}`);
+      appendSummarizerAiOutput({
+        turn: summarizerTurn,
+        rawOutput: formattedWarning,
+        success: false,
+        error: formattedWarning,
+        correlationId,
+      });
       emitCompressionFailedToast(conversationId, warning);
     }
   } finally {

@@ -121,6 +121,14 @@ export interface Preset {
 
   /** 世界配置覆盖（可选），未设置时使用 DEFAULT_WORLD_CONFIG */
   worldConfig?: Partial<WorldConfig>;
+
+  /** 预设的输入/输出标签契约声明 */
+  ioContract?: {
+    /** 输出中必须包含的标签名 */
+    requiredTags?: string[];
+    /** 输出中可选的标签名 */
+    optionalTags?: string[];
+  };
 }
 
 /**

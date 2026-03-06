@@ -1,7 +1,11 @@
 import { useCallback, useState } from "react";
 
-import { aiManager, resolveAIConfig, type Message } from "@/lib/ai";
-import { usePresetStore } from "@/lib/prompt";
+import { createAiExecutor, resolveAIConfig } from "@/lib/ai";
+import {
+  messageAssembler,
+  usePresetStore,
+  type VariableContext,
+} from "@/lib/prompt";
 import { useSettingsStore } from "@/stores/settings";
 
 export interface UseMemoryCompressionResult {
@@ -10,21 +14,16 @@ export interface UseMemoryCompressionResult {
   error: string | null;
 }
 
-function buildCompressionPrompt(selectedText: string): string {
-  return `你是一个叙事摘要专家。请将以下文本压缩为简洁的记忆条目，保留关键信息：
-- 重要事件和行动
-- 涉及的角色和关系
-- 地点和时间信息
-- 状态变化
-
-原始文本：
-${selectedText}
-
-请输出简洁的摘要（3-5行）。`;
+function buildCompressionVariableContext(
+  selectedText: string,
+): VariableContext {
+  return {
+    mode: "solo",
+    user: { name: "Summarizer" },
+    chatHistory: [],
+    userInput: selectedText,
+  };
 }
-
-const FALLBACK_SYSTEM_PROMPT =
-  "你是一个精准、克制的剧情摘要助手，输出应简洁、清晰、可用于后续记忆检索。";
 
 export function useMemoryCompression(): UseMemoryCompressionResult {
   const [isCompressing, setIsCompressing] = useState(false);
@@ -52,21 +51,37 @@ export function useMemoryCompression(): UseMemoryCompressionResult {
         .getState()
         .getProfileOrFallback(summarizerPreset.aiProfileId);
       const config = resolveAIConfig(profile, summarizerPreset.aiSettings);
+      const variableContext = buildCompressionVariableContext(selectedText);
+      const assembledMessages = messageAssembler.assemble(
+        summarizerPreset,
+        variableContext,
+      );
+      const hasUserMessage = assembledMessages.some(
+        (message) =>
+          message.role === "user" && message.content.trim().length > 0,
+      );
 
-      const presetSystemPrompt = summarizerPreset.blocks[0]?.content?.trim();
-      const messages: Message[] = [
-        {
-          role: "system",
-          content: presetSystemPrompt || FALLBACK_SYSTEM_PROMPT,
-        },
-        {
-          role: "user",
-          content: buildCompressionPrompt(selectedText),
-        },
-      ];
+      if (!hasUserMessage) {
+        throw new Error(
+          "Summarizer 预设未组装出有效用户消息，请检查 Marker 配置。",
+        );
+      }
 
-      const response = await aiManager.chat(config, messages);
-      const compressed = response.content.trim();
+      const executor = createAiExecutor(config);
+      const result = await executor.execute({
+        preset: summarizerPreset,
+        variableContext,
+      });
+
+      if (result.aborted) {
+        throw new Error("记忆压缩已中止，请稍后重试。");
+      }
+
+      if (!result.success) {
+        throw new Error(result.error?.message ?? "记忆压缩失败，请稍后重试。");
+      }
+
+      const compressed = result.content?.trim() ?? "";
 
       if (!compressed) {
         throw new Error("AI 返回空内容，请稍后重试。");

@@ -42,7 +42,7 @@ export { defaultSummarizerPreset } from "./presets/default-summarizer";
 export * from "./constants";
 
 // 工具函数
-export { buildVariableContext, createQuickPreset } from "./utils";
+export { createQuickPreset } from "./utils";
 
 // 默认预设工具
 export { getDefaultPresetForPurpose } from "./normalize";

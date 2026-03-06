@@ -1,4 +1,8 @@
 import type { AgentDescriptor } from "@/core/pipeline";
+import {
+  WARNING_CODES,
+  type WarningRecord,
+} from "@/domain/constants/warning-codes";
 import type { PipelineBlackboard } from "@/domain/types";
 import { createAiExecutor } from "@/lib/ai/executor";
 import type { VariableContext } from "@/lib/prompt/types";
@@ -24,8 +28,19 @@ export const parserAgent: AgentDescriptor<PipelineBlackboard> = {
       return;
     }
 
+    const pushWarning = (warning: WarningRecord): void => {
+      bb.warnings ??= [];
+      bb.warnings.push(warning);
+    };
+
     const entityAccessor = bb.entityAccessor as MapEntityAccessor | undefined;
     if (!entityAccessor) {
+      pushWarning({
+        code: WARNING_CODES.PARSER_MISSING_ACCESSOR,
+        message: "Parser Agent 缺少 entityAccessor",
+        stage: "parser",
+        timestamp: Date.now(),
+      });
       throw new Error("Parser Agent 缺少 entityAccessor");
     }
 
@@ -38,6 +53,9 @@ export const parserAgent: AgentDescriptor<PipelineBlackboard> = {
           nearby: bb.archiveSnapshot.nearby,
         }
       : computeArchiveData();
+
+    const plotDirectives =
+      bb.envelope?.directives?.plotDirectives ?? bb.plotDirectives;
 
     const parserContext: VariableContext = {
       ...bb.baseVariableContext,
@@ -52,7 +70,7 @@ export const parserAgent: AgentDescriptor<PipelineBlackboard> = {
         entities: bb.entities?.map(toEntityInfo),
       }),
       inventoryData,
-      plotDirectives: bb.plotDirectives,
+      plotDirectives,
     };
 
     let parserResponse = "";
@@ -68,9 +86,17 @@ export const parserAgent: AgentDescriptor<PipelineBlackboard> = {
     });
 
     if (!parserResult.success) {
-      throw new Error(
-        `解析 AI 调用失败: ${parserResult.error?.message ?? "未知错误"}`,
-      );
+      const message = `解析 AI 调用失败: ${parserResult.error?.message ?? "未知错误"}`;
+      pushWarning({
+        code: WARNING_CODES.PARSER_AI_CALL_FAILED,
+        message,
+        stage: "parser",
+        details: {
+          error: parserResult.error?.message ?? "未知错误",
+        },
+        timestamp: Date.now(),
+      });
+      throw new Error(message);
     }
 
     const parserRawContent = parserResult.content ?? parserResponse;
@@ -80,9 +106,18 @@ export const parserAgent: AgentDescriptor<PipelineBlackboard> = {
 
     const parsed = parseRuleScriptFromResponse(parserRawContent);
     if (!parsed) {
-      throw new Error(
-        "解析 AI 未返回有效的 RuleScript（JSON 解析失败或格式不符）",
-      );
+      const message =
+        "解析 AI 未返回有效的 RuleScript（JSON 解析失败或格式不符）";
+      pushWarning({
+        code: WARNING_CODES.PARSER_SCRIPT_INVALID,
+        message,
+        stage: "parser",
+        details: {
+          rawContentLength: parserRawContent.length,
+        },
+        timestamp: Date.now(),
+      });
+      throw new Error(message);
     }
 
     bb.ruleScript = parsed;

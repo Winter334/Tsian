@@ -59,4 +59,8 @@ export interface DirectorOutput {
   narrativeHints: string;
   archiveUpdatesRaw: string; // 原始 XML 内容
   outlineUpdatesRaw?: string; // 原始 XML 内容
+  /** 解析是否发生降级（缺失必填标签） */
+  degraded?: boolean;
+  /** 解析警告信息（缺失的标签名等） */
+  parseWarnings?: string[];
 }

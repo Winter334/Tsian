@@ -14,10 +14,6 @@ import { DEFAULT_ADVANCED_SETTINGS } from "@/lib/ai";
 import { applyThemeToDOM, defaultThemeId } from "@/styles/themes";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import {
-  FEATURE_FLAG_STORAGE_KEYS,
-  useFeatureFlagStore,
-} from "./feature-flags";
 
 /**
  * 设置状态
@@ -388,25 +384,11 @@ export const useSettingsStore = create<SettingsState>()(
         profiles = [createProfileFromConfig(defaultAIConfig)];
       }
 
-      const useEnvelopeV2 = settings.get<boolean>(
-        FEATURE_FLAG_STORAGE_KEYS.USE_ENVELOPE_V2,
-        false,
-      );
-      const useUnifiedPostProcess = settings.get<boolean>(
-        FEATURE_FLAG_STORAGE_KEYS.USE_UNIFIED_POSTPROCESS,
-        false,
-      );
-
       set((state) => {
         state.themeId = themeId;
         state.profiles = profiles;
         syncAiConfig(state);
         state.hasCompletedOnboarding = hasCompletedOnboarding;
-      });
-
-      useFeatureFlagStore.setState({
-        USE_ENVELOPE_V2: useEnvelopeV2,
-        USE_UNIFIED_POSTPROCESS: useUnifiedPostProcess,
       });
 
       applyThemeToDOM(themeId);
@@ -417,14 +399,6 @@ export const useSettingsStore = create<SettingsState>()(
       settings.set("lyra.themeId", state.themeId);
       settings.set("lyra.profiles", state.profiles);
       settings.set("lyra.onboarding", state.hasCompletedOnboarding);
-
-      const { USE_ENVELOPE_V2, USE_UNIFIED_POSTPROCESS } =
-        useFeatureFlagStore.getState();
-      settings.set(FEATURE_FLAG_STORAGE_KEYS.USE_ENVELOPE_V2, USE_ENVELOPE_V2);
-      settings.set(
-        FEATURE_FLAG_STORAGE_KEYS.USE_UNIFIED_POSTPROCESS,
-        USE_UNIFIED_POSTPROCESS,
-      );
     },
   })),
 );

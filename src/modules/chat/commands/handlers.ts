@@ -42,7 +42,8 @@ import { createMessage } from "@/domain/entities/message";
 import { ChatEvents } from "@/domain/events/chat";
 import type { IrnrPipelineResult } from "@/domain/types";
 import { resolveAIConfig } from "@/lib/ai/resolve-config";
-import { buildVariableContext, usePresetStore } from "@/lib/prompt";
+import { usePresetStore } from "@/lib/prompt";
+import { buildEnvelope, toVariableContext } from "@/lib/prompt/envelope";
 import { getLastDisplayName } from "@/lib/user-identity";
 import {
   createGameStateRepository,
@@ -50,7 +51,10 @@ import {
 } from "@/modules/game/repository";
 import type { EntityData } from "@/modules/game/services/entity-accessor";
 import { applyStructuralChanges } from "@/modules/game/services/structural-change-consumer";
-import { prepareMemoryData } from "@/modules/memory/memory-injector";
+import {
+  parseMemoryMarkerConfig,
+  prepareMemoryData,
+} from "@/modules/memory/memory-injector";
 import { useSettingsStore } from "@/stores/settings";
 import * as Y from "yjs";
 import { getChatRepository } from "../repository/factory";
@@ -231,7 +235,38 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
         assistantMessages,
       );
 
-      const variableContext = buildVariableContext("solo", {
+      // === Envelope V2 路径 ===
+      // 提取 historyLimit（chatHistory marker 的 maxMessages 配置）
+      const chatHistoryBlock = narrativePreset.blocks.find(
+        (b) => b.markerType === "chatHistory",
+      );
+      const maxMessages = (
+        chatHistoryBlock?.markerConfig as Record<string, unknown>
+      )?.maxMessages;
+      const historyLimit = typeof maxMessages === "number" ? maxMessages : 50;
+
+      // 提取 memoryConfig（memorySummary marker 的配置）
+      const memoryBlock = narrativePreset.blocks.find(
+        (b) => b.markerType === "memorySummary",
+      );
+      const memoryConfig = memoryBlock
+        ? parseMemoryMarkerConfig(memoryBlock.markerConfig)
+        : undefined;
+
+      const envelope: import("@/domain/types").ContextEnvelope | undefined =
+        buildEnvelope("solo", {
+          chatHistory,
+          historyTotal: repository.getMessageCount(conversationId),
+          historyLimit,
+          userInput: content,
+          turnNumber: assistantMessageIndex,
+          sessionId: conversationId,
+          memoryData,
+          memoryConfig,
+        });
+
+      // 转换为 VariableContext
+      const variableContext = toVariableContext(envelope, {
         user: {
           name: displayName,
           character: characterInfo
@@ -246,9 +281,6 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
               }
             : undefined,
         },
-        chatHistory,
-        memoryData,
-        userInput: content,
       });
 
       // parser 预设可选——无预设时管线 Parser Agent 自动写入空 ruleScript
@@ -304,8 +336,10 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
         messageIndex: assistantMessageIndex,
       };
 
-      const irnrResult: IrnrPipelineResult =
-        await irnrPipelineService.runSolo(irnrInput);
+      const irnrResult: IrnrPipelineResult = await irnrPipelineService.runSolo({
+        ...irnrInput,
+        envelope,
+      });
 
       if (!irnrResult.success) {
         const errorMessage = irnrResult.error ?? "IRNR 流程失败";

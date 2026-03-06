@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 
 import type { AiOutputEntry, AiOutputSource } from "@/stores/ai-output-log";
 import { animation, borders, color, colorAlpha, glow } from "@/styles/tokens";
@@ -10,6 +10,16 @@ import { AiOutputContent } from "./AiOutputContent";
 interface AiOutputCardProps {
   entry: AiOutputEntry;
   defaultExpanded?: boolean;
+}
+
+function formatDeltaSummary(entry: AiOutputEntry): string | null {
+  const deltas = entry.deltas;
+  if (!deltas || deltas.length === 0) {
+    return null;
+  }
+
+  const terminal = deltas[deltas.length - 1];
+  return `Δ ${deltas.length} | base ${deltas[0].baseTurn} | ${terminal.commitStatus}`;
 }
 
 interface SourceVisual {
@@ -39,6 +49,11 @@ const SOURCE_VISUAL: Record<AiOutputSource, SourceVisual> = {
     background: colorAlpha("secondary", 0.15),
     textColor: color("secondary"),
   },
+  system: {
+    label: "Delta 协议",
+    background: colorAlpha("primary", 0.12),
+    textColor: color("primary"),
+  },
 };
 
 function formatDuration(duration?: number): string | null {
@@ -57,6 +72,7 @@ export function AiOutputCard({
 
   const sourceVisual = SOURCE_VISUAL[entry.source];
   const durationText = formatDuration(entry.duration);
+  const deltaSummary = formatDeltaSummary(entry);
   const collapsedPreview = useMemo(() => {
     const normalized = entry.rawOutput.replace(/\r\n/g, "\n").trim();
     if (!normalized) {
@@ -69,6 +85,32 @@ export function AiOutputCard({
     const previewText = previewLines.join("\n");
     return hasMore ? `${previewText}\n…` : previewText;
   }, [entry.rawOutput]);
+  const correlationId = entry.correlationId?.trim();
+  const correlationText = correlationId
+    ? `cid:${correlationId.slice(0, 8)}`
+    : null;
+
+  const toggleExpanded = () => {
+    setExpanded((value) => !value);
+  };
+
+  const handleHeaderKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    event.preventDefault();
+    toggleExpanded();
+  };
+
+  const handleCopyCorrelationId = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!correlationId || !navigator.clipboard?.writeText) {
+      return;
+    }
+
+    void navigator.clipboard.writeText(correlationId).catch(() => undefined);
+  };
 
   return (
     <div
@@ -83,10 +125,12 @@ export function AiOutputCard({
           expanded && !entry.success ? glow("error", "sm", 0.22) : undefined,
       }}
     >
-      <button
-        type="button"
-        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors"
-        onClick={() => setExpanded((value) => !value)}
+      <div
+        role="button"
+        tabIndex={0}
+        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors cursor-pointer"
+        onClick={toggleExpanded}
+        onKeyDown={handleHeaderKeyDown}
         aria-expanded={expanded}
         aria-label={`切换 AI 输出详情：回合 ${entry.turn}`}
         style={{
@@ -125,6 +169,34 @@ export function AiOutputCard({
             </span>
           ) : null}
 
+          {correlationText ? (
+            <button
+              type="button"
+              className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium font-mono transition-colors"
+              onClick={handleCopyCorrelationId}
+              onKeyDown={(event) => event.stopPropagation()}
+              aria-label={`复制 correlationId：${correlationId}`}
+              title={`点击复制完整 correlationId：${correlationId}`}
+              style={{
+                background: colorAlpha("textMuted", 0.12),
+                color: colorAlpha("textMuted", 0.95),
+                border: `1px solid ${colorAlpha("border", 0.24)}`,
+              }}
+            >
+              {correlationText}
+            </button>
+          ) : null}
+
+          {deltaSummary ? (
+            <span
+              className="text-xs"
+              style={{ color: colorAlpha("textMuted", 0.9) }}
+              title="Delta 链摘要"
+            >
+              {deltaSummary}
+            </span>
+          ) : null}
+
           <span
             className="text-xs"
             style={{ color: entry.success ? color("success") : color("error") }}
@@ -145,7 +217,7 @@ export function AiOutputCard({
             <ChevronRight className="w-4 h-4" />
           )}
         </span>
-      </button>
+      </div>
 
       <AnimatePresence initial={false}>
         {expanded ? (

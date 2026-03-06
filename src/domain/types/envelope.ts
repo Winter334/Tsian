@@ -15,7 +15,6 @@ export interface ContextEnvelope {
     legacyTags?: boolean;
     structuredChannel?: boolean;
     fallbackPolicy?: string;
-    [key: string]: unknown;
   };
 
   /** 会话信息（单机/联机统一） */
@@ -23,7 +22,6 @@ export interface ContextEnvelope {
     sessionId?: string;
     mode: "solo" | "multiplayer";
     roomId?: string;
-    [key: string]: unknown;
   };
 
   /** 回合信息 */
@@ -31,13 +29,11 @@ export interface ContextEnvelope {
     number: number;
     userInput: string;
     submittedAt?: number;
-    [key: string]: unknown;
   };
 
   /** 按用途激活预设快照（保持 activePresetByPurpose 语义） */
   presets: {
     activeByPurpose: Record<PresetPurpose, string | null>;
-    [key: string]: unknown;
   };
 
   /** 历史上下文 */
@@ -49,9 +45,7 @@ export interface ContextEnvelope {
       startIndex: number;
       endIndex: number;
       truncated: boolean;
-      [key: string]: unknown;
     };
-    [key: string]: unknown;
   };
 
   /** 分段记忆快照（与 memorySummary 五字段语义对齐） */
@@ -62,20 +56,24 @@ export interface ContextEnvelope {
       megaSummaryMode: "all" | "recent";
       megaSummaryLimit: number;
       compressionThreshold: number;
-      [key: string]: unknown;
     };
     segments?: {
       recentNarratives: Array<{ id: string; content: string }>;
       miniSummaries: Array<{ id: string; content: string }>;
       megaSummaries: Array<{ id: string; content: string }>;
-      [key: string]: unknown;
     };
-    [key: string]: unknown;
   };
 
   /** 后处理协议冻结字段 */
   postProcess?: {
-    [key: string]: unknown;
+    builtinRuleIds?: string[];
+  };
+
+  /** 导演提示与档案更新等扩展指令 */
+  directives?: {
+    plotDirectives?: string;
+    narrativeHints?: string;
+    archiveUpdates?: unknown[];
   };
 
   /** 标签与结构化通道契约 */
@@ -83,9 +81,12 @@ export interface ContextEnvelope {
     tags: {
       memorySummary: string;
       choices: string;
-      [key: string]: unknown;
     };
-    [key: string]: unknown;
+  };
+
+  /** 可观测追踪信息 */
+  trace?: {
+    correlationId?: string;
   };
 
   /** 预留扩展元数据槽位 */

@@ -13,7 +13,9 @@ import type {
 } from "@/lib/prompt/types";
 import type { WorldConfig } from "@/lib/world";
 
+import { TurnDelta } from "..";
 import type { CreatedNpcData, EntityData, EntityFinalState } from "./entity";
+import type { ContextEnvelope } from "./envelope";
 import type { ResultFrame } from "./result-frame";
 import type { RuleScript } from "./rule-script";
 
@@ -67,6 +69,8 @@ export interface IrnrPipelineInputBase {
   messageId?: string;
   /** assistant 消息序号（用于范围计算，可选） */
   messageIndex?: number;
+  /** Envelope V2 上下文信封（USE_ENVELOPE_V2 开启时可注入） */
+  envelope?: ContextEnvelope;
 }
 
 /**
@@ -104,6 +108,8 @@ export interface IrnrPipelineResult {
   createdNpcs?: CreatedNpcData[];
   /** 导演 AI 的档案更新（调用方按需解析为 ArchiveUpdate[]） */
   archiveUpdates?: unknown[];
+  /** Prompt v2 Delta 链（USE_DELTA_PROTOCOL 开启时生成） */
+  deltas?: TurnDelta[];
 }
 
 // ─── 服务契约 ─────────────────────────────────────────────

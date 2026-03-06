@@ -76,7 +76,7 @@ import {
   type TurnCompletedEvent,
 } from "@/domain/events/room";
 import { SaveEvents } from "@/domain/events/save";
-import { postProcess, postProcessForPersist } from "@/lib/post-process";
+import { postProcess } from "@/lib/post-process";
 import { BUILTIN_RULES } from "@/lib/post-process/builtin-rules";
 import { mergeRules } from "@/lib/post-process/merge";
 import { usePresetStore } from "@/lib/prompt";
@@ -95,7 +95,6 @@ import {
   characterToYMap,
   yMapToCharacter,
 } from "@/modules/game/repository";
-import { useFeatureFlagStore } from "@/stores/feature-flags";
 import * as Y from "yjs";
 import { useRoomStore } from "../store";
 import type { HostTransferMeta, MemberActionMeta } from "../sync/types";
@@ -2376,6 +2375,7 @@ export async function lockActionHandler(
 // ===== 完成回合 =====
 
 import type { PlayerAction } from "@/core/yjs/room/types";
+import { TurnDelta } from "@/domain";
 import {
   convertTurnToMessages,
   toMessageEntities,
@@ -2471,19 +2471,11 @@ export async function completeTurnHandler(
       const activePreset = await usePresetStore
         .getState()
         .getPresetForPurpose("narrative");
-      const useUnifiedPostProcess =
-        useFeatureFlagStore.getState().USE_UNIFIED_POSTPROCESS;
-
-      const postProcessResult = useUnifiedPostProcess
-        ? postProcess({
-            rawText: resolvedAiResponse,
-            phase: "persist",
-            rules: mergeRules(BUILTIN_RULES, activePreset?.postProcessRules),
-          })
-        : postProcessForPersist(
-            resolvedAiResponse,
-            activePreset?.postProcessRules,
-          );
+      const postProcessResult = postProcess({
+        rawText: resolvedAiResponse,
+        phase: "persist",
+        rules: mergeRules(BUILTIN_RULES, activePreset?.postProcessRules),
+      });
 
       cleanedAiResponse = postProcessResult.text;
       miniSummaryParts = postProcessResult.extracted["miniSummary"];
@@ -2576,11 +2568,26 @@ export async function completeTurnHandler(
 
     // 归档回合数据到 HistoryDoc
     const archivedTurns = historyDoc.getArray("archivedTurns");
+    const turnDeltaArray = turnDoc.getArray("deltas");
+    const deltas: TurnDelta[] = (turnDeltaArray.toArray() as unknown[]).filter(
+      (d): d is TurnDelta => {
+        if (typeof d !== "object" || d === null) {
+          return false;
+        }
+
+        const delta = d as Record<string, unknown>;
+        return (
+          typeof delta.deltaVersion === "string" &&
+          typeof delta.commitStatus === "string"
+        );
+      },
+    );
     const archiveData = {
       turnNumber,
       completedAt: now,
       actions: Object.fromEntries(actions),
       aiResponseLength: cleanedAiResponse.length,
+      deltas,
     };
 
     // 压缩并存储（简化版：直接存储 JSON）
@@ -2588,6 +2595,7 @@ export async function completeTurnHandler(
       {
         turnNumber,
         completedAt: now,
+        deltas,
         compressedData: JSON.stringify(archiveData),
       },
     ]);

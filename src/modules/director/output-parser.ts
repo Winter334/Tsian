@@ -6,6 +6,54 @@ import type {
 } from "@/modules/world-archive/types";
 import type { DirectorOutput, Foreshadow, Milestone, StoryArc } from "./types";
 
+interface ParseOptions {
+  ioContract?: {
+    requiredTags?: string[];
+    optionalTags?: string[];
+  };
+}
+
+const DEFAULT_REQUIRED_TAGS = [
+  "plot_directives",
+  "narrative_hints",
+  "archive_updates",
+];
+const DEFAULT_OPTIONAL_TAGS = ["outline_updates"];
+
+function normalizeTags(tags?: string[]): string[] {
+  if (!tags) {
+    return [];
+  }
+
+  const normalized: string[] = [];
+  for (const tag of tags) {
+    const trimmed = tag.trim();
+    if (!trimmed || normalized.includes(trimmed)) {
+      continue;
+    }
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
+function resolveDirectorIoContract(options?: ParseOptions): {
+  requiredTags: string[];
+  optionalTags: string[];
+} {
+  if (!options?.ioContract) {
+    return {
+      requiredTags: [...DEFAULT_REQUIRED_TAGS],
+      optionalTags: [...DEFAULT_OPTIONAL_TAGS],
+    };
+  }
+
+  return {
+    requiredTags: normalizeTags(options.ioContract.requiredTags),
+    optionalTags: normalizeTags(options.ioContract.optionalTags),
+  };
+}
+
 /**
  * 解析导演 AI 的 XML 输出
  *
@@ -14,39 +62,36 @@ import type { DirectorOutput, Foreshadow, Milestone, StoryArc } from "./types";
  *
  * @throws {DirectorOutputParseError} 当必需的 XML 标签缺失时
  */
-export function parseDirectorOutput(rawOutput: string): DirectorOutput {
-  const plotDirectives = extractXmlContent(rawOutput, "plot_directives");
-  if (plotDirectives === null) {
-    throw new DirectorOutputParseError(
-      "导演 AI 输出缺少必需的 <plot_directives> 标签",
-      rawOutput,
-    );
-  }
-
-  const narrativeHints = extractXmlContent(rawOutput, "narrative_hints");
-  if (narrativeHints === null) {
-    throw new DirectorOutputParseError(
-      "导演 AI 输出缺少必需的 <narrative_hints> 标签",
-      rawOutput,
-    );
-  }
-
-  const archiveUpdatesRaw = extractXmlContent(rawOutput, "archive_updates");
-  if (archiveUpdatesRaw === null) {
-    throw new DirectorOutputParseError(
-      "导演 AI 输出缺少必需的 <archive_updates> 标签",
-      rawOutput,
-    );
-  }
-
+export function parseDirectorOutput(
+  raw: string,
+  options?: ParseOptions,
+): DirectorOutput {
+  const plotDirectives = extractXmlContent(raw, "plot_directives");
+  const narrativeHints = extractXmlContent(raw, "narrative_hints");
+  const archiveUpdatesRaw = extractXmlContent(raw, "archive_updates");
   const outlineUpdatesRaw =
-    extractXmlContent(rawOutput, "outline_updates") ?? undefined;
+    extractXmlContent(raw, "outline_updates") ?? undefined;
+
+  const { requiredTags, optionalTags } = resolveDirectorIoContract(options);
+  const extractedTags = new Map<string, string | null>();
+
+  for (const tag of [...requiredTags, ...optionalTags]) {
+    extractedTags.set(tag, extractXmlContent(raw, tag));
+  }
+
+  const parseWarnings = requiredTags.filter((tag) => {
+    return extractedTags.get(tag) === null;
+  });
+
+  const degraded = parseWarnings.length > 0;
 
   return {
-    plotDirectives: plotDirectives.trim(),
-    narrativeHints: narrativeHints.trim(),
-    archiveUpdatesRaw: archiveUpdatesRaw.trim(),
+    plotDirectives: (plotDirectives ?? "").trim(),
+    narrativeHints: (narrativeHints ?? "").trim(),
+    archiveUpdatesRaw: (archiveUpdatesRaw ?? "").trim(),
     outlineUpdatesRaw: outlineUpdatesRaw?.trim(),
+    degraded: degraded ? true : undefined,
+    parseWarnings: degraded ? parseWarnings : undefined,
   };
 }
 

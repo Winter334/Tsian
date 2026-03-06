@@ -8,6 +8,10 @@ import type { MapEntityAccessor } from "@/modules/game/services/entity-accessor"
 import { useWorldArchiveStore } from "@/modules/world-archive/store";
 import type { ArchiveUpdate } from "@/modules/world-archive/types";
 
+import {
+  WARNING_CODES,
+  type WarningRecord,
+} from "@/domain/constants/warning-codes";
 import { buildDirectorContext } from "./context-builder";
 import {
   parseArchiveUpdates,
@@ -271,7 +275,79 @@ export const directorAgent: AgentDescriptor<PipelineBlackboard> = {
     const rawContent = result.content ?? responseText;
     bb._agentRawOutputs ??= {};
     bb._agentRawOutputs.director = rawContent;
-    const parsed = parseDirectorOutput(rawContent);
+
+    const requiredTags = directorPreset.ioContract?.requiredTags ?? [
+      "plot_directives",
+      "narrative_hints",
+      "archive_updates",
+    ];
+
+    let parsed: ReturnType<typeof parseDirectorOutput>;
+    try {
+      parsed = parseDirectorOutput(rawContent, {
+        ioContract: directorPreset.ioContract,
+      });
+    } catch (error) {
+      const warning: WarningRecord = {
+        code: WARNING_CODES.DIRECTOR_PARSE_FAILED,
+        message:
+          error instanceof Error
+            ? error.message
+            : "导演输出解析失败（未知错误）",
+        stage: "director",
+        details: {
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        },
+        timestamp: Date.now(),
+      };
+      if (!bb.warnings) {
+        bb.warnings = [];
+      }
+      bb.warnings.push(warning);
+      console.warn(
+        `[Director] ${WARNING_CODES.DIRECTOR_PARSE_FAILED}:`,
+        warning.message,
+        warning.details,
+      );
+      throw error;
+    }
+
+    if (parsed.degraded) {
+      const parseWarnings = parsed.parseWarnings ?? [];
+      const missingTags = new Set(parseWarnings);
+      const allRequiredMissing =
+        requiredTags.length > 0 &&
+        requiredTags.every((tag) => missingTags.has(tag)) &&
+        parsed.plotDirectives === "" &&
+        parsed.narrativeHints === "" &&
+        parsed.archiveUpdatesRaw === "";
+
+      const warningCode = allRequiredMissing
+        ? WARNING_CODES.DIRECTOR_PARSE_FAILED
+        : WARNING_CODES.DIRECTOR_PARSE_DEGRADED;
+      const warningMessage = allRequiredMissing
+        ? "输出解析失败，所有必填标签均缺失，已回退为空字符串"
+        : "输出解析触发降级，已回退缺失标签为空字符串";
+
+      // 结构化告警写入黑板
+      const warning: WarningRecord = {
+        code: warningCode,
+        message: warningMessage,
+        stage: "director",
+        details: { parseWarnings },
+        timestamp: Date.now(),
+      };
+      if (!bb.warnings) {
+        bb.warnings = [];
+      }
+      bb.warnings.push(warning);
+      // 保留开发调试日志
+      console.warn(
+        `[Director] ${warningCode}:`,
+        warning.message,
+        parseWarnings,
+      );
+    }
 
     const archiveStore = useWorldArchiveStore.getState();
     const aliasMap = (bb as BlackboardWithAliasMap).aliasMap;
@@ -331,6 +407,19 @@ export const directorAgent: AgentDescriptor<PipelineBlackboard> = {
     directorBb.plotDirectives = parsed.plotDirectives;
     directorBb.narrativeHints = parsed.narrativeHints;
     directorBb.archiveUpdates = archiveUpdates;
+
+    // 黑板→Envelope 桥接：当 USE_ENVELOPE_V2 开启时，将 directives 同步写入 envelope
+    if (directorBb.envelope) {
+      directorBb.envelope = {
+        ...directorBb.envelope,
+        directives: {
+          ...directorBb.envelope.directives,
+          plotDirectives: parsed.plotDirectives,
+          narrativeHints: parsed.narrativeHints,
+          archiveUpdates,
+        },
+      };
+    }
 
     const logEntry: DirectorLogEntry = {
       turn: currentTurn,
