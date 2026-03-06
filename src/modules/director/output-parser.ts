@@ -283,7 +283,8 @@ export function parseArchiveUpdates(
   const updates: ArchiveUpdate[] = [];
   const parseErrors: string[] = [];
 
-  const lines = raw
+  const normalizedRaw = normalizeArchiveUpdateMarkdown(raw);
+  const lines = normalizedRaw
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.startsWith("-"));
@@ -599,7 +600,7 @@ function tryParseCreateEntity(
   }
 
   const prefixedNameMatch = content.match(
-    /(?:新增实体|首次出现)(?:了|的)?(?:实体)?[：:]?\s*([^\s，。；;：:（）()]+)/u,
+    /(?:新增实体|首次出现)(?:了|的)?(?:实体)?[：:]?\s*([^\s，。；;：:（）()[\]]+)/u,
   );
 
   const rawFallbackName =
@@ -612,7 +613,7 @@ function tryParseCreateEntity(
     prefixedNameMatch?.[1]?.trim() ?? fallbackNameParts.name,
   );
 
-  if (!candidateName) {
+  if (!candidateName || !isMeaningfulEntityName(candidateName)) {
     return null;
   }
 
@@ -860,8 +861,23 @@ function mapArchetypeToken(token: string | undefined): EntityArchetype | null {
   }
 }
 
+function normalizeArchiveUpdateMarkdown(raw: string): string {
+  return raw
+    .replace(/\[([^\]\n]+)\]\(([^)\n]+)\)/gu, "$1($2)")
+    .replace(/\*\*([^*\n]+)\*\*/gu, "$1")
+    .replace(/__([^_\n]+)__/gu, "$1")
+    .replace(/\*([^*\n]+)\*/gu, "$1")
+    .replace(/_([^_\n]+)_/gu, "$1")
+    .replace(/`([^`\n]+)`/gu, "$1")
+    .replace(/[\[\]]/gu, "");
+}
+
+function isMeaningfulEntityName(name: string): boolean {
+  return /[\p{L}\p{N}]/u.test(name);
+}
+
 function stripWrappingQuotes(input: string): string {
-  return input.replace(/^["'“”‘’`]+|["'“”‘’`]+$/gu, "");
+  return input.replace(/^[\["'“”‘’`]+|[\]"'“”‘’`]+$/gu, "");
 }
 
 /**
