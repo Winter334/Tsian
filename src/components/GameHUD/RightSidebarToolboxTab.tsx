@@ -1,4 +1,4 @@
-import { Activity, Archive } from "lucide-react";
+import { Activity, Archive, Brain, Pin } from "lucide-react";
 
 import { color, colorAlpha } from "@/styles/tokens";
 
@@ -7,11 +7,15 @@ import { ToolboxEntryButton } from "./ToolboxEntryButton";
 interface RightSidebarToolboxTabProps {
   onOpenAiInsight: () => void;
   onOpenArchiveManager: () => void;
+  onOpenCheckpoint: () => void;
+  onOpenMemory: () => void;
 }
 
 export function RightSidebarToolboxTab({
   onOpenAiInsight,
   onOpenArchiveManager,
+  onOpenCheckpoint,
+  onOpenMemory,
 }: RightSidebarToolboxTabProps) {
   return (
     <div className="p-4 space-y-3">
@@ -42,6 +46,18 @@ export function RightSidebarToolboxTab({
           label="世界档案"
           description="管理叙事实体"
           onClick={onOpenArchiveManager}
+        />
+        <ToolboxEntryButton
+          icon={Pin}
+          label="检查点"
+          description="查看与回退关键进度"
+          onClick={onOpenCheckpoint}
+        />
+        <ToolboxEntryButton
+          icon={Brain}
+          label="记忆"
+          description="查看长期与手动记忆"
+          onClick={onOpenMemory}
         />
       </section>
     </div>

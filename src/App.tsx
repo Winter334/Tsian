@@ -577,10 +577,6 @@ function AppContent() {
                     onSaveManager={handleSaveManager}
                     onPresetWorkspace={handleOpenPresetWorkspace}
                     onLorebookWorkspace={handleOpenLorebookWorkspace}
-                    onCheckpoint={handleOpenCheckpoint}
-                    onMemory={handleOpenMemory}
-                    onRoomInfo={handleOpenRoomInfo}
-                    onWorldArchive={handleOpenWorldArchive}
                   />
                 </motion.div>
               )}
@@ -598,6 +594,8 @@ function AppContent() {
                     onReturnToHub={handleReturnToHub}
                     onOpenCharacterPanel={handleOpenCharacterPanel}
                     onOpenArchiveManager={handleOpenWorldArchive}
+                    onOpenCheckpoint={handleOpenCheckpoint}
+                    onOpenMemory={handleOpenMemory}
                     onOpenRoomInfo={handleOpenRoomInfo}
                   >
                     <GameView className="h-full" />

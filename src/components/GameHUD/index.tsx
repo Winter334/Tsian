@@ -13,6 +13,8 @@ interface GameHUDProps {
   onReturnToHub: () => void;
   onOpenCharacterPanel: () => void;
   onOpenArchiveManager: () => void;
+  onOpenCheckpoint: () => void;
+  onOpenMemory: () => void;
   onOpenRoomInfo: () => void;
   children: ReactNode;
 }
@@ -21,6 +23,8 @@ export function GameHUD({
   onReturnToHub,
   onOpenCharacterPanel,
   onOpenArchiveManager,
+  onOpenCheckpoint,
+  onOpenMemory,
   onOpenRoomInfo,
   children,
 }: GameHUDProps) {
@@ -83,6 +87,8 @@ export function GameHUD({
             onActiveTabChange={setRightSidebarActiveTab}
             onOpenAiInsight={() => setAiInsightOpen(true)}
             onOpenArchiveManager={onOpenArchiveManager}
+            onOpenCheckpoint={onOpenCheckpoint}
+            onOpenMemory={onOpenMemory}
           />
         </SidebarDrawer>
       </main>
@@ -99,6 +105,8 @@ export function GameHUD({
           onActiveTabChange={setRightSidebarActiveTab}
           onOpenAiInsight={() => setAiInsightOpen(true)}
           onOpenArchiveManager={onOpenArchiveManager}
+          onOpenCheckpoint={onOpenCheckpoint}
+          onOpenMemory={onOpenMemory}
         />
       </aside>
 

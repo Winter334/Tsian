@@ -1,15 +1,5 @@
 import { motion } from "framer-motion";
-import {
-  Archive,
-  BookOpen,
-  Brain,
-  FolderOpen,
-  Globe,
-  Home,
-  Pin,
-  Settings,
-  Wand2,
-} from "lucide-react";
+import { BookOpen, FolderOpen, Home, Settings, Wand2 } from "lucide-react";
 
 import { animation } from "@/styles/tokens";
 
@@ -24,10 +14,6 @@ interface GameHubProps {
   onSaveManager: () => void;
   onPresetWorkspace: () => void;
   onLorebookWorkspace: () => void;
-  onCheckpoint: () => void;
-  onMemory: () => void;
-  onRoomInfo: () => void;
-  onWorldArchive: () => void;
 }
 
 const containerVariants = {
@@ -66,10 +52,6 @@ export function GameHub({
   onSaveManager,
   onPresetWorkspace,
   onLorebookWorkspace,
-  onCheckpoint,
-  onMemory,
-  onRoomInfo,
-  onWorldArchive,
 }: GameHubProps) {
   return (
     <div className="relative w-full h-dvh overflow-hidden">
@@ -103,26 +85,6 @@ export function GameHub({
 
         <motion.div variants={itemVariants}>
           <HubFeatureIcon
-            position="middle-left"
-            icon={Brain}
-            label="记忆"
-            sublabel="MEMORY"
-            onClick={onMemory}
-          />
-        </motion.div>
-
-        <motion.div variants={itemVariants}>
-          <HubFeatureIcon
-            position="middle-right"
-            icon={Globe}
-            label="联机"
-            sublabel="ONLINE"
-            onClick={onRoomInfo}
-          />
-        </motion.div>
-
-        <motion.div variants={itemVariants}>
-          <HubFeatureIcon
             position="bottom-left"
             icon={Home}
             label="返回标题"
@@ -151,20 +113,6 @@ export function GameHub({
             label="存档"
             sublabel="SAVES"
             onClick={onSaveManager}
-          />
-          <HubFeatureIcon
-            position="inline"
-            icon={Archive}
-            label="世界档案"
-            sublabel="ARCHIVE"
-            onClick={onWorldArchive}
-          />
-          <HubFeatureIcon
-            position="inline"
-            icon={Pin}
-            label="检查点"
-            sublabel="CHECKPOINT"
-            onClick={onCheckpoint}
           />
         </motion.div>
 

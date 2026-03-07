@@ -14,6 +14,8 @@ interface RightSidebarProps {
   onActiveTabChange: (tab: RightSidebarTab) => void;
   onOpenAiInsight: () => void;
   onOpenArchiveManager: () => void;
+  onOpenCheckpoint: () => void;
+  onOpenMemory: () => void;
 }
 
 const SCENE_TAB_ID = "right-sidebar-tab-scene";
@@ -28,6 +30,8 @@ export function RightSidebar({
   onActiveTabChange,
   onOpenAiInsight,
   onOpenArchiveManager,
+  onOpenCheckpoint,
+  onOpenMemory,
 }: RightSidebarProps) {
   const sessionMode = useSessionStore(selectSessionMode);
   const isMultiplayer = sessionMode === "multiplayer";
@@ -64,6 +68,8 @@ export function RightSidebar({
           <RightSidebarToolboxTab
             onOpenAiInsight={onOpenAiInsight}
             onOpenArchiveManager={onOpenArchiveManager}
+            onOpenCheckpoint={onOpenCheckpoint}
+            onOpenMemory={onOpenMemory}
           />
         )}
       </div>
