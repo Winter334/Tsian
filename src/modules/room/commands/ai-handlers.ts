@@ -25,25 +25,23 @@ import type {
   Member,
   PlayerAction,
 } from "@/core/yjs/room/types";
-import {
-  SyncPipelineArchiveChangesPayload,
-  WorldArchiveCommands,
-} from "@/domain";
 import type {
   CancelAiTurnPayload,
   ProcessAiTurnPayload,
   RegenerateAiTurnPayload,
 } from "@/domain/commands/room";
 import { RoomEvents } from "@/domain/events/room";
-import type { CreatedNpcData } from "@/domain/types";
 import { type ResultFrame } from "@/domain/types";
 import { createAiExecutor, type AiExecutor } from "@/lib/ai/executor";
 import { resolveAIConfig } from "@/lib/ai/resolve-config";
 import type { AdvancedSettings, AIConfig } from "@/lib/ai/types";
 import { usePresetStore, type VariableContext } from "@/lib/prompt";
 import { buildEnvelope, toVariableContext } from "@/lib/prompt/envelope";
-import { createGameStateRepository } from "@/modules/game/repository/game-state-repository";
-import { applyStructuralChanges } from "@/modules/game/services/structural-change-consumer";
+import {
+  CreatedNpcData,
+  createGameStateRepository,
+} from "@/modules/game/repository/game-state-repository";
+import { applyIrnrWorldResult } from "@/modules/game/services/apply-irnr-world-result";
 import {
   parseMemoryMarkerConfig,
   prepareMemoryData,
@@ -529,52 +527,20 @@ export async function processAiTurnHandler(
           updateResolveStatus(roomId, turnNumber, "committed");
         }
 
-        // 回写实体最终状态到 MainDoc.characters（通过 Repository Upsert）
-        if (irnrResult.finalEntityStates) {
-          repo.upsertFromEntityStates(
-            irnrResult.finalEntityStates,
-            irnrResult.createdNpcs,
-          );
-        }
-
         const { commandBus } = await import("@/core");
 
-        // 消费结构化变更（物品/技能 → Inventory 命令）
-        if (irnrResult.resultFrame?.structuralChanges) {
-          await applyStructuralChanges(
-            irnrResult.resultFrame.structuralChanges,
-            commandBus,
-          );
-        }
-
-        // --- 世界档案：通过命令链路同步 NPC 自动建档 + 导演档案更新 ---
-        const archiveCommandPayload: SyncPipelineArchiveChangesPayload = {
+        await applyIrnrWorldResult({
           currentTurn: turnNumber,
-          createdNpcs: irnrResult.createdNpcs,
-          archiveUpdates: irnrResult.archiveUpdates,
-        };
-
-        if (
-          (archiveCommandPayload.createdNpcs?.length ?? 0) > 0 ||
-          (archiveCommandPayload.archiveUpdates?.length ?? 0) > 0
-        ) {
-          const archiveSyncResult = await commandBus.dispatch<
-            SyncPipelineArchiveChangesPayload,
-            void
-          >(
-            {
-              type: WorldArchiveCommands.SYNC_PIPELINE_CHANGES,
-              payload: archiveCommandPayload,
-            },
-            { correlationId: context.commandId },
-          );
-
-          if (!archiveSyncResult.success) {
-            console.warn(
-              `[WorldArchive] 命令链路同步失败：${archiveSyncResult.error ?? "unknown"}`,
-            );
-          }
-        }
+          repository: repo,
+          result: {
+            finalEntityStates: irnrResult.finalEntityStates,
+            createdNpcs: irnrResult.createdNpcs,
+            archiveUpdates: irnrResult.archiveUpdates,
+            structuralChanges: irnrResult.resultFrame?.structuralChanges,
+          },
+          commandBus,
+          correlationId: context.commandId,
+        });
 
         // === NPC 自动归档检查 ===
         const NPC_AUTO_ARCHIVE_THRESHOLD = 10; // 连续 N 回合未出场则自动归档

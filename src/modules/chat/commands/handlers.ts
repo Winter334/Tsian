@@ -33,10 +33,6 @@ import {
   CheckpointCommands,
   type RestoreCheckpointPayload,
 } from "@/domain/commands/checkpoint";
-import {
-  WorldArchiveCommands,
-  type SyncPipelineArchiveChangesPayload,
-} from "@/domain/commands/world-archive";
 import { createConversation } from "@/domain/entities/conversation";
 import { createMessage } from "@/domain/entities/message";
 import { ChatEvents } from "@/domain/events/chat";
@@ -49,8 +45,8 @@ import {
   createGameStateRepository,
   type GameStateRepository,
 } from "@/modules/game/repository";
+import { applyIrnrWorldResult } from "@/modules/game/services/apply-irnr-world-result";
 import type { EntityData } from "@/modules/game/services/entity-accessor";
-import { applyStructuralChanges } from "@/modules/game/services/structural-change-consumer";
 import {
   parseMemoryMarkerConfig,
   prepareMemoryData,
@@ -347,74 +343,37 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
         return { success: false, error: errorMessage };
       }
 
-      // Solo IRNR：回写实体最终状态到当前存档（Upsert）
-      if (
-        irnrResult.finalEntityStates &&
-        irnrResult.finalEntityStates.length > 0
-      ) {
-        let writeRepo = gameStateRepo;
-        if (!writeRepo) {
-          const currentSaveForWriteback = yjsManager.getCurrentSave();
-          const rootDoc = yjsManager.getDoc();
-          if (currentSaveForWriteback && rootDoc) {
-            const charactersMap = currentSaveForWriteback.get("characters");
-            if (
-              charactersMap &&
-              typeof charactersMap === "object" &&
-              "size" in charactersMap
-            ) {
-              writeRepo = createGameStateRepository(
-                charactersMap as Y.Map<Y.Map<unknown>>,
-                rootDoc,
-              );
-            }
+      let writeRepo = gameStateRepo;
+      if (!writeRepo && (irnrResult.finalEntityStates?.length ?? 0) > 0) {
+        const currentSaveForWriteback = yjsManager.getCurrentSave();
+        const rootDoc = yjsManager.getDoc();
+        if (currentSaveForWriteback && rootDoc) {
+          const charactersMap = currentSaveForWriteback.get("characters");
+          if (
+            charactersMap &&
+            typeof charactersMap === "object" &&
+            "size" in charactersMap
+          ) {
+            writeRepo = createGameStateRepository(
+              charactersMap as Y.Map<Y.Map<unknown>>,
+              rootDoc,
+            );
           }
         }
-
-        if (writeRepo) {
-          writeRepo.upsertFromEntityStates(
-            irnrResult.finalEntityStates,
-            irnrResult.createdNpcs,
-          );
-        }
       }
 
-      // 消费结构化变更（物品/技能 → Inventory 命令）
-      if (irnrResult.resultFrame?.structuralChanges) {
-        await applyStructuralChanges(
-          irnrResult.resultFrame.structuralChanges,
-          commandBus,
-        );
-      }
-
-      // --- 世界档案：通过命令链路同步 NPC 自动建档 + 导演档案更新 ---
-      const archiveCommandPayload: SyncPipelineArchiveChangesPayload = {
+      await applyIrnrWorldResult({
         currentTurn: assistantMessageIndex,
-        createdNpcs: irnrResult.createdNpcs,
-        archiveUpdates: irnrResult.archiveUpdates,
-      };
-
-      if (
-        (archiveCommandPayload.createdNpcs?.length ?? 0) > 0 ||
-        (archiveCommandPayload.archiveUpdates?.length ?? 0) > 0
-      ) {
-        const archiveSyncResult = await commandBus.dispatch<
-          SyncPipelineArchiveChangesPayload,
-          void
-        >(
-          {
-            type: WorldArchiveCommands.SYNC_PIPELINE_CHANGES,
-            payload: archiveCommandPayload,
-          },
-          { correlationId: context.commandId },
-        );
-
-        if (!archiveSyncResult.success) {
-          console.warn(
-            `[WorldArchive] 命令链路同步失败：${archiveSyncResult.error ?? "unknown"}`,
-          );
-        }
-      }
+        repository: writeRepo,
+        result: {
+          finalEntityStates: irnrResult.finalEntityStates,
+          createdNpcs: irnrResult.createdNpcs,
+          archiveUpdates: irnrResult.archiveUpdates,
+          structuralChanges: irnrResult.resultFrame?.structuralChanges,
+        },
+        commandBus,
+        correlationId: context.commandId,
+      });
 
       const finalContent = irnrResult.narrativeText ?? "";
       session.complete(

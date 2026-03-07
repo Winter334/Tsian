@@ -37,6 +37,8 @@ export {
   type DirectActionServiceContract,
 } from "./direct-action-service";
 
+export { applyIrnrWorldResult } from "./apply-irnr-world-result";
+
 export {
   createGameStateService,
   gameStateService,

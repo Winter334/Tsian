@@ -76,9 +76,7 @@ import {
   type TurnCompletedEvent,
 } from "@/domain/events/room";
 import { SaveEvents } from "@/domain/events/save";
-import { postProcess } from "@/lib/post-process";
-import { BUILTIN_RULES } from "@/lib/post-process/builtin-rules";
-import { mergeRules } from "@/lib/post-process/merge";
+import { postProcessNarrativeForPersist } from "@/lib/post-process";
 import { usePresetStore } from "@/lib/prompt";
 import { computeFullStats } from "@/lib/rules/stats-pipeline";
 import { getUniqueTag } from "@/lib/user-identity";
@@ -2466,19 +2464,18 @@ export async function completeTurnHandler(
 
     // 在写入消息前先执行持久化后处理，避免结构标签泄漏到消息正文
     let cleanedAiResponse = resolvedAiResponse;
-    let miniSummaryParts: string[] | undefined;
+    let miniSummary: string | undefined;
     try {
       const activePreset = await usePresetStore
         .getState()
         .getPresetForPurpose("narrative");
-      const postProcessResult = postProcess({
+      const postProcessResult = postProcessNarrativeForPersist({
         rawText: resolvedAiResponse,
-        phase: "persist",
-        rules: mergeRules(BUILTIN_RULES, activePreset?.postProcessRules),
+        presetRules: activePreset?.postProcessRules,
       });
 
       cleanedAiResponse = postProcessResult.text;
-      miniSummaryParts = postProcessResult.extracted["miniSummary"];
+      miniSummary = postProcessResult.miniSummary;
 
       if (postProcessResult.warnings.length > 0) {
         console.warn(
@@ -2536,9 +2533,7 @@ export async function completeTurnHandler(
     }
 
     // ── Memory 后处理：写入提取的小总结 ──
-    if (miniSummaryParts && miniSummaryParts.length > 0) {
-      const miniSummary = miniSummaryParts.join("\n");
-
+    if (miniSummary) {
       // 方案 C（房主统一分配索引）：从 HistoryDoc 消息数组长度计算
       const assistantMessageIndex = messagesArray.length - 1;
 
@@ -2560,10 +2555,37 @@ export async function completeTurnHandler(
         roomId,
       };
 
-      void commandBus.dispatch({
-        type: MemoryCommands.ADD_MINI_SUMMARY,
-        payload: miniSummaryPayload,
-      });
+      try {
+        const dispatchResult = await commandBus.dispatch({
+          type: MemoryCommands.ADD_MINI_SUMMARY,
+          payload: miniSummaryPayload,
+        });
+
+        if (!dispatchResult.success) {
+          console.warn(
+            `[Room:completeTurn] 写入小总结失败，但已保留消息与回合归档: ${dispatchResult.error ?? "未知错误"}`,
+            {
+              conversationId,
+              roomId,
+              turnNumber,
+              messageId: assistantMessageId,
+              messageIndex: assistantMessageIndex,
+            },
+          );
+        }
+      } catch (error) {
+        console.warn(
+          "[Room:completeTurn] 写入小总结失败，但已保留消息与回合归档:",
+          error instanceof Error ? error.message : error,
+          {
+            conversationId,
+            roomId,
+            turnNumber,
+            messageId: assistantMessageId,
+            messageIndex: assistantMessageIndex,
+          },
+        );
+      }
     }
 
     // 归档回合数据到 HistoryDoc

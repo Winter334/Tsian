@@ -282,32 +282,35 @@ export const directorAgent: AgentDescriptor<PipelineBlackboard> = {
       "archive_updates",
     ];
 
+    const pushWarning = (
+      code: WarningRecord["code"],
+      message: string,
+      details?: Record<string, unknown>,
+    ): void => {
+      const warning: WarningRecord = {
+        code,
+        message,
+        stage: "director",
+        details,
+        timestamp: Date.now(),
+      };
+      bb.warnings ??= [];
+      bb.warnings.push(warning);
+      console.warn(`[Director] ${code}:`, message, details);
+    };
+
     let parsed: ReturnType<typeof parseDirectorOutput>;
     try {
       parsed = parseDirectorOutput(rawContent, {
         ioContract: directorPreset.ioContract,
       });
     } catch (error) {
-      const warning: WarningRecord = {
-        code: WARNING_CODES.DIRECTOR_PARSE_FAILED,
-        message:
-          error instanceof Error
-            ? error.message
-            : "导演输出解析失败（未知错误）",
-        stage: "director",
-        details: {
+      pushWarning(
+        WARNING_CODES.DIRECTOR_PARSE_FAILED,
+        error instanceof Error ? error.message : "导演输出解析失败（未知错误）",
+        {
           errorName: error instanceof Error ? error.name : "UnknownError",
         },
-        timestamp: Date.now(),
-      };
-      if (!bb.warnings) {
-        bb.warnings = [];
-      }
-      bb.warnings.push(warning);
-      console.warn(
-        `[Director] ${WARNING_CODES.DIRECTOR_PARSE_FAILED}:`,
-        warning.message,
-        warning.details,
       );
       throw error;
     }
@@ -329,24 +332,7 @@ export const directorAgent: AgentDescriptor<PipelineBlackboard> = {
         ? "输出解析失败，所有必填标签均缺失，已回退为空字符串"
         : "输出解析触发降级，已回退缺失标签为空字符串";
 
-      // 结构化告警写入黑板
-      const warning: WarningRecord = {
-        code: warningCode,
-        message: warningMessage,
-        stage: "director",
-        details: { parseWarnings },
-        timestamp: Date.now(),
-      };
-      if (!bb.warnings) {
-        bb.warnings = [];
-      }
-      bb.warnings.push(warning);
-      // 保留开发调试日志
-      console.warn(
-        `[Director] ${warningCode}:`,
-        warning.message,
-        parseWarnings,
-      );
+      pushWarning(warningCode, warningMessage, { parseWarnings });
     }
 
     const archiveStore = useWorldArchiveStore.getState();
@@ -398,14 +384,29 @@ export const directorAgent: AgentDescriptor<PipelineBlackboard> = {
 
     const currentTurn = bb.turnNumber;
 
-    const archiveUpdates = parseArchiveUpdates(
-      parsed.archiveUpdatesRaw,
-      entityLookup,
-      currentTurn,
-    );
-
     directorBb.plotDirectives = parsed.plotDirectives;
     directorBb.narrativeHints = parsed.narrativeHints;
+
+    let archiveUpdates: ArchiveUpdate[] = [];
+    try {
+      archiveUpdates = parseArchiveUpdates(
+        parsed.archiveUpdatesRaw,
+        entityLookup,
+        currentTurn,
+      );
+    } catch (error) {
+      pushWarning(
+        WARNING_CODES.DIRECTOR_PARSE_DEGRADED,
+        error instanceof Error
+          ? `archive_updates 解析失败，已跳过该段：${error.message}`
+          : "archive_updates 解析失败，已跳过该段（未知错误）",
+        {
+          section: "archive_updates",
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        },
+      );
+    }
+
     directorBb.archiveUpdates = archiveUpdates;
 
     // 黑板→Envelope 桥接：当 USE_ENVELOPE_V2 开启时，将 directives 同步写入 envelope
@@ -430,12 +431,27 @@ export const directorAgent: AgentDescriptor<PipelineBlackboard> = {
       outlineUpdatesSummary: parsed.outlineUpdatesRaw,
     };
 
-    const outlineInstructions = parsed.outlineUpdatesRaw
-      ? parseOutlineUpdates(parsed.outlineUpdatesRaw, currentTurn)
-      : [];
+    let outlineChanged = false;
+    let foreshadowChanged = false;
+    try {
+      const outlineInstructions = parsed.outlineUpdatesRaw
+        ? parseOutlineUpdates(parsed.outlineUpdatesRaw, currentTurn)
+        : [];
 
-    const { outlineChanged, foreshadowChanged } =
-      applyOutlineInstructions(outlineInstructions);
+      ({ outlineChanged, foreshadowChanged } =
+        applyOutlineInstructions(outlineInstructions));
+    } catch (error) {
+      pushWarning(
+        WARNING_CODES.DIRECTOR_PARSE_DEGRADED,
+        error instanceof Error
+          ? `outline_updates 处理失败，已跳过该段：${error.message}`
+          : "outline_updates 处理失败，已跳过该段（未知错误）",
+        {
+          section: "outline_updates",
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        },
+      );
+    }
 
     useDirectorStore.getState().appendDirectorLog(logEntry);
 

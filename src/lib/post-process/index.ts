@@ -3,6 +3,10 @@ import type { PostProcessInput, PostProcessOutput } from "./types";
 
 export { BUILTIN_RULES } from "./builtin-rules";
 export { mergeRules } from "./merge";
+export {
+  postProcessNarrativeForPersist,
+  type PersistNarrativePostProcessResult,
+} from "./persist-narrative";
 export { executePostProcessPipeline } from "./pipeline";
 export {
   convertTavernRegex,
