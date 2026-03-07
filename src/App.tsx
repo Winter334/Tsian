@@ -1,13 +1,15 @@
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
 
 import { CharacterPanelDialog } from "./components/CharacterPanel";
+import { GameHUD } from "./components/GameHUD";
 import {
   GameWizard,
   type GameMode,
   type WizardResult,
 } from "./components/GameWizard";
+import { GameHub } from "./components/layout/GameHub";
 import { LorebookWorkspace } from "./components/LorebookWorkspace";
 import { RoomInfoDialog } from "./components/Multiplayer";
 import { MultiplayerSaveDialog } from "./components/MultiplayerSaveDialog";
@@ -33,10 +35,6 @@ import { useCommand, useEvent } from "./hooks";
 import { savePortrait } from "./lib/portrait/storage";
 import { usePresetStore } from "./lib/prompt";
 import { getLastDisplayName, getOrCreateUserId } from "./lib/user-identity";
-// 通过顶层模块入口导入，确保松耦合
-import { ArchiveManagerDialog } from "./components/ArchiveManager";
-import { GameHUD } from "./components/GameHUD";
-import { GameHub } from "./components/layout/GameHub";
 import {
   CheckpointPanel,
   GameView,
@@ -46,10 +44,416 @@ import {
 } from "./modules";
 import { selectIsOnline, useSessionStore } from "./stores";
 import { useSettingsStore } from "./stores/settings";
+import {
+  animation,
+  colorAlpha,
+  glassmorphism,
+  glow,
+  gradients,
+  gradientText,
+} from "./styles/tokens";
+// 通过顶层模块入口导入，确保松耦合
+import { ArchiveManagerDialog } from "./components/ArchiveManager";
 
 type AppState = "splash" | "onboarding" | "title" | "wizard" | "hub" | "game";
+type HubGameTransitionState = "idle" | "hub-to-game" | "game-to-hub";
+type HubGameTransitionPhase = "idle" | "out" | "in";
+type ActiveHubGameTransition = Exclude<HubGameTransitionState, "idle">;
+type ActiveHubGameTransitionPhase = Exclude<HubGameTransitionPhase, "idle">;
 
+const HUB_GAME_TRANSITION_EASE = [0.22, 1, 0.36, 1] as const;
 const RETURN_TO_TITLE_THROTTLE_MS = 800;
+const HUB_GAME_EXIT_HANDOFF_RATIO = 0.82;
+const HUB_GAME_EXIT_DURATION_MS =
+  animation.duration.slow * 1000 * HUB_GAME_EXIT_HANDOFF_RATIO;
+const HUB_GAME_EXIT_REDUCED_MOTION_MS = 170;
+const HUB_GAME_ENTER_DURATION_MS = animation.duration.normal * 1000;
+const HUB_GAME_ENTER_REDUCED_MOTION_MS = 130;
+const TRANSITION_CARD_CLIP_PATH =
+  "polygon(0 12%, 12% 0, 88% 0, 100% 12%, 100% 88%, 88% 100%, 12% 100%, 0 88%)";
+const TRANSITION_CARD_CLIP_STYLE = {
+  clipPath: TRANSITION_CARD_CLIP_PATH,
+  WebkitClipPath: TRANSITION_CARD_CLIP_PATH,
+} as const;
+
+interface HubGameTransitionShellProps {
+  direction: ActiveHubGameTransition;
+  phase: ActiveHubGameTransitionPhase;
+}
+
+function HubGameTransitionShell({
+  direction,
+  phase,
+}: HubGameTransitionShellProps) {
+  const shouldReduceMotion = useReducedMotion();
+  const isHubToGame = direction === "hub-to-game";
+  const phaseDuration = shouldReduceMotion
+    ? 0.17
+    : phase === "out"
+      ? animation.duration.slow
+      : animation.duration.normal;
+  const scrimOpacity = shouldReduceMotion
+    ? phase === "out"
+      ? 0.3
+      : 0.16
+    : isHubToGame
+      ? phase === "out"
+        ? 0.28
+        : 0.78
+      : phase === "out"
+        ? 0.8
+        : 0.22;
+  const shellInitial = shouldReduceMotion
+    ? {
+        opacity: 0,
+        scale: isHubToGame ? 0.98 : 1.06,
+      }
+    : isHubToGame
+      ? {
+          rotateY: 0,
+          rotateX: 0,
+          scale: 1,
+          y: 0,
+          opacity: 1,
+          filter: "blur(0px)",
+        }
+      : {
+          rotateY: 180,
+          rotateX: -8,
+          scale: 1.72,
+          y: -44,
+          opacity: 0.04,
+          filter: "blur(16px)",
+        };
+  const shellAnimate = shouldReduceMotion
+    ? phase === "out"
+      ? {
+          opacity: 1,
+          scale: isHubToGame ? 1.06 : 1.015,
+        }
+      : {
+          opacity: 0,
+          scale: isHubToGame ? 1.12 : 1,
+        }
+    : isHubToGame
+      ? phase === "out"
+        ? {
+            rotateY: 118,
+            rotateX: 10,
+            scale: 1.32,
+            y: -26,
+            opacity: 1,
+            filter: "blur(0px)",
+          }
+        : {
+            rotateY: 180,
+            rotateX: 16,
+            scale: 1.84,
+            y: -48,
+            opacity: 0,
+            filter: "blur(12px)",
+          }
+      : phase === "out"
+        ? {
+            rotateY: 72,
+            rotateX: -12,
+            scale: 1.34,
+            y: -26,
+            opacity: 1,
+            filter: "blur(0px)",
+          }
+        : {
+            rotateY: 0,
+            rotateX: 0,
+            scale: 1,
+            y: 0,
+            opacity: 0,
+            filter: "blur(7px)",
+          };
+
+  const shellTransition = {
+    duration: phaseDuration,
+    ease: HUB_GAME_TRANSITION_EASE,
+    ...(shouldReduceMotion
+      ? {}
+      : {
+          rotateY: {
+            duration: phaseDuration,
+            ease: [0.32, 0.02, 0.2, 1] as const,
+          },
+          rotateX: {
+            duration: phaseDuration,
+            ease: HUB_GAME_TRANSITION_EASE,
+          },
+          scale: {
+            duration: phaseDuration,
+            ease: HUB_GAME_TRANSITION_EASE,
+          },
+          opacity: {
+            duration: phaseDuration * (phase === "out" ? 1 : 0.82),
+            ease: [0.32, 0, 0.2, 1] as const,
+          },
+        }),
+  };
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-45 overflow-hidden">
+      <motion.div
+        className="absolute inset-0"
+        initial={false}
+        animate={{ opacity: scrimOpacity }}
+        transition={{
+          duration: phaseDuration,
+          ease: HUB_GAME_TRANSITION_EASE,
+        }}
+        style={{
+          background: `radial-gradient(circle at 50% 50%, ${colorAlpha(
+            "bgBase",
+            phase === "out" ? 0.04 : 0.02,
+          )} 0%, ${colorAlpha("bgBase", phase === "out" ? 0.16 : 0.2)} 18%, ${colorAlpha("bgBase", phase === "out" ? 0.74 : 0.92)} 72%), linear-gradient(180deg, ${colorAlpha("bgBase", phase === "out" ? 0.32 : 0.38)} 0%, ${colorAlpha("bgBase", phase === "out" ? 0.64 : 0.82)} 100%)`,
+        }}
+      />
+
+      <div
+        className="absolute inset-0 flex items-center justify-center"
+        style={{
+          perspective: shouldReduceMotion ? undefined : "1500px",
+        }}
+      >
+        <motion.div
+          className="absolute h-40 w-40 blur-3xl md:h-56 md:w-56"
+          initial={false}
+          animate={{
+            opacity: phase === "out" ? 0.84 : 0.28,
+            scale: phase === "out" ? 1.18 : 1.56,
+          }}
+          transition={{
+            duration: phaseDuration,
+            ease: HUB_GAME_TRANSITION_EASE,
+          }}
+          style={{
+            ...TRANSITION_CARD_CLIP_STYLE,
+            background: `radial-gradient(circle at 50% 50%, ${colorAlpha(
+              "primary",
+              0.52,
+            )} 0%, ${colorAlpha("secondary", 0.24)} 36%, transparent 74%)`,
+          }}
+        />
+
+        <motion.div
+          className="relative h-40 w-40 md:h-56 md:w-56"
+          initial={shellInitial}
+          animate={shellAnimate}
+          transition={shellTransition}
+          style={{
+            transformStyle: "preserve-3d",
+            transformOrigin: "center center",
+          }}
+        >
+          <div
+            className="absolute -inset-4 blur-2xl md:-inset-6"
+            style={{
+              ...TRANSITION_CARD_CLIP_STYLE,
+              background: `radial-gradient(circle at 50% 50%, ${colorAlpha(
+                "primary",
+                0.3,
+              )} 0%, ${colorAlpha("secondary", 0.12)} 34%, transparent 76%)`,
+            }}
+          />
+
+          <div
+            className="absolute inset-0 overflow-hidden rounded-[1.4rem]"
+            style={{
+              ...glassmorphism(0.54),
+              ...TRANSITION_CARD_CLIP_STYLE,
+              background: `linear-gradient(168deg, ${colorAlpha(
+                "bgCard",
+                0.72,
+              )} 0%, ${colorAlpha("bgElevated", 0.58)} 42%, ${colorAlpha(
+                "bgBase",
+                0.66,
+              )} 100%)`,
+              border: `1px solid ${colorAlpha("primary", 0.22)}`,
+              boxShadow: `0 20px 44px ${colorAlpha("bgBase", 0.28)}, ${glow(
+                "primary",
+                "lg",
+                0.18,
+              )}, inset 0 0 0 1px ${colorAlpha("textPrimary", 0.05)}`,
+              backdropFilter: "blur(18px) saturate(135%)",
+              WebkitBackdropFilter: "blur(18px) saturate(135%)",
+              backfaceVisibility: "hidden",
+              WebkitBackfaceVisibility: "hidden",
+              transform: "translateZ(2px)",
+            }}
+          >
+            <div
+              className="absolute inset-px rounded-[calc(1.4rem-1px)]"
+              style={{
+                ...TRANSITION_CARD_CLIP_STYLE,
+                background: `radial-gradient(circle at 50% 34%, ${colorAlpha(
+                  "primary",
+                  0.22,
+                )} 0%, ${colorAlpha("secondary", 0.12)} 18%, transparent 56%), linear-gradient(180deg, ${colorAlpha("textPrimary", 0.08)} 0%, transparent 28%, ${colorAlpha("primary", 0.06)} 100%)`,
+                boxShadow: `inset 0 0 0 1px ${colorAlpha("textPrimary", 0.04)}`,
+              }}
+            />
+            <div
+              className="absolute inset-[8%] rounded-[1.15rem]"
+              style={{
+                ...TRANSITION_CARD_CLIP_STYLE,
+                background: `linear-gradient(138deg, transparent 4%, ${colorAlpha(
+                  "primary",
+                  0.06,
+                )} 38%, transparent 62%), repeating-linear-gradient(180deg, transparent 0px, transparent 13px, ${colorAlpha(
+                  "primary",
+                  0.08,
+                )} 13.5px, transparent 14px), repeating-linear-gradient(90deg, transparent 0px, transparent 18px, ${colorAlpha(
+                  "secondary",
+                  0.06,
+                )} 18.5px, transparent 19px)`,
+                boxShadow: `inset 0 0 18px ${colorAlpha("primary", 0.08)}`,
+                mixBlendMode: "screen",
+              }}
+            />
+            <div
+              className="absolute inset-[6.5%] rounded-[1.1rem]"
+              style={{
+                ...TRANSITION_CARD_CLIP_STYLE,
+                border: `1px solid ${colorAlpha("primary", 0.3)}`,
+                boxShadow: `inset 0 0 0 1px ${colorAlpha(
+                  "textPrimary",
+                  0.05,
+                )}, inset 0 0 18px ${colorAlpha("primary", 0.08)}`,
+              }}
+            />
+            <div className="relative z-10 flex h-full flex-col items-center justify-center px-4 text-center md:px-6">
+              <span
+                className="text-[10px] md:text-xs uppercase tracking-[0.24em]"
+                style={{ color: colorAlpha("textSecondary", 0.68) }}
+              >
+                Adventure Gate
+              </span>
+              <strong
+                className="mt-1 text-xl font-semibold md:text-3xl"
+                style={{
+                  ...gradientText(gradients.text()),
+                  textShadow: glow("primary", "sm", 0.18),
+                }}
+              >
+                继续冒险
+              </strong>
+              <span
+                className="mt-3 text-[10px] md:text-xs uppercase tracking-[0.22em]"
+                style={{ color: colorAlpha("textPrimary", 0.76) }}
+              >
+                INSPECTION SURFACE
+              </span>
+            </div>
+            <div
+              className="absolute inset-x-7 top-5 h-px md:top-6"
+              style={{
+                background: `linear-gradient(90deg, transparent, ${colorAlpha(
+                  "secondary",
+                  0.22,
+                )} 18%, ${colorAlpha("primary", 0.56)} 50%, ${colorAlpha(
+                  "secondary",
+                  0.22,
+                )} 82%, transparent)`,
+              }}
+            />
+            <div
+              className="absolute inset-x-6 bottom-4 h-px md:bottom-5"
+              style={{
+                background: `linear-gradient(90deg, transparent, ${colorAlpha(
+                  "primary",
+                  0.56,
+                )}, ${colorAlpha("secondary", 0.42)}, transparent)` ,
+                boxShadow: glow("primary", "sm", 0.14),
+              }}
+            />
+          </div>
+
+          <div
+            className="absolute inset-0 overflow-hidden rounded-[1.4rem]"
+            style={{
+              ...glassmorphism(0.62),
+              ...TRANSITION_CARD_CLIP_STYLE,
+              background: `linear-gradient(148deg, ${colorAlpha(
+                "bgElevated",
+                0.82,
+              )} 0%, ${colorAlpha("bgCard", 0.72)} 42%, ${colorAlpha(
+                "bgBase",
+                0.82,
+              )} 100%)`,
+              border: `1px solid ${colorAlpha("secondary", 0.18)}`,
+              boxShadow: `0 18px 40px ${colorAlpha("bgBase", 0.24)}, ${glow(
+                "primary",
+                "md",
+                0.16,
+              )}, inset 0 0 0 1px ${colorAlpha("textPrimary", 0.04)}`,
+              backdropFilter: "blur(18px) saturate(130%)",
+              WebkitBackdropFilter: "blur(18px) saturate(130%)",
+              backfaceVisibility: "hidden",
+              WebkitBackfaceVisibility: "hidden",
+              transform: "rotateY(180deg) translateZ(2px)",
+            }}
+          >
+            <div
+              className="absolute inset-[8%] rounded-[1.1rem]"
+              style={{
+                ...TRANSITION_CARD_CLIP_STYLE,
+                background: `radial-gradient(circle at 50% 46%, ${colorAlpha(
+                  "primary",
+                  0.18,
+                )} 0%, ${colorAlpha("secondary", 0.12)} 24%, transparent 58%), repeating-linear-gradient(135deg, transparent 0px, transparent 14px, ${colorAlpha(
+                  "primary",
+                  0.05,
+                )} 14.5px, transparent 15px), linear-gradient(180deg, ${colorAlpha(
+                  "textPrimary",
+                  0.05,
+                )} 0%, transparent 24%, ${colorAlpha("primary", 0.06)} 100%)`,
+                boxShadow: `inset 0 0 18px ${colorAlpha("primary", 0.1)}`,
+              }}
+            />
+            <div className="relative z-10 flex h-full flex-col items-center justify-center text-center">
+              <div
+                className="h-13 w-13 rounded-full md:h-18 md:w-18"
+                style={{
+                  background: `radial-gradient(circle at 50% 50%, ${colorAlpha(
+                    "textPrimary",
+                    0.86,
+                  )} 0%, ${colorAlpha("secondary", 0.34)} 18%, ${colorAlpha(
+                    "primary",
+                    0.12,
+                  )} 48%, transparent 76%)`,
+                  boxShadow: `${glow("primary", "md", 0.22)}, inset 0 0 16px ${colorAlpha(
+                    "textPrimary",
+                    0.14,
+                  )}`,
+                }}
+              />
+              <div
+                className="mt-5 h-px w-16 md:w-24"
+                style={{
+                  background: `linear-gradient(90deg, transparent, ${colorAlpha(
+                    "secondary",
+                    0.44,
+                  )}, transparent)`,
+                }}
+              />
+              <span
+                className="mt-3 text-[10px] md:text-xs uppercase tracking-[0.28em]"
+                style={{ color: colorAlpha("textPrimary", 0.74) }}
+              >
+                Transition Shell
+              </span>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * 房间事件监听器组件
@@ -162,6 +566,12 @@ function AppContent() {
   const [archiveManagerOpen, setArchiveManagerOpen] = useState(false);
   const [selectedMultiplayerSave, setSelectedMultiplayerSave] =
     useState<SaveSlotInfo | null>(null);
+  const [hubGameTransition, setHubGameTransition] =
+    useState<HubGameTransitionState>("idle");
+  const [hubGameTransitionPhase, setHubGameTransitionPhase] =
+    useState<HubGameTransitionPhase>("idle");
+  const hubGameTransitionTimerRef = useRef<number | null>(null);
+  const shouldReduceMotion = useReducedMotion();
 
   // GameWizard 初始状态（用于"开启新聚会"场景）
   const [wizardInitialStep, setWizardInitialStep] = useState<
@@ -186,6 +596,61 @@ function AppContent() {
 
   // 检查是否有存档槽位
   const hasSaveData = saves.length > 0;
+  const hubGameExitDurationMs = shouldReduceMotion
+    ? HUB_GAME_EXIT_REDUCED_MOTION_MS
+    : HUB_GAME_EXIT_DURATION_MS;
+  const hubGameEnterDurationMs = shouldReduceMotion
+    ? HUB_GAME_ENTER_REDUCED_MOTION_MS
+    : HUB_GAME_ENTER_DURATION_MS;
+
+  const clearHubGameTransitionTimer = useCallback(() => {
+    if (hubGameTransitionTimerRef.current !== null) {
+      window.clearTimeout(hubGameTransitionTimerRef.current);
+      hubGameTransitionTimerRef.current = null;
+    }
+  }, []);
+
+  const setHubGameTransitionTimer = useCallback(
+    (callback: () => void, delayMs: number) => {
+      clearHubGameTransitionTimer();
+      hubGameTransitionTimerRef.current = window.setTimeout(() => {
+        hubGameTransitionTimerRef.current = null;
+        callback();
+      }, delayMs);
+    },
+    [clearHubGameTransitionTimer],
+  );
+
+  const resetHubGameTransition = useCallback(() => {
+    clearHubGameTransitionTimer();
+    setHubGameTransition("idle");
+    setHubGameTransitionPhase("idle");
+  }, [clearHubGameTransitionTimer]);
+
+  const runHubGameTransition = useCallback(
+    (
+      direction: Exclude<HubGameTransitionState, "idle">,
+      nextState: Extract<AppState, "hub" | "game">,
+    ) => {
+      setHubGameTransition(direction);
+      setHubGameTransitionPhase("out");
+      setHubGameTransitionTimer(() => {
+        setAppState(nextState);
+        setHubGameTransitionPhase("in");
+        setHubGameTransitionTimer(() => {
+          setHubGameTransition("idle");
+          setHubGameTransitionPhase("idle");
+        }, hubGameEnterDurationMs);
+      }, hubGameExitDurationMs);
+    },
+    [hubGameEnterDurationMs, hubGameExitDurationMs, setHubGameTransitionTimer],
+  );
+
+  useEffect(() => {
+    return () => {
+      clearHubGameTransitionTimer();
+    };
+  }, [clearHubGameTransitionTimer]);
 
   // 获取最近的存档槽位
   const getLatestSave = () => {
@@ -212,6 +677,8 @@ function AppContent() {
 
   // 返回标题界面的回调
   const handleReturnToTitle = () => {
+    resetHubGameTransition();
+    setRoomInfoOpen(false);
     setAppState("title");
   };
 
@@ -305,12 +772,15 @@ function AppContent() {
           }
         }
 
+        resetHubGameTransition();
         setAppState("hub");
       } else {
+        resetHubGameTransition();
         setAppState("title");
       }
     } else {
       // 联机模式：先进入 Hub（房间已创建/加入）
+      resetHubGameTransition();
       setAppState("hub");
     }
   };
@@ -318,6 +788,7 @@ function AppContent() {
   // 向导关闭（取消）
   const handleWizardClose = () => {
     setWizardOpen(false);
+    resetHubGameTransition();
     setAppState("title");
   };
 
@@ -332,6 +803,7 @@ function AppContent() {
 
     if (loadResult.success) {
       // 注意：房间状态会在 SAVE_LOADED 事件触发后由 Room 模块自动重置
+      resetHubGameTransition();
       setAppState("hub");
       return true;
     } else {
@@ -457,13 +929,21 @@ function AppContent() {
 
   // 从 Hub 进入游戏
   const handleEnterGame = () => {
-    setAppState("game");
+    if (appState !== "hub" || hubGameTransition !== "idle") {
+      return;
+    }
+
+    runHubGameTransition("hub-to-game", "game");
   };
 
   // 从 Game 返回 Hub
   const handleReturnToHub = () => {
+    if (appState !== "game" || hubGameTransition !== "idle") {
+      return;
+    }
+
     setRoomInfoOpen(false);
-    setAppState("hub");
+    runHubGameTransition("game-to-hub", "hub");
   };
 
   const handleOpenMemory = () => {
@@ -484,6 +964,7 @@ function AppContent() {
 
   // 从存档管理加载存档后进入 Hub
   const handleLoadSave = () => {
+    resetHubGameTransition();
     setAppState("hub");
   };
 
@@ -503,10 +984,25 @@ function AppContent() {
     } catch {
       // 离房失败不阻塞回标题
     } finally {
+      resetHubGameTransition();
       setRoomInfoOpen(false);
       setAppState("title");
     }
   };
+
+  const isHubGameTransitioning = hubGameTransitionPhase !== "idle";
+  const activeHubGameTransition: {
+    direction: ActiveHubGameTransition;
+    phase: ActiveHubGameTransitionPhase;
+  } | null =
+    hubGameTransition === "idle" || hubGameTransitionPhase === "idle"
+      ? null
+      : {
+          direction: hubGameTransition,
+          phase: hubGameTransitionPhase,
+        };
+  const showHubLayer = appState === "hub";
+  const showGameLayer = appState === "game";
 
   return (
     <>
@@ -557,52 +1053,45 @@ function AppContent() {
           />
         )}
 
-        {/* Hub / Game 视图（仅 hub ↔ game 切换使用过渡动画） */}
-        {(appState === "hub" || appState === "game") && (
-          <div className="relative h-dvh">
-            <AnimatePresence mode="wait" initial={false}>
-              {appState === "hub" && (
-                <motion.div
-                  key="hub"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.25 }}
-                  className="absolute inset-0"
-                >
-                  <GameHub
-                    onEnterGame={handleEnterGame}
-                    onBackToTitle={handleBackToTitle}
-                    onSettings={handleSettings}
-                    onSaveManager={handleSaveManager}
-                    onPresetWorkspace={handleOpenPresetWorkspace}
-                    onLorebookWorkspace={handleOpenLorebookWorkspace}
-                  />
-                </motion.div>
-              )}
+        {/* Hub / Game 视图（源层退出 → 目标层进入） */}
+        {(appState === "hub" ||
+          appState === "game" ||
+          isHubGameTransitioning) && (
+          <div className="relative h-dvh overflow-hidden">
+            {showHubLayer && (
+              <GameHub
+                onEnterGame={handleEnterGame}
+                onBackToTitle={handleBackToTitle}
+                onSettings={handleSettings}
+                onSaveManager={handleSaveManager}
+                onPresetWorkspace={handleOpenPresetWorkspace}
+                onLorebookWorkspace={handleOpenLorebookWorkspace}
+                transitionState={hubGameTransition}
+                transitionPhase={hubGameTransitionPhase}
+              />
+            )}
 
-              {appState === "game" && (
-                <motion.div
-                  key="game"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.25 }}
-                  className="absolute inset-0"
-                >
-                  <GameHUD
-                    onReturnToHub={handleReturnToHub}
-                    onOpenCharacterPanel={handleOpenCharacterPanel}
-                    onOpenArchiveManager={handleOpenWorldArchive}
-                    onOpenCheckpoint={handleOpenCheckpoint}
-                    onOpenMemory={handleOpenMemory}
-                    onOpenRoomInfo={handleOpenRoomInfo}
-                  >
-                    <GameView className="h-full" />
-                  </GameHUD>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {showGameLayer && (
+              <GameHUD
+                onReturnToHub={handleReturnToHub}
+                onOpenCharacterPanel={handleOpenCharacterPanel}
+                onOpenArchiveManager={handleOpenWorldArchive}
+                onOpenCheckpoint={handleOpenCheckpoint}
+                onOpenMemory={handleOpenMemory}
+                onOpenRoomInfo={handleOpenRoomInfo}
+                transitionState={hubGameTransition}
+                transitionPhase={hubGameTransitionPhase}
+              >
+                <GameView className="h-full" />
+              </GameHUD>
+            )}
+
+            {activeHubGameTransition && (
+              <HubGameTransitionShell
+                direction={activeHubGameTransition.direction}
+                phase={activeHubGameTransition.phase}
+              />
+            )}
           </div>
         )}
 

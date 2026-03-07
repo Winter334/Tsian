@@ -14,11 +14,13 @@ interface TopBarProps {
   onOpenRightSidebar: () => void;
   onReturnToHub: () => void;
   onOpenRoomInfo: () => void;
+  disabled?: boolean;
 }
 
 interface TopBarIconButtonProps {
   onClick: () => void;
   ariaLabel: string;
+  disabled?: boolean;
 }
 
 function formatTime(seconds: number): string {
@@ -31,23 +33,31 @@ function formatTime(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-function TopBarIconButton({ onClick, ariaLabel }: TopBarIconButtonProps) {
+function TopBarIconButton({
+  onClick,
+  ariaLabel,
+  disabled = false,
+}: TopBarIconButtonProps) {
   return (
     <motion.button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={[
         "md:hidden h-8 w-8 rounded-full",
         "inline-flex items-center justify-center",
         "backdrop-blur-sm",
-      ].join(" ")}
+        disabled ? "cursor-not-allowed opacity-50" : undefined,
+      ]
+        .filter(Boolean)
+        .join(" ")}
       style={{
         background: colorAlpha("bgElevated", 0.58),
         border: `1px solid ${colorAlpha("primary", 0.2)}`,
         color: colorAlpha("textPrimary", 0.95),
       }}
-      whileHover={{ scale: 1.04 }}
-      whileTap={{ scale: 0.96 }}
+      whileHover={disabled ? undefined : { scale: 1.04 }}
+      whileTap={disabled ? undefined : { scale: 0.96 }}
       transition={{ duration: animation.duration.fast }}
       aria-label={ariaLabel}
     >
@@ -61,6 +71,7 @@ export function TopBar({
   onOpenRightSidebar,
   onReturnToHub,
   onOpenRoomInfo,
+  disabled = false,
 }: TopBarProps) {
   const sessionMode = useSessionStore(selectSessionMode);
   const roomId = useSessionStore((s) => s.roomId);
@@ -103,6 +114,7 @@ export function TopBar({
         <TopBarIconButton
           onClick={onOpenLeftSidebar}
           ariaLabel="打开角色状态侧栏"
+          disabled={disabled}
         />
       </div>
 
@@ -111,22 +123,30 @@ export function TopBar({
           <motion.button
             type="button"
             onClick={onOpenRoomInfo}
+            disabled={disabled}
             className={[
               "h-8 max-w-full px-3 rounded-full",
               "inline-flex items-center gap-2",
               "text-xs sm:text-sm",
               "backdrop-blur-sm",
-            ].join(" ")}
+              disabled ? "cursor-not-allowed opacity-55" : undefined,
+            ]
+              .filter(Boolean)
+              .join(" ")}
             style={{
               background: colorAlpha("bgElevated", 0.56),
               border: `1px solid ${colorAlpha("primary", 0.2)}`,
               color: colorAlpha("textPrimary", 0.95),
             }}
-            whileHover={{
-              scale: 1.02,
-              boxShadow: glow("primary", "sm", 0.2),
-            }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={
+              disabled
+                ? undefined
+                : {
+                    scale: 1.02,
+                    boxShadow: glow("primary", "sm", 0.2),
+                  }
+            }
+            whileTap={disabled ? undefined : { scale: 0.98 }}
             transition={{ duration: animation.duration.fast }}
             aria-label="查看房间信息"
           >
@@ -140,11 +160,13 @@ export function TopBar({
         <TopBarIconButton
           onClick={onOpenRightSidebar}
           ariaLabel="打开右侧功能栏侧栏"
+          disabled={disabled}
         />
         <HubReturnButton
           onClick={onReturnToHub}
           floating={false}
           className="h-8 w-8"
+          disabled={disabled}
         />
       </div>
     </header>

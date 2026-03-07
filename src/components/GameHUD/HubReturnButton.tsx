@@ -7,23 +7,27 @@ interface HubReturnButtonProps {
   onClick: () => void;
   className?: string;
   floating?: boolean;
+  disabled?: boolean;
 }
 
 export function HubReturnButton({
   onClick,
   className,
   floating = true,
+  disabled = false,
 }: HubReturnButtonProps) {
   return (
     <motion.button
       type="button"
       onClick={onClick}
       title="返回大厅"
+      disabled={disabled}
       className={[
         floating ? "absolute top-3 right-3 z-50" : "shrink-0",
         "w-10 h-10 rounded-full",
         "inline-flex items-center justify-center",
         "backdrop-blur-sm",
+        disabled ? "cursor-not-allowed opacity-50" : undefined,
         className,
       ]
         .filter(Boolean)
@@ -33,11 +37,15 @@ export function HubReturnButton({
         border: `1px solid ${colorAlpha("primary", 0.2)}`,
         color: colorAlpha("textPrimary", 0.95),
       }}
-      whileHover={{
-        scale: 1.05,
-        boxShadow: glow("primary", "md", 0.35),
-      }}
-      whileTap={{ scale: 0.96 }}
+      whileHover={
+        disabled
+          ? undefined
+          : {
+              scale: 1.05,
+              boxShadow: glow("primary", "md", 0.35),
+            }
+      }
+      whileTap={disabled ? undefined : { scale: 0.96 }}
       transition={{ duration: animation.duration.fast }}
       aria-label="返回大厅"
     >
