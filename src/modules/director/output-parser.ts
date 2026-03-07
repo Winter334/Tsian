@@ -59,6 +59,7 @@ interface ArchiveCreateOp {
   state: string;
   id?: string;
   essence?: string;
+  presence?: string;
   tags?: string[];
 }
 
@@ -259,6 +260,10 @@ export function parseArchiveUpdates(
   const items = parseJsonArray<ArchiveJsonOp>(trimmed, "archive_updates");
   const updates: ArchiveUpdate[] = [];
   const errors: string[] = [];
+  const pendingRefs = new Map<string, string>();
+  const resolveArchiveRef = (ref: unknown): string => {
+    return resolveRef(ref, entityLookup, pendingRefs);
+  };
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
@@ -268,9 +273,20 @@ export function parseArchiveUpdates(
     }
 
     try {
-      const update = mapArchiveOp(item, entityLookup, currentTurn);
-      if (update) {
-        updates.push(update);
+      const update = mapArchiveOp(item, resolveArchiveRef, currentTurn);
+      if (!update) {
+        continue;
+      }
+
+      updates.push(update);
+
+      if (item.op === "create" && update.type === "create_entity") {
+        registerPendingCreateRefs(item, update, pendingRefs);
+
+        const presenceUpdate = mapArchiveCreatePresence(item, update);
+        if (presenceUpdate) {
+          updates.push(presenceUpdate);
+        }
       }
     } catch (error) {
       errors.push(
@@ -291,20 +307,20 @@ export function parseArchiveUpdates(
 
 function mapArchiveOp(
   item: ArchiveJsonOp,
-  entityLookup: (nameOrId: string) => string | undefined,
+  resolveArchiveRef: (ref: unknown) => string,
   _currentTurn: number,
 ): ArchiveUpdate | null {
   switch (item.op) {
     case "create":
       return mapArchiveCreate(item);
     case "update":
-      return mapArchiveUpdate(item, entityLookup);
+      return mapArchiveUpdate(item, resolveArchiveRef);
     case "essence":
-      return mapArchiveEssence(item, entityLookup);
+      return mapArchiveEssence(item, resolveArchiveRef);
     case "presence":
-      return mapArchivePresence(item, entityLookup);
+      return mapArchivePresence(item, resolveArchiveRef);
     case "relate":
-      return mapArchiveRelate(item, entityLookup);
+      return mapArchiveRelate(item, resolveArchiveRef);
     default:
       throw new Error(`未知操作类型: ${(item as { op: string }).op}`);
   }
@@ -347,9 +363,9 @@ function mapArchiveCreate(item: ArchiveCreateOp): ArchiveUpdate {
 
 function mapArchiveUpdate(
   item: ArchiveUpdateOp,
-  entityLookup: (nameOrId: string) => string | undefined,
+  resolveArchiveRef: (ref: unknown) => string,
 ): ArchiveUpdate {
-  const entityId = resolveRef(item.ref, entityLookup);
+  const entityId = resolveArchiveRef(item.ref);
   if (!item.state || typeof item.state !== "string") {
     throw new Error("update 操作缺少 state 字段");
   }
@@ -358,9 +374,9 @@ function mapArchiveUpdate(
 
 function mapArchiveEssence(
   item: ArchiveEssenceOp,
-  entityLookup: (nameOrId: string) => string | undefined,
+  resolveArchiveRef: (ref: unknown) => string,
 ): ArchiveUpdate {
-  const entityId = resolveRef(item.ref, entityLookup);
+  const entityId = resolveArchiveRef(item.ref);
   if (!item.essence || typeof item.essence !== "string") {
     throw new Error("essence 操作缺少 essence 字段");
   }
@@ -373,9 +389,9 @@ function mapArchiveEssence(
 
 function mapArchivePresence(
   item: ArchivePresenceOp,
-  entityLookup: (nameOrId: string) => string | undefined,
+  resolveArchiveRef: (ref: unknown) => string,
 ): ArchiveUpdate {
-  const entityId = resolveRef(item.ref, entityLookup);
+  const entityId = resolveArchiveRef(item.ref);
   if (!item.presence || typeof item.presence !== "string") {
     throw new Error("presence 操作缺少 presence 字段");
   }
@@ -394,9 +410,9 @@ function mapArchivePresence(
 
 function mapArchiveRelate(
   item: ArchiveRelateOp,
-  entityLookup: (nameOrId: string) => string | undefined,
+  resolveArchiveRef: (ref: unknown) => string,
 ): ArchiveUpdate {
-  const entityId = resolveRef(item.ref, entityLookup);
+  const entityId = resolveArchiveRef(item.ref);
 
   if (!item.target || typeof item.target !== "string") {
     throw new Error("relate 操作缺少 target 字段");
@@ -408,7 +424,7 @@ function mapArchiveRelate(
     throw new Error("relate 操作缺少 relDesc 字段");
   }
 
-  const targetEntityId = resolveRef(item.target, entityLookup);
+  const targetEntityId = resolveArchiveRef(item.target);
 
   return {
     type: "add_relationship",
@@ -707,12 +723,62 @@ export function repairJson(raw: string): string {
   return text.trim();
 }
 
+function normalizeArchiveRefKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function registerPendingCreateRefs(
+  item: ArchiveCreateOp,
+  update: Extract<ArchiveUpdate, { type: "create_entity" }>,
+  pendingRefs: Map<string, string>,
+): void {
+  const localRefToken = update.gameEntityId ?? update.name;
+  const candidates = [item.id, item.name, update.gameEntityId, update.name];
+
+  for (const candidate of candidates) {
+    if (!candidate || !candidate.trim()) {
+      continue;
+    }
+
+    pendingRefs.set(normalizeArchiveRefKey(candidate), localRefToken);
+  }
+}
+
+function mapArchiveCreatePresence(
+  item: ArchiveCreateOp,
+  update: Extract<ArchiveUpdate, { type: "create_entity" }>,
+): Extract<ArchiveUpdate, { type: "update_presence" }> | null {
+  if (!item.presence || typeof item.presence !== "string") {
+    return null;
+  }
+
+  const normalizedPresence = item.presence.trim().toLowerCase();
+  if (!normalizedPresence) {
+    return null;
+  }
+  if (!VALID_PRESENCES.has(normalizedPresence)) {
+    throw new Error(
+      `create.presence 值无效: "${item.presence}"，期望 active/nearby/dormant/resolved`,
+    );
+  }
+  if (normalizedPresence === "active") {
+    return null;
+  }
+
+  return {
+    type: "update_presence",
+    entityId: update.gameEntityId ?? update.name,
+    newPresence: normalizedPresence as EntityPresence,
+  };
+}
+
 /**
- * 解析 ref 字段：通过 entityLookup 做名称/ID 模糊匹配
+ * 解析 ref 字段：优先匹配已有档案实体；仅当未命中时，才回退到同批次 create 的本地引用。
  */
 function resolveRef(
   ref: unknown,
   entityLookup: (nameOrId: string) => string | undefined,
+  pendingRefs?: Map<string, string>,
 ): string {
   if (!ref || typeof ref !== "string") {
     throw new Error("缺少 ref 字段");
@@ -723,11 +789,16 @@ function resolveRef(
   }
 
   const resolved = entityLookup(trimmed);
-  if (!resolved) {
-    throw new Error(`无法匹配实体引用: ${trimmed}`);
+  if (resolved) {
+    return resolved;
   }
 
-  return resolved;
+  const pendingResolved = pendingRefs?.get(normalizeArchiveRefKey(trimmed));
+  if (pendingResolved) {
+    return pendingResolved;
+  }
+
+  throw new Error(`无法匹配实体引用: ${trimmed}`);
 }
 
 /**

@@ -160,6 +160,82 @@ describe("parseArchiveUpdates", () => {
     ]);
   });
 
+  it("支持同批次 create 后通过 gameEntityId 建立关系", () => {
+    const raw = JSON.stringify([
+      {
+        op: "create",
+        type: "character",
+        name: "老汉斯",
+        id: "NPC_Hans",
+        essence: "旅店老板",
+        state: "在柜台后擦拭酒杯",
+      },
+      {
+        op: "relate",
+        ref: "NPC_Hans",
+        target: "PC",
+        relType: "observer",
+        relDesc: "观察这个陌生的面孔",
+      },
+    ]);
+
+    const result = parseArchiveUpdates(raw, entityLookup, 1);
+
+    expect(result).toEqual([
+      {
+        type: "create_entity",
+        archetype: "character",
+        name: "老汉斯",
+        essence: "旅店老板",
+        initialState: "在柜台后擦拭酒杯",
+        gameEntityId: "NPC_Hans",
+        tags: undefined,
+      },
+      {
+        type: "add_relationship",
+        entityId: "NPC_Hans",
+        relationship: {
+          targetEntityId: "entity-player",
+          type: "observer",
+          description: "观察这个陌生的面孔",
+        },
+      },
+    ]);
+  });
+
+  it("支持 create.presence 生成附加的 presence 更新", () => {
+    const raw = JSON.stringify([
+      {
+        op: "create",
+        type: "character",
+        name: "疤面巴克",
+        id: "NPC_Buck",
+        essence: "收债人",
+        state: "正闯入酒馆",
+        presence: "dormant",
+      },
+    ]);
+
+    const result = parseArchiveUpdates(raw, entityLookup, 1);
+
+    expect(result).toEqual([
+      {
+        type: "create_entity",
+        archetype: "character",
+        name: "疤面巴克",
+        essence: "收债人",
+        initialState: "正闯入酒馆",
+        gameEntityId: "NPC_Buck",
+        tags: undefined,
+      },
+      {
+        type: "update_presence",
+        entityId: "NPC_Buck",
+        newPresence: "dormant",
+      },
+    ]);
+  });
+
   it("空数组返回空结果", () => {
     expect(parseArchiveUpdates("[]", entityLookup, 1)).toEqual([]);
     expect(parseArchiveUpdates("   ", entityLookup, 1)).toEqual([]);

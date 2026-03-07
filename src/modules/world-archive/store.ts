@@ -87,6 +87,25 @@ function findEntityByGameId(
   });
 }
 
+function resolveEntityByArchiveRef(
+  entities: Record<string, NarrativeEntity>,
+  ref: string,
+): NarrativeEntity | undefined {
+  const direct = entities[ref];
+  if (direct) {
+    return direct;
+  }
+
+  const byGameId = findEntityByGameId(entities, ref);
+  if (byGameId) {
+    return byGameId;
+  }
+
+  return Object.values(entities).find((entity) => {
+    return entity.name === ref;
+  });
+}
+
 export const useWorldArchiveStore = create<WorldArchiveState>()(
   immer((set, get) => ({
     entities: {},
@@ -282,6 +301,10 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
           return;
         }
 
+        const resolveEntity = (ref: string): NarrativeEntity | undefined => {
+          return resolveEntityByArchiveRef(state.entities, ref);
+        };
+
         updates.forEach((update) => {
           switch (update.type) {
             case "create_entity": {
@@ -317,7 +340,7 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
             }
 
             case "update_state": {
-              const entity = state.entities[update.entityId];
+              const entity = resolveEntity(update.entityId);
               if (!entity || entity.currentState === update.newState) {
                 break;
               }
@@ -329,7 +352,7 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
             }
 
             case "update_essence": {
-              const entity = state.entities[update.entityId];
+              const entity = resolveEntity(update.entityId);
               if (!entity || entity.essence === update.newEssence) {
                 break;
               }
@@ -340,7 +363,7 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
             }
 
             case "update_presence": {
-              const entity = state.entities[update.entityId];
+              const entity = resolveEntity(update.entityId);
               if (!entity || entity.presence === update.newPresence) {
                 break;
               }
@@ -352,7 +375,7 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
                 );
                 if (!synced) {
                   console.warn(
-                    `[WorldArchive] Presence 更新被拒绝：Character 同步失败（entityId=${update.entityId}, gameEntityId=${entity.gameEntityId}）`,
+                    `[WorldArchive] Presence 更新被拒绝：Character 同步失败（entityRef=${update.entityId}, gameEntityId=${entity.gameEntityId}）`,
                   );
                   break;
                 }
@@ -365,12 +388,22 @@ export const useWorldArchiveStore = create<WorldArchiveState>()(
             }
 
             case "add_relationship": {
-              const entity = state.entities[update.entityId];
+              const entity = resolveEntity(update.entityId);
               if (!entity) {
                 break;
               }
 
-              const nextRelationship = cloneRelationship(update.relationship);
+              const targetEntity = resolveEntity(
+                update.relationship.targetEntityId,
+              );
+              if (!targetEntity) {
+                break;
+              }
+
+              const nextRelationship = cloneRelationship({
+                ...update.relationship,
+                targetEntityId: targetEntity.id,
+              });
               const hasDuplicateTarget = entity.relationships.some((item) => {
                 return item.targetEntityId === nextRelationship.targetEntityId;
               });

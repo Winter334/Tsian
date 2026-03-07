@@ -183,14 +183,10 @@ function rebuildNestedYMap(
 
   for (const entry of entries) {
     try {
+      const id =
+        isRecord(entry) && typeof entry.id === "string" ? entry.id : undefined;
       const encoded = codec.encode(entry);
-      const id = encoded.get("id");
-      const resolvedId =
-        typeof id === "string"
-          ? id
-          : isRecord(entry) && typeof entry.id === "string"
-            ? entry.id
-            : crypto.randomUUID();
+      const resolvedId = id ?? crypto.randomUUID();
 
       targetMap.set(resolvedId, encoded);
     } catch {
