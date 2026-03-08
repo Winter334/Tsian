@@ -14,7 +14,13 @@ import { immer } from "zustand/middleware/immer";
 import { defaultWorld } from "./presets/default";
 import type { WorldIndex } from "./storage";
 import { worldStorage } from "./storage";
-import type { World, WorldId } from "./types";
+import type {
+  World,
+  WorldConfig,
+  WorldId,
+  WorldMeta,
+  WorldNarrativeSeed,
+} from "./types";
 
 function generateWorldId(prefix = "world"): WorldId {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -32,7 +38,16 @@ interface WorldStoreState {
   createWorld(name: string, description?: string): Promise<World>;
   updateWorld(
     id: WorldId,
-    updates: Partial<Pick<World, "meta" | "rules" | "narrative">>,
+    updates: {
+      meta?: Partial<
+        Pick<
+          WorldMeta,
+          "name" | "description" | "author" | "version" | "source"
+        >
+      >;
+      rules?: WorldConfig;
+      narrative?: WorldNarrativeSeed;
+    },
   ): Promise<void>;
   deleteWorld(id: WorldId): Promise<void>;
   setActiveWorld(id: WorldId): void;

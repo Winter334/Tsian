@@ -27,6 +27,7 @@ import {
   Info,
   Palette,
   Settings,
+  Sparkles,
   User,
 } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -56,6 +57,8 @@ interface SettingsDialogProps {
   onOpenPresetWorkspace?: () => void;
   /** 打开世界书工作区的回调 */
   onOpenLorebookWorkspace?: () => void;
+  /** 打开世界工作区的回调 */
+  onOpenWorldWorkspace?: () => void;
 }
 
 export function SettingsDialog({
@@ -63,6 +66,7 @@ export function SettingsDialog({
   onOpenChange,
   onOpenPresetWorkspace,
   onOpenLorebookWorkspace,
+  onOpenWorldWorkspace,
 }: SettingsDialogProps) {
   const [currentPage, setCurrentPage] = useState<SettingsPage>("home");
   const { toast } = useToast();
@@ -128,6 +132,14 @@ export function SettingsDialog({
     }
   }, [onOpenChange, onOpenLorebookWorkspace]);
 
+  // 处理世界工作台入口点击
+  const handleWorldClick = useCallback(() => {
+    if (onOpenWorldWorkspace) {
+      onOpenChange(false); // 关闭设置弹窗
+      onOpenWorldWorkspace(); // 打开世界工作台
+    }
+  }, [onOpenChange, onOpenWorldWorkspace]);
+
   // 获取当前页面标题
   const getPageTitle = () => {
     switch (currentPage) {
@@ -187,6 +199,7 @@ export function SettingsDialog({
                     onNavigate={setCurrentPage}
                     onPresetsClick={handlePresetsClick}
                     onLorebookClick={handleLorebookClick}
+                    onWorldClick={handleWorldClick}
                   />
                 </motion.div>
               )}
@@ -282,12 +295,14 @@ interface SettingsHomeProps {
   onNavigate: (page: SettingsPage) => void;
   onPresetsClick?: () => void;
   onLorebookClick?: () => void;
+  onWorldClick?: () => void;
 }
 
 function SettingsHome({
   onNavigate,
   onPresetsClick,
   onLorebookClick,
+  onWorldClick,
 }: SettingsHomeProps) {
   const cards = [
     {
@@ -317,6 +332,13 @@ function SettingsHome({
       title: "世界书管理",
       description: "世界观设定、条目管理",
       onClick: onLorebookClick,
+    },
+    {
+      id: "world",
+      icon: <Sparkles className="w-6 h-6" />,
+      title: "世界管理",
+      description: "作者态世界、叙事启动与规则编辑",
+      onClick: onWorldClick,
     },
     {
       id: "data",

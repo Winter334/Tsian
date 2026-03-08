@@ -20,6 +20,7 @@ import { SettingsDialog } from "./components/Settings";
 import { SplashScreen } from "./components/SplashScreen";
 import { TitleScreen } from "./components/TitleScreen";
 import { ToastProvider, useToast } from "./components/ui";
+import { WorldWorkspace } from "./components/WorldWorkspace";
 import { StorageWarningBanner, yjsManager } from "./core/yjs";
 import type { SaveMemberInfo, SaveSlotInfo } from "./core/yjs/types";
 import { RoomCommands } from "./domain/commands/room";
@@ -560,6 +561,7 @@ function AppContent() {
   const [multiplayerDialogOpen, setMultiplayerDialogOpen] = useState(false);
   const [presetWorkspaceOpen, setPresetWorkspaceOpen] = useState(false);
   const [lorebookWorkspaceOpen, setLorebookWorkspaceOpen] = useState(false);
+  const [worldWorkspaceOpen, setWorldWorkspaceOpen] = useState(false);
   const [characterPanelOpen, setCharacterPanelOpen] = useState(false);
   const [memoryManagerOpen, setMemoryManagerOpen] = useState(false);
   const [checkpointPanelOpen, setCheckpointPanelOpen] = useState(false);
@@ -932,6 +934,11 @@ function AppContent() {
     setLorebookWorkspaceOpen(true);
   };
 
+  // 打开世界工作台
+  const handleOpenWorldWorkspace = () => {
+    setWorldWorkspaceOpen(true);
+  };
+
   // 打开角色面板
   const handleOpenCharacterPanel = () => {
     setCharacterPanelOpen(true);
@@ -1111,6 +1118,7 @@ function AppContent() {
           onOpenChange={setSettingsOpen}
           onOpenPresetWorkspace={handleOpenPresetWorkspace}
           onOpenLorebookWorkspace={handleOpenLorebookWorkspace}
+          onOpenWorldWorkspace={handleOpenWorldWorkspace}
         />
 
         {/* 预设工作区 */}
@@ -1123,6 +1131,12 @@ function AppContent() {
         <LorebookWorkspace
           open={lorebookWorkspaceOpen}
           onOpenChange={setLorebookWorkspaceOpen}
+        />
+
+        {/* 世界工作台 */}
+        <WorldWorkspace
+          open={worldWorkspaceOpen}
+          onOpenChange={setWorldWorkspaceOpen}
         />
 
         {/* 存档管理弹窗 */}
