@@ -12,6 +12,10 @@ import {
   type ExportedSave,
 } from "../types";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * 验证结果
  */
@@ -148,8 +152,22 @@ function validateSave(
     return { valid: false, error: "存档缺少消息数据" };
   }
 
+  const conversationIds = new Set(
+    obj.conversations
+      .filter((conversation): conversation is ExportedConversation =>
+        isRecord(conversation),
+      )
+      .map((conversation) => conversation.id),
+  );
+
   const messages = obj.messages as Record<string, unknown>;
   for (const [convId, msgArray] of Object.entries(messages)) {
+    if (!conversationIds.has(convId)) {
+      return {
+        valid: false,
+        error: `会话 ${convId} 的消息存在，但缺少对应会话元数据`,
+      };
+    }
     if (!Array.isArray(msgArray)) {
       return {
         valid: false,

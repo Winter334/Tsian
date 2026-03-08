@@ -40,6 +40,55 @@ const DEFAULT_DOC_NAME = "lyra-game";
  */
 const CURRENT_SAVE_KEY = "lyra-current-save-id";
 
+function getRecoveredConversationMetadata(
+  conversationId: string,
+): Record<string, unknown> | undefined {
+  const roomMainMatch = /^room:(.+):main$/.exec(conversationId);
+  if (!roomMainMatch) {
+    return undefined;
+  }
+
+  return {
+    type: "multiplayer-room-main",
+    roomId: roomMainMatch[1],
+  };
+}
+
+function recoverImportedConversation(
+  conversationId: string,
+  messages: ImportSaveData["messages"][string],
+  fallbackTimestamp: number,
+) {
+  const metadata = getRecoveredConversationMetadata(conversationId);
+  let createdAt = fallbackTimestamp;
+  let updatedAt = fallbackTimestamp;
+
+  if (messages.length > 0) {
+    createdAt = messages.reduce((min, message) => {
+      return typeof message.createdAt === "number"
+        ? Math.min(min, message.createdAt)
+        : min;
+    }, fallbackTimestamp);
+    updatedAt = messages.reduce((max, message) => {
+      const candidate =
+        typeof message.updatedAt === "number"
+          ? message.updatedAt
+          : typeof message.createdAt === "number"
+            ? message.createdAt
+            : max;
+      return Math.max(max, candidate);
+    }, fallbackTimestamp);
+  }
+
+  return {
+    id: conversationId,
+    title: metadata ? "联机房间记录" : "导入会话",
+    createdAt,
+    updatedAt,
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
 /**
  * YjsManager 类
  */
@@ -487,10 +536,26 @@ export class YjsManager {
     const now = Date.now();
 
     // 生成 ID 映射
+    const normalizedConversations = [...data.conversations];
+    const knownConversationIds = new Set(
+      normalizedConversations.map((conversation) => conversation.id),
+    );
+
+    for (const [conversationId, messages] of Object.entries(data.messages)) {
+      if (knownConversationIds.has(conversationId)) {
+        continue;
+      }
+
+      normalizedConversations.push(
+        recoverImportedConversation(conversationId, messages, now),
+      );
+      knownConversationIds.add(conversationId);
+    }
+
     const conversationIdMap: Record<string, string> = {};
     const messageIdMap: Record<string, string> = {};
 
-    for (const conv of data.conversations) {
+    for (const conv of normalizedConversations) {
       conversationIdMap[conv.id] = crypto.randomUUID();
     }
 
@@ -547,7 +612,7 @@ export class YjsManager {
 
     // 创建会话 Map（值为普通对象，保持与 ChatRepository 结构一致）
     const conversationsMap = new Y.Map();
-    for (const conv of data.conversations) {
+    for (const conv of normalizedConversations) {
       const newConvId = conversationIdMap[conv.id];
       const convData = {
         id: newConvId,

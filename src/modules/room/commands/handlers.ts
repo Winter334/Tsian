@@ -122,6 +122,106 @@ function readWorldNarrativeFromSaveSlot(
   return worldNarrativeFromYMap(narrativeValue);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getRoomConversationMetadata(
+  conversationId: string,
+): Record<string, unknown> | undefined {
+  const roomMainMatch = /^room:(.+):main$/.exec(conversationId);
+  if (!roomMainMatch) {
+    return undefined;
+  }
+
+  return {
+    type: "multiplayer-room-main",
+    roomId: roomMainMatch[1],
+  };
+}
+
+function ensureConversationMapEntry(
+  conversationsMap: Y.Map<unknown>,
+  conversationId: string,
+  updatedAt = Date.now(),
+  title?: string,
+): void {
+  const existingValue = conversationsMap.get(conversationId);
+  const roomMetadata = getRoomConversationMetadata(conversationId);
+  const fallbackTitle = title ?? (roomMetadata ? "联机房间记录" : "未命名会话");
+  const fallbackMetadata = roomMetadata
+    ? { ...roomMetadata }
+    : undefined;
+
+  if (isRecord(existingValue)) {
+    const existingMetadata = isRecord(existingValue.metadata)
+      ? existingValue.metadata
+      : undefined;
+
+    conversationsMap.set(conversationId, {
+      ...existingValue,
+      id: conversationId,
+      title:
+        typeof existingValue.title === "string" && existingValue.title.trim()
+          ? existingValue.title
+          : fallbackTitle,
+      characterIds: Array.isArray(existingValue.characterIds)
+        ? existingValue.characterIds
+        : [],
+      createdAt:
+        typeof existingValue.createdAt === "number"
+          ? existingValue.createdAt
+          : updatedAt,
+      updatedAt,
+      ...(fallbackMetadata || existingMetadata
+        ? {
+            metadata: {
+              ...(existingMetadata ?? {}),
+              ...(fallbackMetadata ?? {}),
+            },
+          }
+        : {}),
+    });
+    return;
+  }
+
+  conversationsMap.set(conversationId, {
+    id: conversationId,
+    title: fallbackTitle,
+    characterIds: [],
+    createdAt: updatedAt,
+    updatedAt,
+    ...(fallbackMetadata ? { metadata: fallbackMetadata } : {}),
+  });
+}
+
+function ensureSaveConversationEntry(
+  saveSlot: Y.Map<unknown>,
+  conversationId: string,
+  updatedAt = Date.now(),
+  title?: string,
+): void {
+  let conversationsMap = saveSlot.get("conversations") as
+    | Y.Map<unknown>
+    | undefined;
+  if (!conversationsMap) {
+    conversationsMap = new Y.Map<unknown>();
+    saveSlot.set("conversations", conversationsMap);
+  }
+
+  ensureConversationMapEntry(conversationsMap, conversationId, updatedAt, title);
+}
+
+function ensureHistoryConversationEntry(
+  historyDoc: Y.Doc,
+  conversationId: string,
+  updatedAt = Date.now(),
+  title?: string,
+): void {
+  const conversationsMap = historyDoc.getMap("conversations") as Y.Map<unknown>;
+  ensureConversationMapEntry(conversationsMap, conversationId, updatedAt, title);
+}
+
 function writeMainDocWorldNarrative(
   mainDoc: Y.Doc,
   narrative: WorldNarrativeRuntimeSnapshot,
@@ -159,12 +259,14 @@ function seedRoomOpeningIfNeeded(
   saveSlot: Y.Map<unknown>,
   narrative: WorldNarrativeRuntimeSnapshot,
 ): WorldNarrativeRuntimeSnapshot {
+  const conversationId = `room:${roomId}:main`;
+  ensureSaveConversationEntry(saveSlot, conversationId);
+  ensureHistoryConversationEntry(historyDoc, conversationId);
+
   const opening = narrative.opening?.trim();
   if (!opening || narrative.openingInjected) {
     return narrative;
   }
-
-  const conversationId = `room:${roomId}:main`;
   const openingMessage = createOpeningSeedMessage(conversationId, opening);
 
   let saveMessagesMap = saveSlot.get("messages") as
@@ -2753,6 +2855,13 @@ export async function completeTurnHandler(
       conversionResult.messages,
       conversationId,
     );
+    const conversationUpdatedAt =
+      messageEntities[messageEntities.length - 1]?.createdAt ?? now;
+    ensureHistoryConversationEntry(
+      historyDoc,
+      conversationId,
+      conversationUpdatedAt,
+    );
     for (const msg of messageEntities) {
       messagesArray.push([msg]);
     }
@@ -2856,6 +2965,11 @@ export async function completeTurnHandler(
         | undefined;
       if (saveSlot) {
         // 1. 写入消息到 SaveSlot
+        ensureSaveConversationEntry(
+          saveSlot,
+          conversationId,
+          conversationUpdatedAt,
+        );
         const saveMessagesMap = saveSlot.get("messages") as
           | Y.Map<Y.Array<unknown>>
           | undefined;

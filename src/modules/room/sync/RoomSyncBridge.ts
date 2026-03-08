@@ -1115,12 +1115,39 @@ export class RoomSyncBridge implements EventMetaReader {
       saveSlot.set("messages", saveMessagesMap);
     }
 
+    let saveConversationsMap = saveSlot.get("conversations") as
+      | Y.Map<unknown>
+      | undefined;
+    if (!saveConversationsMap) {
+      saveConversationsMap = new Y.Map<unknown>();
+      saveSlot.set("conversations", saveConversationsMap);
+    }
+
     const rootDoc = yjsManager.getDoc();
 
     rootDoc.transact(() => {
       messagesMap.forEach((historyArray, convId) => {
         if (!(historyArray instanceof Y.Array)) {
           return;
+        }
+
+        if (!saveConversationsMap.has(convId)) {
+          const roomMainMatch = /^room:(.+):main$/.exec(convId);
+          saveConversationsMap.set(convId, {
+            id: convId,
+            title: roomMainMatch ? "联机房间记录" : "未命名会话",
+            characterIds: [],
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            ...(roomMainMatch
+              ? {
+                  metadata: {
+                    type: "multiplayer-room-main",
+                    roomId: roomMainMatch[1],
+                  },
+                }
+              : {}),
+          });
         }
 
         let saveArray = saveMessagesMap.get(convId) as
