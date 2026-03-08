@@ -103,6 +103,7 @@ function convertToImportSaveData(save: ExportedSave) {
     messages: save.messages,
     gameState: save.gameState,
     worldConfig: save.worldConfig,
+    worldNarrative: save.worldNarrative,
     // 角色数据（Phase 2 新增）
     characters: save.characters,
   };

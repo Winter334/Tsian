@@ -82,10 +82,17 @@ import { computeFullStats } from "@/lib/rules/stats-pipeline";
 import { getUniqueTag } from "@/lib/user-identity";
 import { DEFAULT_WORLD_CONFIG } from "@/lib/world";
 import {
+  getDefaultWorldNarrativeRuntimeSnapshot,
   getRuntimeWorldConfig,
+  resolveSelectedWorldNarrative,
   resolveSelectedWorldRules,
+  worldNarrativeFromYMap,
+  worldNarrativeToYMap,
 } from "@/lib/world/resolve-config";
-import type { WorldConfig } from "@/lib/world/types";
+import type {
+  WorldConfig,
+  WorldNarrativeRuntimeSnapshot,
+} from "@/lib/world/types";
 import {
   worldConfigFromYMap,
   worldConfigToYMap,
@@ -103,6 +110,99 @@ import type { HostTransferMeta, MemberActionMeta } from "../sync/types";
 
 /** 房间码冲突时的最大重试次数 */
 const MAX_CODE_RETRY = 3;
+
+function readWorldNarrativeFromSaveSlot(
+  saveSlot?: Y.Map<unknown>,
+): WorldNarrativeRuntimeSnapshot | null {
+  const narrativeValue = saveSlot?.get("worldNarrative");
+  if (!(narrativeValue instanceof Y.Map)) {
+    return null;
+  }
+
+  return worldNarrativeFromYMap(narrativeValue);
+}
+
+function writeMainDocWorldNarrative(
+  mainDoc: Y.Doc,
+  narrative: WorldNarrativeRuntimeSnapshot,
+): void {
+  const encodedWorldNarrative = worldNarrativeToYMap(narrative);
+  const mainDocWorldNarrativeMap = mainDoc.getMap("worldNarrative");
+  mainDocWorldNarrativeMap.set("version", encodedWorldNarrative.get("version"));
+  mainDocWorldNarrativeMap.set("data", encodedWorldNarrative.get("data"));
+}
+
+function createOpeningSeedMessage(
+  conversationId: string,
+  opening: string,
+  createdAt = Date.now(),
+) {
+  return {
+    ...createMessage({
+      role: "assistant",
+      content: opening,
+      conversationId,
+      metadata: {
+        type: "opening",
+        conversationId,
+      },
+    }),
+    status: "complete" as const,
+    createdAt,
+    updatedAt: createdAt,
+  };
+}
+
+function seedRoomOpeningIfNeeded(
+  roomId: string,
+  historyDoc: Y.Doc,
+  saveSlot: Y.Map<unknown>,
+  narrative: WorldNarrativeRuntimeSnapshot,
+): WorldNarrativeRuntimeSnapshot {
+  const opening = narrative.opening?.trim();
+  if (!opening || narrative.openingInjected) {
+    return narrative;
+  }
+
+  const conversationId = `room:${roomId}:main`;
+  const openingMessage = createOpeningSeedMessage(conversationId, opening);
+
+  let saveMessagesMap = saveSlot.get("messages") as
+    | Y.Map<Y.Array<unknown>>
+    | undefined;
+  if (!saveMessagesMap) {
+    saveMessagesMap = new Y.Map<Y.Array<unknown>>();
+    saveSlot.set("messages", saveMessagesMap);
+  }
+
+  let saveMessagesArray = saveMessagesMap.get(conversationId) as
+    | Y.Array<unknown>
+    | undefined;
+  if (!saveMessagesArray) {
+    saveMessagesArray = new Y.Array<unknown>();
+    saveMessagesMap.set(conversationId, saveMessagesArray);
+  }
+  saveMessagesArray.push([openingMessage]);
+
+  const historyMessagesMap = historyDoc.getMap("messages") as Y.Map<
+    Y.Array<unknown>
+  >;
+  let historyMessagesArray = historyMessagesMap.get(conversationId) as
+    | Y.Array<unknown>
+    | undefined;
+  if (!historyMessagesArray) {
+    historyMessagesArray = new Y.Array<unknown>();
+    historyMessagesMap.set(conversationId, historyMessagesArray);
+  }
+  historyMessagesArray.push([{ ...openingMessage }]);
+
+  const updatedNarrative: WorldNarrativeRuntimeSnapshot = {
+    ...narrative,
+    openingInjected: true,
+  };
+  saveSlot.set("worldNarrative", worldNarrativeToYMap(updatedNarrative));
+  return updatedNarrative;
+}
 
 // ===== EventMeta 写入辅助函数 =====
 
@@ -203,10 +303,12 @@ export async function createRoomHandler(
   let code: string = "";
   let retryCount = 0;
 
-  // 联机建档的 WorldConfig 来源：
+  // 联机建档的运行时世界快照来源：
   // - 新建房间：显式 world 选择
-  // - 从存档续玩：存档中的 worldConfig 快照
+  // - 从存档续玩：存档中的 worldConfig / worldNarrative 快照
   let authoritativeWorldConfig: WorldConfig = DEFAULT_WORLD_CONFIG;
+  let authoritativeWorldNarrative: WorldNarrativeRuntimeSnapshot =
+    getDefaultWorldNarrativeRuntimeSnapshot();
 
   if (payload.fromSaveId) {
     const saveSlot = yjsManager.getSaveSlots().get(payload.fromSaveId) as
@@ -230,6 +332,20 @@ export async function createRoomHandler(
         payload.worldId,
       );
     }
+
+    const decodedNarrative = readWorldNarrativeFromSaveSlot(saveSlot);
+    if (decodedNarrative) {
+      authoritativeWorldNarrative = decodedNarrative;
+    } else if (payload.worldId) {
+      authoritativeWorldNarrative = await resolveSelectedWorldNarrative(
+        payload.worldId,
+      );
+    }
+  } else if (payload.worldId) {
+    authoritativeWorldConfig = await resolveSelectedWorldRules(payload.worldId);
+    authoritativeWorldNarrative = await resolveSelectedWorldNarrative(
+      payload.worldId,
+    );
   }
 
   // 确保 API 客户端已配置
@@ -296,11 +412,12 @@ export async function createRoomHandler(
       saveId, // 续玩时传入，新建时为 undefined
     });
 
-    // 写入房间权威 worldConfig（Host 侧来源快照）
+    // 写入房间权威 world 快照（Host 侧来源快照）
     const encodedWorldConfig = worldConfigToYMap(authoritativeWorldConfig);
     const mainDocWorldConfigMap = mainDoc.getMap("worldConfig");
     mainDocWorldConfigMap.set("version", encodedWorldConfig.get("version"));
     mainDocWorldConfigMap.set("data", encodedWorldConfig.get("data"));
+    writeMainDocWorldNarrative(mainDoc, authoritativeWorldNarrative);
 
     // 更新 mainDoc 的 code（因为 createMainDoc 会生成新的 code，我们需要用服务器确认的 code）
     const metadataMap = mainDoc.getMap("metadata");
@@ -380,6 +497,19 @@ export async function createRoomHandler(
           "worldConfig",
           worldConfigToYMap(authoritativeWorldConfig),
         );
+        saveSlot.set(
+          "worldNarrative",
+          worldNarrativeToYMap(authoritativeWorldNarrative),
+        );
+
+        const historyDoc = await subdocManager.loadHistoryDoc(roomId);
+        authoritativeWorldNarrative = seedRoomOpeningIfNeeded(
+          roomId,
+          historyDoc,
+          saveSlot,
+          authoritativeWorldNarrative,
+        );
+        writeMainDocWorldNarrative(mainDoc, authoritativeWorldNarrative);
 
         const savedTurnNumber =
           (saveSlot.get("currentTurnNumber") as number) || 0;
@@ -496,7 +626,7 @@ export async function createRoomHandler(
         members: [hostMemberInfo],
       });
 
-      // 写入 WorldConfig 快照（联机建档与单机建档保持一致）
+      // 写入运行时世界快照（联机建档与单机建档保持一致）
       const createdSave = yjsManager.getSaveSlots().get(saveId) as
         | Y.Map<unknown>
         | undefined;
@@ -505,6 +635,19 @@ export async function createRoomHandler(
           "worldConfig",
           worldConfigToYMap(authoritativeWorldConfig),
         );
+        createdSave.set(
+          "worldNarrative",
+          worldNarrativeToYMap(authoritativeWorldNarrative),
+        );
+
+        const historyDoc = await subdocManager.loadHistoryDoc(roomId);
+        authoritativeWorldNarrative = seedRoomOpeningIfNeeded(
+          roomId,
+          historyDoc,
+          createdSave,
+          authoritativeWorldNarrative,
+        );
+        writeMainDocWorldNarrative(mainDoc, authoritativeWorldNarrative);
       }
 
       // 将 saveId 写入 MainDoc（新建场景）
@@ -605,15 +748,21 @@ export async function joinRoomHandler(
   const { code, userId, displayName } = payload;
   const now = Date.now();
 
-  // 联机加入房间时不再回退到活动预设，统一使用默认规则等待 Host 权威配置同步
+  // 联机加入房间时不再回退到活动预设，统一等待 Host 权威世界快照同步
   let authoritativeWorldConfig: WorldConfig = DEFAULT_WORLD_CONFIG;
+  let authoritativeWorldNarrative: WorldNarrativeRuntimeSnapshot =
+    getDefaultWorldNarrativeRuntimeSnapshot();
 
-  const applyAuthoritativeWorldConfigToSave = (saveId: string): void => {
+  const applyAuthoritativeWorldSnapshotToSave = (saveId: string): void => {
     const saveSlot = yjsManager.getSaveSlots().get(saveId) as
       | Y.Map<unknown>
       | undefined;
     if (saveSlot) {
       saveSlot.set("worldConfig", worldConfigToYMap(authoritativeWorldConfig));
+      saveSlot.set(
+        "worldNarrative",
+        worldNarrativeToYMap(authoritativeWorldNarrative),
+      );
     }
   };
 
@@ -725,6 +874,14 @@ export async function joinRoomHandler(
     );
     if (syncedWorldConfig) {
       authoritativeWorldConfig = syncedWorldConfig;
+    }
+
+    const mainDocWorldNarrativeMap = mainDoc.getMap("worldNarrative");
+    const syncedWorldNarrative = worldNarrativeFromYMap(
+      mainDocWorldNarrativeMap as Y.Map<unknown>,
+    );
+    if (syncedWorldNarrative) {
+      authoritativeWorldNarrative = syncedWorldNarrative;
     }
 
     // 连接 HistoryDoc（复用 MainDoc 的 WebSocket）
@@ -860,8 +1017,21 @@ export async function joinRoomHandler(
         yjsManager.loadSave(matchedSave.id);
         guestSaveId = matchedSave.id;
 
-        // matchedSave 路径也必须执行 Host 权威 worldConfig 回填，避免沿用本地旧配置
-        applyAuthoritativeWorldConfigToSave(matchedSave.id);
+        // matchedSave 路径也必须执行 Host 权威世界快照回填，避免沿用本地旧配置
+        applyAuthoritativeWorldSnapshotToSave(matchedSave.id);
+
+        const matchedSaveSlot = yjsManager
+          .getSaveSlots()
+          .get(matchedSave.id) as Y.Map<unknown> | undefined;
+        const historyDoc = await subdocManager.loadHistoryDoc(roomId);
+        if (matchedSaveSlot) {
+          authoritativeWorldNarrative = seedRoomOpeningIfNeeded(
+            roomId,
+            historyDoc,
+            matchedSaveSlot,
+            authoritativeWorldNarrative,
+          );
+        }
 
         // 对齐 Save 模块行为：联机入房加载存档后发布 SAVE_LOADED
         eventBus.emit(
@@ -886,7 +1056,7 @@ export async function joinRoomHandler(
           members: [guestMemberInfo],
         });
 
-        // 写入 WorldConfig 快照（联机建档与单机建档保持一致）
+        // 写入运行时世界快照（联机建档与单机建档保持一致）
         const createdGuestSave = yjsManager.getSaveSlots().get(guestSaveId) as
           | Y.Map<unknown>
           | undefined;
@@ -894,6 +1064,18 @@ export async function joinRoomHandler(
           createdGuestSave.set(
             "worldConfig",
             worldConfigToYMap(authoritativeWorldConfig),
+          );
+          createdGuestSave.set(
+            "worldNarrative",
+            worldNarrativeToYMap(authoritativeWorldNarrative),
+          );
+
+          const historyDoc = await subdocManager.loadHistoryDoc(roomId);
+          authoritativeWorldNarrative = seedRoomOpeningIfNeeded(
+            roomId,
+            historyDoc,
+            createdGuestSave,
+            authoritativeWorldNarrative,
           );
         }
 
@@ -922,7 +1104,7 @@ export async function joinRoomHandler(
           members: [guestMemberInfo],
         });
 
-        // 写入 WorldConfig 快照（兼容旧房间缺失 saveId 的回退建档路径）
+        // 写入运行时世界快照（兼容旧房间缺失 saveId 的回退建档路径）
         const fallbackGuestSave = yjsManager.getSaveSlots().get(guestSaveId) as
           | Y.Map<unknown>
           | undefined;
@@ -930,6 +1112,18 @@ export async function joinRoomHandler(
           fallbackGuestSave.set(
             "worldConfig",
             worldConfigToYMap(authoritativeWorldConfig),
+          );
+          fallbackGuestSave.set(
+            "worldNarrative",
+            worldNarrativeToYMap(authoritativeWorldNarrative),
+          );
+
+          const historyDoc = await subdocManager.loadHistoryDoc(roomId);
+          authoritativeWorldNarrative = seedRoomOpeningIfNeeded(
+            roomId,
+            historyDoc,
+            fallbackGuestSave,
+            authoritativeWorldNarrative,
           );
         }
 
@@ -2404,7 +2598,7 @@ export async function lockActionHandler(
 // ===== 完成回合 =====
 
 import type { PlayerAction } from "@/core/yjs/room/types";
-import { TurnDelta } from "@/domain";
+import { createMessage, TurnDelta } from "@/domain";
 import {
   convertTurnToMessages,
   toMessageEntities,

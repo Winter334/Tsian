@@ -247,6 +247,7 @@ function validateSave(
     ...(save as ExportedSave),
     type: obj.type === "multiplayer" ? "multiplayer" : "solo",
     ...(obj.currentTurnNumber === undefined ? { currentTurnNumber: 0 } : {}),
+    ...(obj.worldNarrative === undefined ? { worldNarrative: undefined } : {}),
   };
 
   return { valid: true, data: normalizedSave };

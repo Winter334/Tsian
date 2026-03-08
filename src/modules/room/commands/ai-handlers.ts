@@ -37,6 +37,7 @@ import { resolveAIConfig } from "@/lib/ai/resolve-config";
 import type { AdvancedSettings, AIConfig } from "@/lib/ai/types";
 import { usePresetStore, type VariableContext } from "@/lib/prompt";
 import { buildEnvelope, toVariableContext } from "@/lib/prompt/envelope";
+import { getRuntimeWorldNarrative } from "@/lib/world/resolve-config";
 import {
   CreatedNpcData,
   createGameStateRepository,
@@ -322,6 +323,7 @@ export async function processAiTurnHandler(
     // 8. 获取房间名称
     const metadataMap = mainDoc.getMap("metadata");
     const roomName = (metadataMap.get("name") as string) || "联机游戏";
+    const runtimeNarrative = getRuntimeWorldNarrative();
 
     // 9. 构建变量上下文
     const playersList = Array.from(members.values()).map((m) => ({
@@ -424,6 +426,7 @@ export async function processAiTurnHandler(
       user: { name: roomName },
       players: playersList,
       activeNpcs: activeNpcs.length > 0 ? activeNpcs : undefined,
+      scenario: runtimeNarrative.script,
     });
     variableContext.turn = {
       number: turnNumber,

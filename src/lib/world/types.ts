@@ -239,16 +239,39 @@ export interface WorldMeta {
 
 export interface WorldNarrativeSeed {
   /**
-   * 未来工作包 D：作者态剧本入口。
-   * 当前仅保留存储槽位，不接入运行时链路。
+   * 作者态剧本入口。
+   * 创建存档 / 建房时会写入运行时 narrative 快照。
    */
   script?: string;
   /**
-   * 未来工作包 D：作者态开幕语入口。
-   * 当前仅保留存储槽位，不接入运行时链路。
+   * 作者态开幕语入口。
+   * 创建存档 / 建房时会写入运行时 narrative 快照。
    */
   opening?: string;
 }
+
+/**
+ * 运行时叙事启动快照。
+ *
+ * 与 WorldConfig 并列存储在 Save / Room 文档中，
+ * 用于承载 script / opening 及 opening 的一次性注入状态。
+ */
+export interface WorldNarrativeRuntimeSnapshot {
+  version: 1;
+  script?: string;
+  opening?: string;
+  /**
+   * opening 是否已经完成首次注入。
+   * 用于保证会话初始化 / 房间开局只执行一次。
+   */
+  openingInjected?: boolean;
+}
+
+export const DEFAULT_WORLD_NARRATIVE_RUNTIME_SNAPSHOT: WorldNarrativeRuntimeSnapshot =
+  {
+    version: 1,
+    openingInjected: false,
+  };
 
 export interface World {
   id: WorldId;
@@ -259,8 +282,8 @@ export interface World {
    */
   rules: WorldConfig;
   /**
-   * 未来叙事启动层占位（工作包 D）。
-   * 当前只做作者态数据存储，不接入运行时。
+   * 作者态叙事启动真源。
+   * 运行时通过独立 narrative 快照写入 Save / Room 文档后读取。
    */
   narrative?: WorldNarrativeSeed;
 }

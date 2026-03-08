@@ -41,6 +41,7 @@ import { resolveAIConfig } from "@/lib/ai/resolve-config";
 import { usePresetStore } from "@/lib/prompt";
 import { buildEnvelope, toVariableContext } from "@/lib/prompt/envelope";
 import { getLastDisplayName } from "@/lib/user-identity";
+import { getRuntimeWorldNarrative } from "@/lib/world/resolve-config";
 import {
   createGameStateRepository,
   type GameStateRepository,
@@ -213,6 +214,7 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
       }
 
       const displayName = characterInfo?.name || playerName || "冒险者";
+      const runtimeNarrative = getRuntimeWorldNarrative();
 
       // 准备分段记忆注入数据（供 memorySummary marker 渲染）
       // 提取 assistant 消息列表给 prepareMemoryData
@@ -277,6 +279,7 @@ const sendMessageHandler: CommandHandler<SendMessagePayload, void> = async (
               }
             : undefined,
         },
+        scenario: runtimeNarrative.script,
       });
 
       // parser 预设可选——无预设时管线 Parser Agent 自动写入空 ruleScript

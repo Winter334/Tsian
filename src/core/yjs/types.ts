@@ -3,7 +3,10 @@
  */
 
 import type { CharacterStatus } from "@/domain/entities/character";
-import type { WorldConfig } from "@/lib/world/types";
+import type {
+  WorldConfig,
+  WorldNarrativeRuntimeSnapshot,
+} from "@/lib/world/types";
 import type * as Y from "yjs";
 
 /**
@@ -38,6 +41,8 @@ export interface SaveSlot {
   messages: Y.Map<Y.Array<unknown>>;
   /** 游戏状态（角色、背包等，后续扩展） */
   gameState: Y.Map<unknown>;
+  /** 世界叙事启动快照 */
+  worldNarrative?: Y.Map<unknown>;
 
   // === 联机游戏进度（Phase 1 新增） ===
   /** 当前回合号（0 = 未开始） */
@@ -261,6 +266,8 @@ export interface ImportSaveData {
   gameState: Record<string, unknown>;
   /** 世界配置快照 */
   worldConfig?: WorldConfig;
+  /** 世界叙事启动快照 */
+  worldNarrative?: WorldNarrativeRuntimeSnapshot;
   /** 角色列表（Phase 2 新增） */
   characters?: ImportCharacterData[];
 }
@@ -361,6 +368,8 @@ export interface ExportSaveData {
   gameState: Record<string, unknown>;
   /** 世界配置快照 */
   worldConfig?: WorldConfig;
+  /** 世界叙事启动快照 */
+  worldNarrative?: WorldNarrativeRuntimeSnapshot;
   /** 角色列表（Phase 2 新增） */
   characters?: ExportCharacterData[];
 }

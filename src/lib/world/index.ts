@@ -4,17 +4,29 @@
 
 export { defaultWorld, defaultWorldConfig } from "./presets/default";
 export {
+  getDefaultWorldNarrativeRuntimeSnapshot,
   getRuntimeWorldConfig,
+  getRuntimeWorldNarrative,
+  normalizeWorldNarrativeRuntimeSnapshot,
+  resolveSelectedWorldNarrative,
   resolveSelectedWorldRules,
+  resolveWorldNarrative,
+  resolveWorldNarrativeFromSeed,
   resolveWorldRules,
   worldConfigFromYMap,
   worldConfigToYMap,
+  worldNarrativeFromYMap,
+  worldNarrativeToYMap,
 } from "./resolve-config";
 export { getDefaultResourceField, getResourcePairs } from "./resource-utils";
 export { worldStorage } from "./storage";
 export type { WorldIndex, WorldStorage } from "./storage";
 export { useWorldStore } from "./store";
-export { DEFAULT_WORLD_CONFIG, resolveDimensionSelections } from "./types";
+export {
+  DEFAULT_WORLD_CONFIG,
+  DEFAULT_WORLD_NARRATIVE_RUNTIME_SNAPSHOT,
+  resolveDimensionSelections,
+} from "./types";
 export type {
   CheckRuleConfig,
   ConditionConfig,
@@ -27,5 +39,6 @@ export type {
   WorldConfig,
   WorldId,
   WorldMeta,
+  WorldNarrativeRuntimeSnapshot,
   WorldNarrativeSeed,
 } from "./types";

@@ -8,6 +8,11 @@ import {
   worldConfigFromYMap,
   worldConfigToYMap,
 } from "@/lib/world/world-config-codec";
+import {
+  normalizeWorldNarrativeRuntimeSnapshot,
+  worldNarrativeFromYMap,
+  worldNarrativeToYMap,
+} from "@/lib/world/world-narrative-codec";
 import { characterToYMap, yMapToCharacter } from "@/modules/game/repository";
 import { IndexeddbPersistence } from "y-indexeddb";
 import * as Y from "yjs";
@@ -268,6 +273,7 @@ export class YjsManager {
       conversations: new Y.Map(),
       messages: new Y.Map(),
       gameState: new Y.Map(),
+      worldNarrative: worldNarrativeToYMap(undefined),
     };
 
     // 联机存档专用字段
@@ -325,6 +331,7 @@ export class YjsManager {
       conversations: new Y.Map(),
       messages: new Y.Map(),
       gameState: new Y.Map(),
+      worldNarrative: worldNarrativeToYMap(undefined),
     };
 
     // 联机存档专用字段
@@ -587,6 +594,11 @@ export class YjsManager {
       saveMap.set("worldConfig", worldConfigToYMap(data.worldConfig));
     }
 
+    const worldNarrative = normalizeWorldNarrativeRuntimeSnapshot(
+      data.worldNarrative,
+    );
+    saveMap.set("worldNarrative", worldNarrativeToYMap(worldNarrative));
+
     // 创建角色 Map（Phase 2 → 统一为 Y.Map<Y.Map<unknown>>）
     if (data.characters && data.characters.length > 0) {
       const charactersMap = new Y.Map<Y.Map<unknown>>();
@@ -734,6 +746,12 @@ export class YjsManager {
         ? worldConfigFromYMap(worldConfigValue)
         : null;
 
+    const worldNarrativeValue = saveMap.get("worldNarrative");
+    const worldNarrative =
+      worldNarrativeValue instanceof Y.Map
+        ? worldNarrativeFromYMap(worldNarrativeValue)
+        : null;
+
     // 提取角色数据（Phase 2 → 统一从 Y.Map<Y.Map<unknown>> 读取）
     const charactersMap = saveMap.get("characters") as
       | Y.Map<Y.Map<unknown>>
@@ -803,6 +821,7 @@ export class YjsManager {
       messages,
       gameState,
       worldConfig: worldConfig ?? undefined,
+      worldNarrative: worldNarrative ?? undefined,
       characters: characters.length > 0 ? characters : undefined,
     };
   }

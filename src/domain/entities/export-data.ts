@@ -4,7 +4,10 @@
  * 这些类型定义属于领域层，用于数据导出/导入功能
  */
 
-import type { WorldConfig } from "@/lib/world/types";
+import type {
+  WorldConfig,
+  WorldNarrativeRuntimeSnapshot,
+} from "@/lib/world/types";
 
 import type { ArchivedTurn, SaveMemberInfo, SaveType } from "@/core/yjs/types";
 
@@ -117,6 +120,8 @@ export interface ExportedSave {
   gameState: Record<string, unknown>;
   /** 世界配置快照 */
   worldConfig?: WorldConfig;
+  /** 世界叙事启动快照 */
+  worldNarrative?: WorldNarrativeRuntimeSnapshot;
   /** 角色列表（Phase 2 新增） */
   characters?: ExportedCharacter[];
 }

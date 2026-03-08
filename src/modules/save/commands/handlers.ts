@@ -28,9 +28,11 @@ import { computeFullStats } from "@/lib/rules/stats-pipeline";
 import { getOrCreateUserId, getUniqueTag } from "@/lib/user-identity";
 import {
   getRuntimeWorldConfig,
+  resolveSelectedWorldNarrative,
   resolveSelectedWorldRules,
 } from "@/lib/world/resolve-config";
 import { worldConfigToYMap } from "@/lib/world/world-config-codec";
+import { worldNarrativeToYMap } from "@/lib/world/world-narrative-codec";
 import { characterToYMap } from "@/modules/game/repository";
 
 /**
@@ -49,8 +51,11 @@ const createSaveHandler: CommandHandler<CreateSavePayload, string> = async (
     // 1. 获取之前的存档 ID
     const previousSaveId = yjsManager.getCurrentSaveId();
 
-    // 2. 从显式 world 选择解析 WorldConfig（用于写入快照）
-    const worldConfig = await resolveSelectedWorldRules(worldId);
+    // 2. 从显式 world 选择解析运行时快照（用于写入存档）
+    const [worldConfig, worldNarrative] = await Promise.all([
+      resolveSelectedWorldRules(worldId),
+      resolveSelectedWorldNarrative(worldId),
+    ]);
 
     // 3. 创建存档槽位（默认为 solo 类型）
     const saveId = yjsManager.createSave({ name });
@@ -58,10 +63,11 @@ const createSaveHandler: CommandHandler<CreateSavePayload, string> = async (
     // 4. 加载新创建的存档
     yjsManager.loadSave(saveId);
 
-    // 5. 写入 WorldConfig 快照与初始角色数据（单机模式）
+    // 5. 写入 WorldConfig / Narrative 快照与初始角色数据（单机模式）
     const save = yjsManager.getCurrentSave();
     if (save) {
       save.set("worldConfig", worldConfigToYMap(worldConfig));
+      save.set("worldNarrative", worldNarrativeToYMap(worldNarrative));
 
       if (initialCharacter) {
         const userId = getOrCreateUserId();
