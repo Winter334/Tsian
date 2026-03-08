@@ -29,6 +29,8 @@ export type SaveCommandType = (typeof SaveCommands)[keyof typeof SaveCommands];
  */
 export interface CreateSavePayload {
   name: string;
+  /** 显式选择的作者态世界 ID */
+  worldId: string;
   /** 单机模式：初始角色数据（存档创建时一并写入） */
   initialCharacter?: CharacterCreationData;
 }

@@ -1,17 +1,16 @@
 /**
  * 世界配置解析工具
  *
- * - resolveWorldConfig：创作阶段（GameWizard / 预设预览）
+ * - resolveWorldRules：作者态世界 → 运行时规则快照（创作阶段）
  * - getRuntimeWorldConfig：运行阶段（从存档快照读取）
  */
 
 import * as Y from "yjs";
 
 import { yjsManager } from "@/core/yjs";
-import type { Preset } from "@/lib/prompt/types";
 
-import type { WorldConfig } from "./types";
-import { DEFAULT_WORLD_CONFIG } from "./types";
+import { useWorldStore } from "./store";
+import { DEFAULT_WORLD_CONFIG, type World, type WorldConfig } from "./types";
 import { worldConfigFromYMap } from "./world-config-codec";
 
 export { worldConfigFromYMap, worldConfigToYMap } from "./world-config-codec";
@@ -35,18 +34,34 @@ export function getRuntimeWorldConfig(): WorldConfig {
 }
 
 /**
- * 从预设解析 WorldConfig（仅限创作阶段）。
+ * 从作者态世界解析运行时规则快照（仅限创作/建档阶段）。
  *
- * 仅用于：
- * - GameWizard 创建新游戏时（存档尚未创建）
- * - 预设编辑器预览
- *
- * 运行时业务逻辑应使用 getRuntimeWorldConfig()，避免受 activePreset 切换影响。
+ * 运行时业务逻辑仍应使用 getRuntimeWorldConfig()，
+ * 避免受活动世界切换影响。
  */
-export function resolveWorldConfig(preset?: Preset | null): WorldConfig {
-  if (!preset?.worldConfig) return DEFAULT_WORLD_CONFIG;
+export function resolveWorldRules(world?: World | null): WorldConfig {
+  if (!world) return DEFAULT_WORLD_CONFIG;
+
   return {
     ...DEFAULT_WORLD_CONFIG,
-    ...preset.worldConfig,
+    ...world.rules,
+    worldId: world.id,
+    worldName: world.meta.name,
   };
+}
+
+/**
+ * 按 ID 读取作者态世界，并解析为运行时规则快照。
+ *
+ * 用于建档 / 建房等需要显式 world 选择的入口。
+ */
+export async function resolveSelectedWorldRules(
+  worldId: string,
+): Promise<WorldConfig> {
+  const world = await useWorldStore.getState().getWorld(worldId);
+  if (!world) {
+    throw new Error(`世界 ${worldId} 不存在`);
+  }
+
+  return resolveWorldRules(world);
 }

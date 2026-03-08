@@ -35,6 +35,7 @@ import { useCommand, useEvent } from "./hooks";
 import { savePortrait } from "./lib/portrait/storage";
 import { usePresetStore } from "./lib/prompt";
 import { getLastDisplayName, getOrCreateUserId } from "./lib/user-identity";
+import { useWorldStore } from "./lib/world";
 import {
   CheckpointPanel,
   GameView,
@@ -367,7 +368,7 @@ function HubGameTransitionShell({
                 background: `linear-gradient(90deg, transparent, ${colorAlpha(
                   "primary",
                   0.56,
-                )}, ${colorAlpha("secondary", 0.42)}, transparent)` ,
+                )}, ${colorAlpha("secondary", 0.42)}, transparent)`,
                 boxShadow: glow("primary", "sm", 0.14),
               }}
             />
@@ -666,6 +667,7 @@ function AppContent() {
   // 监听预设错误
   const { error: showErrorToast } = useToast();
   const presetError = usePresetStore((s) => s.error);
+  const worldError = useWorldStore((s) => s.error);
 
   useEffect(() => {
     if (presetError) {
@@ -674,6 +676,13 @@ function AppContent() {
       usePresetStore.getState().clearError();
     }
   }, [presetError, showErrorToast]);
+
+  useEffect(() => {
+    if (worldError) {
+      showErrorToast("世界错误", worldError);
+      useWorldStore.getState().clearError();
+    }
+  }, [showErrorToast, worldError]);
 
   // 返回标题界面的回调
   const handleReturnToTitle = () => {
@@ -739,6 +748,7 @@ function AppContent() {
         type: SaveCommands.CREATE_SAVE,
         payload: {
           name: `存档 ${saves.length + 1}`,
+          worldId: result.worldId,
           // 传入角色数据，存入 Yjs 存档的 characters 数组
           initialCharacter,
         },

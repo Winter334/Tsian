@@ -8,6 +8,8 @@
 import { RoomCommands } from "@/domain/commands/room";
 import { useCommand } from "@/hooks";
 import { getOrCreateUserId, saveDisplayName } from "@/lib/user-identity";
+import type { WorldConfig } from "@/lib/world";
+import { getRuntimeWorldConfig } from "@/lib/world/resolve-config";
 import { useCallback, useState } from "react";
 
 /**
@@ -18,6 +20,7 @@ export interface JoinRoomResult {
   data?: {
     roomId: string;
     code: string;
+    worldConfig: WorldConfig;
   };
   error?: string;
 }
@@ -64,9 +67,19 @@ export function useJoinRoom() {
         });
 
         if (result.success) {
+          const data = result.data as {
+            roomId: string;
+            code?: string;
+            worldConfig?: WorldConfig;
+          };
+
           return {
             success: true,
-            data: result.data as { roomId: string; code: string },
+            data: {
+              roomId: data.roomId,
+              code: data.code ?? code,
+              worldConfig: data.worldConfig ?? getRuntimeWorldConfig(),
+            },
           };
         } else {
           const errorMsg = result.error || "加入房间失败";
@@ -81,7 +94,7 @@ export function useJoinRoom() {
         setIsJoining(false);
       }
     },
-    [dispatch]
+    [dispatch],
   );
 
   const clearError = useCallback(() => {

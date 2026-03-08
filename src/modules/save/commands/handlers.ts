@@ -24,12 +24,11 @@ import type {
 import { SaveCommands } from "@/domain/commands/save";
 import { createCharacter } from "@/domain/entities/character";
 import { SaveEvents } from "@/domain/events/save";
-import { usePresetStore } from "@/lib/prompt";
 import { computeFullStats } from "@/lib/rules/stats-pipeline";
 import { getOrCreateUserId, getUniqueTag } from "@/lib/user-identity";
 import {
   getRuntimeWorldConfig,
-  resolveWorldConfig,
+  resolveSelectedWorldRules,
 } from "@/lib/world/resolve-config";
 import { worldConfigToYMap } from "@/lib/world/world-config-codec";
 import { characterToYMap } from "@/modules/game/repository";
@@ -44,15 +43,14 @@ const createSaveHandler: CommandHandler<CreateSavePayload, string> = async (
   command: Command<CreateSavePayload>,
   context: CommandContext,
 ): Promise<CommandResult<string>> => {
-  const { name, initialCharacter } = command.payload;
+  const { name, worldId, initialCharacter } = command.payload;
 
   try {
     // 1. 获取之前的存档 ID
     const previousSaveId = yjsManager.getCurrentSaveId();
 
-    // 2. 从当前激活预设解析 WorldConfig（用于写入快照）
-    const activePreset = usePresetStore.getState().activePreset;
-    const worldConfig = resolveWorldConfig(activePreset);
+    // 2. 从显式 world 选择解析 WorldConfig（用于写入快照）
+    const worldConfig = await resolveSelectedWorldRules(worldId);
 
     // 3. 创建存档槽位（默认为 solo 类型）
     const saveId = yjsManager.createSave({ name });

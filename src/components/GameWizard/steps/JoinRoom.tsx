@@ -58,6 +58,7 @@ export function JoinRoom({ context, onNext, onBack }: StepProps) {
         playerName,
         roomId: result.data.roomId,
         roomCode: code,
+        worldConfig: result.data.worldConfig,
         stepData: {
           ...context.stepData,
           joinRoom: {

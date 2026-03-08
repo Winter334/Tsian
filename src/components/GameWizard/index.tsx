@@ -11,10 +11,10 @@
  */
 
 import { useMotionTokens } from "@/hooks";
-import { usePresetStore } from "@/lib/prompt/store";
 import { getLastDisplayName } from "@/lib/user-identity";
 import { cn } from "@/lib/utils";
-import { resolveWorldConfig } from "@/lib/world/resolve-config";
+import { DEFAULT_WORLD_CONFIG, useWorldStore } from "@/lib/world";
+import { resolveWorldRules } from "@/lib/world/resolve-config";
 import { createStepVariants } from "@/styles/motion-variants";
 import { colorAlpha } from "@/styles/tokens";
 import { AnimatePresence, motion } from "framer-motion";
@@ -72,25 +72,45 @@ export function GameWizard({
     }
   }, [open, initialStep, initialContext]);
 
-  // 从活动预设读取 WorldConfig
-  const activePreset = usePresetStore((s) => s.activePreset);
-  const worldConfig = useMemo(
-    () => resolveWorldConfig(activePreset),
-    [activePreset],
+  const activeWorldId = useWorldStore((s) => s.activeWorldId);
+  const activeWorld = useWorldStore((s) =>
+    activeWorldId ? (s.loadedWorlds.get(activeWorldId) ?? null) : null,
   );
+  const authoredWorldConfig = useMemo(
+    () => (activeWorld ? resolveWorldRules(activeWorld) : DEFAULT_WORLD_CONFIG),
+    [activeWorld],
+  );
+  const worldConfig =
+    context.mode === "join-room" && context.worldConfig
+      ? context.worldConfig
+      : (context.worldConfig ?? authoredWorldConfig);
   const requiredAttributePoints = worldConfig.pointBuyRules?.bonusPoints ?? 10;
 
   // 将 worldConfig 注入到 context 中（供步骤组件读取）
   useEffect(() => {
     setContext((prev) => {
-      if (prev.worldConfig === worldConfig) return prev;
-      return { ...prev, worldConfig };
+      if (prev.worldConfig && prev.worldId === undefined) {
+        return prev;
+      }
+
+      if (
+        prev.worldConfig === authoredWorldConfig &&
+        prev.worldId === activeWorld?.id
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        worldId: activeWorld?.id ?? prev.worldId,
+        worldConfig: authoredWorldConfig,
+      };
     });
-  }, [worldConfig]);
+  }, [activeWorld?.id, authoredWorldConfig]);
 
   // 根据 WorldConfig 动态生成步骤配置
   const wizardSteps = useMemo(
-    () => generateWizardSteps(worldConfig),
+    () => generateWizardSteps(worldConfig ?? DEFAULT_WORLD_CONFIG),
     [worldConfig],
   );
 
@@ -170,6 +190,7 @@ export function GameWizard({
         const result: WizardResult = {
           mode: newContext.mode!,
           saveId: newContext.saveId,
+          worldId: newContext.worldId,
           roomId: newContext.roomId,
           roomCode: newContext.roomCode,
           characterId: newContext.characterId,
@@ -226,6 +247,7 @@ export function GameWizard({
       onComplete({
         mode: result.mode!,
         saveId: result.saveId,
+        worldId: result.worldId,
         roomId: result.roomId,
         roomCode: result.roomCode,
         characterId: result.characterId,

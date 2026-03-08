@@ -60,9 +60,15 @@ export function RoomSettings({ context, onNext, onBack }: StepProps) {
     saveDisplayName(playerName);
 
     // 创建房间
+    if (!context.worldId) {
+      setError("当前未选择世界");
+      return;
+    }
+
     const result = await create({
       name: config.name,
       hostDisplayName: playerName,
+      worldId: context.worldId,
       maxPlayers: config.maxPlayers,
       turnDuration: config.turnDuration,
     });
@@ -70,6 +76,7 @@ export function RoomSettings({ context, onNext, onBack }: StepProps) {
     if (result.success && result.data) {
       onNext({
         playerName,
+        worldId: context.worldId,
         roomId: result.data.roomId,
         roomCode: result.data.code,
         stepData: {

@@ -5,7 +5,7 @@
  */
 
 import type { SaveMemberInfo } from "@/core/yjs/types";
-import type { WorldConfig } from "@/lib/world/types";
+import type { WorldConfig, WorldId } from "@/lib/world/types";
 import type { ComponentType } from "react";
 
 // ============================================================
@@ -120,7 +120,10 @@ export interface WizardContext {
   /** 玩家显示名 */
   playerName?: string;
 
-  /** 世界配置（从活动预设解析而来，只读） */
+  /** 显式选择的作者态世界 ID */
+  worldId?: WorldId;
+
+  /** 世界配置（从活动世界解析而来，只读） */
   worldConfig?: WorldConfig;
 
   // ===== 步骤数据（分层存储） =====
@@ -242,6 +245,7 @@ export interface WizardStepConfig {
 export interface WizardResult {
   mode: GameMode;
   saveId?: string;
+  worldId?: WorldId;
   roomId?: string;
   roomCode?: string;
   characterId?: string;

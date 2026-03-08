@@ -18,6 +18,8 @@ export interface CreateRoomOptions {
   name: string;
   /** 房主显示名称 */
   hostDisplayName: string;
+  /** 显式选择的作者态世界 ID */
+  worldId: string;
   /** 最大玩家数（2-8，默认 4） */
   maxPlayers?: number;
   /** 回合时长（分钟，默认 5） */
@@ -79,6 +81,7 @@ export function useCreateRoom() {
             name: options.name,
             hostUserId: getOrCreateUserId(),
             hostDisplayName: options.hostDisplayName,
+            worldId: options.worldId,
             maxPlayers: options.maxPlayers ?? 4,
             turnDuration: (options.turnDuration ?? 5) * 60 * 1000,
           },
@@ -102,7 +105,7 @@ export function useCreateRoom() {
         setIsCreating(false);
       }
     },
-    [dispatch]
+    [dispatch],
   );
 
   const clearError = useCallback(() => {

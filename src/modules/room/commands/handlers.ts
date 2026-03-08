@@ -80,10 +80,12 @@ import { postProcessNarrativeForPersist } from "@/lib/post-process";
 import { usePresetStore } from "@/lib/prompt";
 import { computeFullStats } from "@/lib/rules/stats-pipeline";
 import { getUniqueTag } from "@/lib/user-identity";
+import { DEFAULT_WORLD_CONFIG } from "@/lib/world";
 import {
   getRuntimeWorldConfig,
-  resolveWorldConfig,
+  resolveSelectedWorldRules,
 } from "@/lib/world/resolve-config";
+import type { WorldConfig } from "@/lib/world/types";
 import {
   worldConfigFromYMap,
   worldConfigToYMap,
@@ -193,16 +195,18 @@ function writeHostTransferMeta(roomId: string, meta: HostTransferMeta): void {
 export async function createRoomHandler(
   payload: CreateRoomPayload,
   _context: CommandContext,
-): Promise<CommandResult<{ roomId: string; code: string }>> {
+): Promise<
+  CommandResult<{ roomId: string; code: string; worldConfig: WorldConfig }>
+> {
   const roomId = crypto.randomUUID();
   const now = Date.now();
   let code: string = "";
   let retryCount = 0;
 
-  // 联机建档的 WorldConfig 默认值来源：当前活动 Preset
-  const activePreset = usePresetStore.getState().activePreset;
-  const defaultWorldConfig = resolveWorldConfig(activePreset);
-  let authoritativeWorldConfig = defaultWorldConfig;
+  // 联机建档的 WorldConfig 来源：
+  // - 新建房间：显式 world 选择
+  // - 从存档续玩：存档中的 worldConfig 快照
+  let authoritativeWorldConfig: WorldConfig = DEFAULT_WORLD_CONFIG;
 
   if (payload.fromSaveId) {
     const saveSlot = yjsManager.getSaveSlots().get(payload.fromSaveId) as
@@ -214,6 +218,17 @@ export async function createRoomHandler(
       if (decodedWorldConfig) {
         authoritativeWorldConfig = decodedWorldConfig;
       }
+    } else {
+      if (!payload.worldId) {
+        return {
+          success: false,
+          error: "创建房间缺少 worldId",
+        };
+      }
+
+      authoritativeWorldConfig = await resolveSelectedWorldRules(
+        payload.worldId,
+      );
     }
   }
 
@@ -545,7 +560,10 @@ export async function createRoomHandler(
     // - MEMBER_JOINED: 由 members Map 变化触发
     // - CONNECTED: 由 MultiplayerProvider 状态回调触发（保留在 index.ts）
 
-    return { success: true, data: { roomId, code } };
+    return {
+      success: true,
+      data: { roomId, code, worldConfig: authoritativeWorldConfig },
+    };
   } catch (error) {
     // 清理：如果部分创建成功，需要清理
     if (subdocManager.getMainDoc(roomId)) {
@@ -576,14 +594,19 @@ export async function createRoomHandler(
 export async function joinRoomHandler(
   payload: JoinRoomPayload,
   _context: CommandContext,
-): Promise<CommandResult<{ roomId: string; isHost: boolean }>> {
+): Promise<
+  CommandResult<{
+    roomId: string;
+    isHost: boolean;
+    code: string;
+    worldConfig: WorldConfig;
+  }>
+> {
   const { code, userId, displayName } = payload;
   const now = Date.now();
 
-  // 联机建档的 WorldConfig 本地回退值来源：当前活动 Preset
-  const activePreset = usePresetStore.getState().activePreset;
-  const fallbackWorldConfig = resolveWorldConfig(activePreset);
-  let authoritativeWorldConfig = fallbackWorldConfig;
+  // 联机加入房间时不再回退到活动预设，统一使用默认规则等待 Host 权威配置同步
+  let authoritativeWorldConfig: WorldConfig = DEFAULT_WORLD_CONFIG;
 
   const applyAuthoritativeWorldConfigToSave = (saveId: string): void => {
     const saveSlot = yjsManager.getSaveSlots().get(saveId) as
@@ -1014,7 +1037,15 @@ export async function joinRoomHandler(
       });
     }
 
-    return { success: true, data: { roomId, isHost } };
+    return {
+      success: true,
+      data: {
+        roomId,
+        isHost,
+        code,
+        worldConfig: authoritativeWorldConfig,
+      },
+    };
   } catch (error) {
     // 清理
     multiplayerProvider.disconnect();

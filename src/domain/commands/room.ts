@@ -118,6 +118,8 @@ export interface CreateRoomPayload {
   maxPlayers?: number;
   /** 回合时长（毫秒） */
   turnDuration?: number;
+  /** 显式选择的作者态世界 ID（仅新建房间时使用） */
+  worldId?: string;
   /** 从存档创建（可选） */
   fromSaveId?: string;
 }

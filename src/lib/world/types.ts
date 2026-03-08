@@ -225,6 +225,46 @@ export interface InventoryRulesConfig {
   equipSlotDefinitions?: EquipSlotDefinition[];
 }
 
+export type WorldId = string;
+
+export interface WorldMeta {
+  name: string;
+  description?: string;
+  author?: string;
+  version: string;
+  createdAt: number;
+  updatedAt: number;
+  source: "lyra" | "custom";
+}
+
+export interface WorldNarrativeSeed {
+  /**
+   * 未来工作包 D：作者态剧本入口。
+   * 当前仅保留存储槽位，不接入运行时链路。
+   */
+  script?: string;
+  /**
+   * 未来工作包 D：作者态开幕语入口。
+   * 当前仅保留存储槽位，不接入运行时链路。
+   */
+  opening?: string;
+}
+
+export interface World {
+  id: WorldId;
+  meta: WorldMeta;
+  /**
+   * 作者态规则真源。
+   * 运行时仍通过 worldConfig 快照写入 Save / Room 文档后读取。
+   */
+  rules: WorldConfig;
+  /**
+   * 未来叙事启动层占位（工作包 D）。
+   * 当前只做作者态数据存储，不接入运行时。
+   */
+  narrative?: WorldNarrativeSeed;
+}
+
 export interface WorldConfig {
   version: 1;
   worldId?: string;
