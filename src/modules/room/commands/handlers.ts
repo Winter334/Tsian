@@ -149,9 +149,7 @@ function ensureConversationMapEntry(
   const existingValue = conversationsMap.get(conversationId);
   const roomMetadata = getRoomConversationMetadata(conversationId);
   const fallbackTitle = title ?? (roomMetadata ? "联机房间记录" : "未命名会话");
-  const fallbackMetadata = roomMetadata
-    ? { ...roomMetadata }
-    : undefined;
+  const fallbackMetadata = roomMetadata ? { ...roomMetadata } : undefined;
 
   if (isRecord(existingValue)) {
     const existingMetadata = isRecord(existingValue.metadata)
@@ -209,7 +207,12 @@ function ensureSaveConversationEntry(
     saveSlot.set("conversations", conversationsMap);
   }
 
-  ensureConversationMapEntry(conversationsMap, conversationId, updatedAt, title);
+  ensureConversationMapEntry(
+    conversationsMap,
+    conversationId,
+    updatedAt,
+    title,
+  );
 }
 
 function ensureHistoryConversationEntry(
@@ -219,7 +222,134 @@ function ensureHistoryConversationEntry(
   title?: string,
 ): void {
   const conversationsMap = historyDoc.getMap("conversations") as Y.Map<unknown>;
-  ensureConversationMapEntry(conversationsMap, conversationId, updatedAt, title);
+  ensureConversationMapEntry(
+    conversationsMap,
+    conversationId,
+    updatedAt,
+    title,
+  );
+}
+
+function resolvePersistedRoomConversationId(
+  saveSlot: Y.Map<unknown>,
+  roomId: string,
+): string | null {
+  const canonicalConversationId = `room:${roomId}:main`;
+  const messagesMap = saveSlot.get("messages") as
+    | Y.Map<Y.Array<unknown>>
+    | undefined;
+  const conversationsMap = saveSlot.get("conversations") as
+    | Y.Map<unknown>
+    | undefined;
+
+  const canonicalMessages = messagesMap?.get(canonicalConversationId);
+  if (
+    canonicalMessages instanceof Y.Array ||
+    conversationsMap?.has(canonicalConversationId)
+  ) {
+    return canonicalConversationId;
+  }
+
+  let resolvedConversationId: string | null = null;
+  conversationsMap?.forEach((conversationValue, conversationId) => {
+    if (resolvedConversationId || !isRecord(conversationValue)) {
+      return;
+    }
+
+    const metadata = isRecord(conversationValue.metadata)
+      ? conversationValue.metadata
+      : undefined;
+    if (
+      metadata?.type === "multiplayer-room-main" &&
+      metadata.roomId === roomId
+    ) {
+      resolvedConversationId = conversationId;
+    }
+  });
+
+  return resolvedConversationId;
+}
+
+function migratePersistedRoomMessages(
+  saveSlot: Y.Map<unknown>,
+  previousRoomId: string,
+  nextRoomId: string,
+): void {
+  const oldConversationId = resolvePersistedRoomConversationId(
+    saveSlot,
+    previousRoomId,
+  );
+  const newConversationId = `room:${nextRoomId}:main`;
+
+  if (!oldConversationId || oldConversationId === newConversationId) {
+    return;
+  }
+
+  const messagesMap = saveSlot.get("messages") as
+    | Y.Map<Y.Array<unknown>>
+    | undefined;
+  if (!messagesMap) {
+    return;
+  }
+
+  const oldMessages = messagesMap.get(oldConversationId) as
+    | Y.Array<unknown>
+    | undefined;
+  if (!oldMessages || oldMessages.length === 0) {
+    return;
+  }
+
+  const migrateMessages = (): void => {
+    let newMessages = messagesMap.get(newConversationId) as
+      | Y.Array<unknown>
+      | undefined;
+    if (!newMessages) {
+      newMessages = new Y.Array<unknown>();
+      messagesMap.set(newConversationId, newMessages);
+    }
+
+    const existingMessageIds = new Set<string>();
+    const existingMessages = newMessages.toArray() as Array<
+      Record<string, unknown>
+    >;
+    for (const message of existingMessages) {
+      const id = message?.id;
+      if (typeof id === "string") {
+        existingMessageIds.add(id);
+      }
+    }
+
+    const migratedMessages: unknown[] = [];
+    for (let i = 0; i < oldMessages.length; i++) {
+      const msg = oldMessages.get(i) as Record<string, unknown>;
+      const id = msg?.id;
+      if (typeof id === "string" && existingMessageIds.has(id)) {
+        continue;
+      }
+      if (typeof id === "string") {
+        existingMessageIds.add(id);
+      }
+
+      migratedMessages.push({
+        ...msg,
+        conversationId: newConversationId,
+      });
+    }
+
+    if (migratedMessages.length > 0) {
+      newMessages.insert(newMessages.length, migratedMessages);
+    }
+
+    messagesMap.delete(oldConversationId);
+  };
+
+  const rootDoc = yjsManager.getDoc();
+  if (rootDoc) {
+    rootDoc.transact(migrateMessages);
+    return;
+  }
+
+  migrateMessages();
 }
 
 function writeMainDocWorldNarrative(
@@ -625,54 +755,7 @@ export async function createRoomHandler(
         const lastRoomId = saveSlot.get("lastRoomId") as string | undefined;
 
         if (lastRoomId && lastRoomId !== roomId) {
-          const oldConversationId = `room:${lastRoomId}:main`;
-          const newConversationId = `room:${roomId}:main`;
-
-          const messagesMap = saveSlot.get("messages") as
-            | Y.Map<Y.Array<unknown>>
-            | undefined;
-
-          if (messagesMap) {
-            const oldMessages = messagesMap.get(oldConversationId) as
-              | Y.Array<unknown>
-              | undefined;
-
-            if (oldMessages && oldMessages.length > 0) {
-              const messageCount = oldMessages.length;
-
-              // 使用 Yjs 事务批量操作，避免多次触发变更检测
-              const rootDoc = yjsManager.getDoc();
-              if (rootDoc) {
-                rootDoc.transact(() => {
-                  // 创建新的消息数组
-                  let newMessages = messagesMap.get(newConversationId) as
-                    | Y.Array<unknown>
-                    | undefined;
-                  if (!newMessages) {
-                    newMessages = new Y.Array<unknown>();
-                    messagesMap.set(newConversationId, newMessages);
-                  }
-
-                  // 批量迁移消息：使用 insert 一次性插入所有消息
-                  // 避免逐条 push 导致的性能问题
-                  const migratedMessages: unknown[] = [];
-                  for (let i = 0; i < messageCount; i++) {
-                    const msg = oldMessages.get(i) as Record<string, unknown>;
-                    migratedMessages.push({
-                      ...msg,
-                      conversationId: newConversationId,
-                    });
-                  }
-
-                  // 一次性插入所有消息
-                  newMessages.insert(newMessages.length, migratedMessages);
-
-                  // 删除旧的消息数组（节省空间，避免重复）
-                  messagesMap.delete(oldConversationId);
-                });
-              }
-            }
-          }
+          migratePersistedRoomMessages(saveSlot, lastRoomId, roomId);
 
           // archivedTurns 不需要迁移，因为它不依赖 conversationId
         }
@@ -1253,47 +1336,7 @@ export async function joinRoomHandler(
         const lastRoomId = saveSlot.get("lastRoomId") as string | undefined;
 
         if (lastRoomId && lastRoomId !== roomId) {
-          const oldConversationId = `room:${lastRoomId}:main`;
-          const newConversationId = `room:${roomId}:main`;
-
-          const messagesMap = saveSlot.get("messages") as
-            | Y.Map<Y.Array<unknown>>
-            | undefined;
-
-          if (messagesMap) {
-            const oldMessages = messagesMap.get(oldConversationId) as
-              | Y.Array<unknown>
-              | undefined;
-
-            if (oldMessages && oldMessages.length > 0) {
-              const messageCount = oldMessages.length;
-
-              const rootDoc = yjsManager.getDoc();
-              if (rootDoc) {
-                rootDoc.transact(() => {
-                  let newMessages = messagesMap.get(newConversationId) as
-                    | Y.Array<unknown>
-                    | undefined;
-                  if (!newMessages) {
-                    newMessages = new Y.Array<unknown>();
-                    messagesMap.set(newConversationId, newMessages);
-                  }
-
-                  const migratedMessages: unknown[] = [];
-                  for (let i = 0; i < messageCount; i++) {
-                    const msg = oldMessages.get(i) as Record<string, unknown>;
-                    migratedMessages.push({
-                      ...msg,
-                      conversationId: newConversationId,
-                    });
-                  }
-
-                  newMessages.insert(newMessages.length, migratedMessages);
-                  messagesMap.delete(oldConversationId);
-                });
-              }
-            }
-          }
+          migratePersistedRoomMessages(saveSlot, lastRoomId, roomId);
         }
       }
     }
