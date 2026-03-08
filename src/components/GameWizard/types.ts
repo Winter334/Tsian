@@ -91,12 +91,16 @@ export interface JoinRoomStepData {
  * 1. 定义新的步骤数据接口（如 CharacterCreationStepData）
  * 2. 在此映射中添加对应字段
  */
+export interface WorldSelectionStepData {
+  worldId: WorldId;
+}
+
 export interface StepDataMap {
   roomSettings?: RoomSettingsStepData;
   joinRoom?: JoinRoomStepData;
+  worldSelection?: WorldSelectionStepData;
   // 未来扩展：
   // characterCreation?: CharacterCreationStepData;
-  // worldSelection?: WorldSelectionStepData;
 }
 
 // ============================================================

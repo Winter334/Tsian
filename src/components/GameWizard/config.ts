@@ -21,6 +21,7 @@ import { ModeSelection } from "./steps/ModeSelection";
 import { RoomSettings } from "./steps/RoomSettings";
 import { SoloCharacterCreation } from "./steps/SoloCharacterCreation";
 import { WaitingLobby } from "./steps/WaitingLobby";
+import { WorldSelectionStep } from "./steps/WorldSelectionStep";
 
 // Phase 2 角色创建多步骤组件
 import { createDimensionStepComponent } from "./steps/DimensionSelectionStep";
@@ -53,7 +54,7 @@ const FIXED_STEP_REGISTRY: Record<
       const bonusPoints = ctx.worldConfig?.pointBuyRules?.bonusPoints ?? 10;
       const total = Object.values(ctx.allocatedPoints).reduce(
         (sum, v) => sum + v,
-        0
+        0,
       );
       return total === bonusPoints;
     },
@@ -80,7 +81,7 @@ const FIXED_STEP_REGISTRY: Record<
  * @returns 完整的步骤配置映射
  */
 export function generateWizardSteps(
-  worldConfig: WorldConfig
+  worldConfig: WorldConfig,
 ): Record<string, WizardStepConfig> {
   // 1. 从 WorldConfig 中提取有效维度，过滤空选项并按 order 排序
   const dimensions: CharacterDimension[] = (worldConfig.dimensions ?? [])
@@ -112,10 +113,11 @@ export function generateWizardSteps(
       // 根据模式配置决定下一步
       switch (ctx.mode) {
         case "solo":
-          // 单人模式进入角色创建向导（Phase 2 多步骤）
-          return soloChain[0];
+          // 单人模式先显式选择世界，再进入角色创建向导
+          return "world-selection";
         case "create-room":
-          return "room-settings";
+          // Host 建房前先显式选择世界
+          return "world-selection";
         case "join-room":
           return "join-room";
         default: {
@@ -128,9 +130,29 @@ export function generateWizardSteps(
     getPrevStep: () => null, // 第一步，返回 null 关闭向导
   };
 
-  // 4. 遍历 soloChain，为每个步骤生成配置
+  // 4. 世界选择步骤：单机/建房共用，加入房间继续使用 Host 权威 worldConfig
+  steps["world-selection"] = {
+    id: "world-selection",
+    component: WorldSelectionStep,
+    label: "世界",
+    validate: (ctx) => Boolean(ctx.worldId),
+    getNextStep: (ctx: WizardContext) => {
+      if (ctx.mode === "solo") {
+        return soloChain[0] ?? null;
+      }
+
+      if (ctx.mode === "create-room") {
+        return "room-settings";
+      }
+
+      return null;
+    },
+    getPrevStep: () => "mode-selection",
+  };
+
+  // 5. 遍历 soloChain，为每个步骤生成配置
   soloChain.forEach((stepId, index) => {
-    const prev = index === 0 ? "mode-selection" : soloChain[index - 1];
+    const prev = index === 0 ? "world-selection" : soloChain[index - 1];
     const next = index === soloChain.length - 1 ? null : soloChain[index + 1];
 
     if (stepId.startsWith("solo-dim-")) {
@@ -174,7 +196,7 @@ export function generateWizardSteps(
     }
   });
 
-  // 5. 旧版单步角色创建（保留向后兼容）
+  // 6. 旧版单步角色创建（保留向后兼容）
   /** @deprecated 已被 solo-char-* 多步骤替代 */
   steps["solo-character-creation"] = {
     id: "solo-character-creation",
@@ -183,13 +205,13 @@ export function generateWizardSteps(
     getPrevStep: () => "mode-selection",
   };
 
-  // 6. 联机模式步骤（保持不变）
+  // 7. 联机模式步骤（建房链路前置世界选择；加入房间保持 Host 权威）
   steps["room-settings"] = {
     id: "room-settings",
     component: RoomSettings,
     label: "房间设置",
     getNextStep: () => "waiting-lobby",
-    getPrevStep: () => "mode-selection",
+    getPrevStep: () => "world-selection",
   };
 
   steps["join-room"] = {
@@ -223,7 +245,7 @@ export const INITIAL_STEP = "mode-selection";
  */
 export function getStepsForMode(
   mode: GameMode,
-  worldConfig: WorldConfig
+  worldConfig: WorldConfig,
 ): string[] {
   switch (mode) {
     case "solo": {
@@ -233,6 +255,7 @@ export function getStepsForMode(
       const dimensionStepIds = dimensions.map((d) => `solo-dim-${d.id}`);
       return [
         "mode-selection",
+        "world-selection",
         "solo-char-name",
         ...dimensionStepIds,
         "solo-char-attributes",
@@ -241,7 +264,12 @@ export function getStepsForMode(
       ];
     }
     case "create-room":
-      return ["mode-selection", "room-settings", "waiting-lobby"];
+      return [
+        "mode-selection",
+        "world-selection",
+        "room-settings",
+        "waiting-lobby",
+      ];
     case "join-room":
       return ["mode-selection", "join-room", "waiting-lobby"];
     default:
@@ -257,7 +285,7 @@ export function getStepsForMode(
  */
 export function getVisibleSteps(
   steps: Map<string, WizardStepConfig>,
-  context: WizardContext
+  context: WizardContext,
 ): Array<{ id: string; label: string }> {
   const result: Array<{ id: string; label: string }> = [];
   const visited = new Set<string>();

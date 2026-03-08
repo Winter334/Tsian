@@ -7,6 +7,7 @@ export { ModeSelection } from "./ModeSelection";
 export { RoomSettings } from "./RoomSettings";
 export { SoloCharacterCreation } from "./SoloCharacterCreation";
 export { WaitingLobby } from "./WaitingLobby";
+export { WorldSelectionStep } from "./WorldSelectionStep";
 
 // Phase 2 角色创建多步骤
 export {

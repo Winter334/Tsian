@@ -4,11 +4,8 @@ import type * as Y from "yjs";
 
 import { CharacterPanelDialog } from "./components/CharacterPanel";
 import { GameHUD } from "./components/GameHUD";
-import {
-  GameWizard,
-  type GameMode,
-  type WizardResult,
-} from "./components/GameWizard";
+import { GameWizard, type WizardResult } from "./components/GameWizard";
+import type { WizardContext } from "./components/GameWizard/types";
 import { GameHub } from "./components/layout/GameHub";
 import { LorebookWorkspace } from "./components/LorebookWorkspace";
 import { RoomInfoDialog } from "./components/Multiplayer";
@@ -22,7 +19,7 @@ import { TitleScreen } from "./components/TitleScreen";
 import { ToastProvider, useToast } from "./components/ui";
 import { WorldWorkspace } from "./components/WorldWorkspace";
 import { StorageWarningBanner, yjsManager } from "./core/yjs";
-import type { SaveMemberInfo, SaveSlotInfo } from "./core/yjs/types";
+import type { SaveSlotInfo } from "./core/yjs/types";
 import { RoomCommands } from "./domain/commands/room";
 import { SaveCommands } from "./domain/commands/save";
 import type { CharacterCreationData } from "./domain/entities/character";
@@ -37,6 +34,7 @@ import { savePortrait } from "./lib/portrait/storage";
 import { usePresetStore } from "./lib/prompt";
 import { getLastDisplayName, getOrCreateUserId } from "./lib/user-identity";
 import { useWorldStore } from "./lib/world";
+import { getRuntimeWorldConfig } from "./lib/world/resolve-config";
 import {
   CheckpointPanel,
   GameView,
@@ -581,14 +579,7 @@ function AppContent() {
     string | undefined
   >(undefined);
   const [wizardInitialContext, setWizardInitialContext] = useState<
-    | {
-        mode?: GameMode;
-        roomId?: string;
-        roomCode?: string;
-        /** 期望的成员列表（联机续玩时使用） */
-        expectedMembers?: SaveMemberInfo[];
-      }
-    | undefined
+    Partial<WizardContext> | undefined
   >(undefined);
 
   const { hasCompletedOnboarding, loadSettings } = useSettingsStore();
@@ -728,6 +719,12 @@ function AppContent() {
     setWizardOpen(false);
 
     if (result.mode === "solo") {
+      if (!result.worldId) {
+        showErrorToast("创建存档失败", "未选择世界，无法创建新存档");
+        resetHubGameTransition();
+        setAppState("title");
+        return;
+      }
       // 单人模式：创建新存档
       // 注意：房间状态会在 SAVE_CREATED 事件触发后由 Room 模块自动重置
       const initialCharacter: CharacterCreationData | undefined =
@@ -791,6 +788,13 @@ function AppContent() {
         setAppState("title");
       }
     } else {
+      if (result.mode === "create-room" && !result.worldId) {
+        showErrorToast("创建房间失败", "未选择世界，无法创建房间");
+        resetHubGameTransition();
+        setAppState("title");
+        return;
+      }
+
       // 联机模式：先进入 Hub（房间已创建/加入）
       resetHubGameTransition();
       setAppState("hub");
@@ -873,11 +877,14 @@ function AppContent() {
       const roomData = createResult.data as { roomId: string; code: string };
 
       // 3. 设置向导初始状态，直接进入等待大厅
+      const saveWorldConfig = getRuntimeWorldConfig();
       setWizardInitialStep("waiting-lobby");
       setWizardInitialContext({
         mode: "create-room",
         roomId: roomData.roomId,
         roomCode: roomData.code,
+        worldId: saveWorldConfig.worldId,
+        worldConfig: saveWorldConfig,
         // 传递存档中的成员列表，用于成员到齐检查
         expectedMembers: save.members,
       });

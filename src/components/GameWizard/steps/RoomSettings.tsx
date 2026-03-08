@@ -12,10 +12,17 @@ import {
   saveDisplayName,
 } from "@/lib/user-identity";
 import { useCreateRoom } from "@/modules/room/hooks";
-import { colorAlpha } from "@/styles/tokens";
+import { color, colorAlpha } from "@/styles/tokens";
 import type { Easing } from "framer-motion";
 import { motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Clock, Home, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Clock,
+  Home,
+  Loader2,
+  Orbit,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { RoomPreview, TimeSlider } from "../components";
 import type { RoomConfig, StepProps } from "../types";
@@ -98,9 +105,53 @@ export function RoomSettings({ context, onNext, onBack }: StepProps) {
   return (
     <div className="p-8">
       <div className="space-y-6">
-        {/* 房间名称 */}
         <motion.div
           custom={0}
+          variants={formItemVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <Card variant="outlined" hover={false} className="p-4">
+            <div className="flex items-start gap-3">
+              <div
+                className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                style={{
+                  background: colorAlpha("primary", 0.12),
+                  border: `1px solid ${colorAlpha("primary", 0.2)}`,
+                }}
+              >
+                <Orbit
+                  className="h-4 w-4"
+                  style={{ color: color("primary") }}
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p
+                  className="text-sm font-medium"
+                  style={{ color: color("textPrimary") }}
+                >
+                  当前房间世界
+                </p>
+                <p
+                  className="mt-1 text-base font-semibold"
+                  style={{ color: color("primary") }}
+                >
+                  {context.worldConfig?.worldName ?? "未命名世界"}
+                </p>
+                <p
+                  className="mt-2 text-sm leading-relaxed"
+                  style={{ color: colorAlpha("textMuted", 0.78) }}
+                >
+                  房主权威 worldConfig
+                  将在创建房间时写入快照。若需切换世界，请返回上一步重新选择。
+                </p>
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+        {/* 房间名称 */}
+        <motion.div
+          custom={1}
           variants={formItemVariants}
           initial="hidden"
           animate="visible"
@@ -121,7 +172,7 @@ export function RoomSettings({ context, onNext, onBack }: StepProps) {
 
         {/* 最大人数 - 使用 PlayerCountSelector */}
         <motion.div
-          custom={1}
+          custom={2}
           variants={formItemVariants}
           initial="hidden"
           animate="visible"
@@ -136,7 +187,7 @@ export function RoomSettings({ context, onNext, onBack }: StepProps) {
 
         {/* 回合时长 - 使用 TimeSlider */}
         <motion.div
-          custom={2}
+          custom={3}
           variants={formItemVariants}
           initial="hidden"
           animate="visible"
@@ -158,7 +209,7 @@ export function RoomSettings({ context, onNext, onBack }: StepProps) {
 
         {/* 房间预览 */}
         <motion.div
-          custom={3}
+          custom={4}
           variants={formItemVariants}
           initial="hidden"
           animate="visible"

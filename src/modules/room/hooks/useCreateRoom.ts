@@ -61,6 +61,10 @@ export interface CreateRoomResult {
  * };
  * ```
  */
+/**
+ * 说明：fromSaveId 续玩开房仍直接由上游 CommandBus 调度，
+ * 本 Hook 仅承载“新建房间 + 显式 world 选择”场景。
+ */
 export function useCreateRoom() {
   const dispatch = useCommand();
   const [isCreating, setIsCreating] = useState(false);

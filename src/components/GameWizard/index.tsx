@@ -89,20 +89,25 @@ export function GameWizard({
   // 将 worldConfig 注入到 context 中（供步骤组件读取）
   useEffect(() => {
     setContext((prev) => {
-      if (prev.worldConfig && prev.worldId === undefined) {
+      if (prev.stepData.worldSelection?.worldId) {
         return prev;
       }
 
+      if (prev.roomId && prev.worldConfig) {
+        return prev;
+      }
+
+      const fallbackWorldId = activeWorld?.id ?? prev.worldId;
       if (
-        prev.worldConfig === authoredWorldConfig &&
-        prev.worldId === activeWorld?.id
+        prev.worldId === fallbackWorldId &&
+        prev.worldConfig === authoredWorldConfig
       ) {
         return prev;
       }
 
       return {
         ...prev,
-        worldId: activeWorld?.id ?? prev.worldId,
+        worldId: fallbackWorldId,
         worldConfig: authoredWorldConfig,
       };
     });
@@ -157,6 +162,11 @@ export function GameWizard({
       return;
     }
 
+    if (currentStep?.validate) {
+      setStepValid(currentStep.validate(context));
+      return;
+    }
+
     if (currentStepId === "solo-char-attributes") {
       const totalAllocated = Object.values(
         context.allocatedPoints ?? {},
@@ -167,7 +177,9 @@ export function GameWizard({
 
     setStepValid(true);
   }, [
+    currentStep,
     currentStepId,
+    context,
     context.dimensionSelections,
     context.allocatedPoints,
     requiredAttributePoints,
@@ -274,10 +286,7 @@ export function GameWizard({
   // 导航状态计算
   const canGoBack = currentStep.getPrevStep(context) !== null;
   const isLastStep = currentStep.getNextStep(context) === null;
-  const requiresStepValidation =
-    currentStepId.startsWith("solo-dim-") ||
-    currentStepId === "solo-char-attributes";
-  const canGoNext = requiresStepValidation ? stepValid : true;
+  const canGoNext = stepValid;
 
   return (
     <AnimatePresence>
