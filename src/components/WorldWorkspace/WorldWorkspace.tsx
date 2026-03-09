@@ -3,13 +3,18 @@
  *
  * 全屏作者态世界编辑工作区：
  * - 左侧世界列表
- * - 中间结构化编辑区
- * - 右侧辅助说明区
- * - 移动端按列表 / 编辑 / 辅助三区切换
+ * - 右侧主编辑区
+ * - 移动端按列表 / 编辑双页切换
  */
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { StarfieldBackground } from "@/components/effects/StarfieldBackground";
 import { Overlay, useToast } from "@/components/ui";
@@ -25,14 +30,34 @@ import {
 
 import {
   useWorldWorkspaceState,
+  type WorldRulesEditorScope,
   type WorldWorkspaceMobilePage,
 } from "./hooks/useWorldWorkspaceState";
-import { WorldAssistantPane } from "./WorldAssistantPane";
 import { WorldEditorPane } from "./WorldEditorPane";
 import { WorldListPane } from "./WorldListPane";
 import { WorldWorkspaceToolbar } from "./WorldWorkspaceToolbar";
 
 const LG_BREAKPOINT = 1024;
+
+function getRawRulesApplySuccessMessage(scope: WorldRulesEditorScope): string {
+  switch (scope) {
+    case "attributes":
+      return "属性与点数分区规则 JSON 已同步到当前草稿";
+    case "derivedStats":
+      return "衍生属性分区规则 JSON 已同步到当前草稿";
+    case "checkRules":
+      return "检定规则分区 JSON 已同步到当前草稿";
+    case "conditions":
+      return "状态分区规则 JSON 已同步到当前草稿";
+    case "dimensions":
+      return "角色维度分区规则 JSON 已同步到当前草稿";
+    case "talents":
+      return "天赋分区规则 JSON 已同步到当前草稿";
+    case "full":
+    default:
+      return "全量规则 JSON 已同步到当前草稿";
+  }
+}
 
 function useIsDesktop(): boolean {
   return useSyncExternalStore(
@@ -117,13 +142,24 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
   }, [success, workspace]);
 
   const handleToggleRawRulesEditor = useCallback(() => {
-    workspace.setRawRulesEditorOpen(!workspace.rawRulesEditorOpen);
+    if (
+      workspace.rawRulesEditorOpen &&
+      workspace.rawRulesEditorScope === "full"
+    ) {
+      workspace.closeRawRulesEditor();
+      return;
+    }
+
+    workspace.openRawRulesEditor("full");
   }, [workspace]);
 
   const handleApplyRawRulesText = useCallback(() => {
     try {
       workspace.applyRawRulesText();
-      success("规则已应用", "原始规则 JSON 已同步到当前草稿");
+      success(
+        "规则已应用",
+        getRawRulesApplySuccessMessage(workspace.rawRulesEditorScope),
+      );
     } catch (err) {
       error("规则解析失败", err instanceof Error ? err.message : "未知错误");
     }
@@ -171,6 +207,56 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [closeConfirmOpen, handleCloseRequest, open]);
 
+  const editorPane = useMemo(
+    () => (
+      <WorldEditorPane
+        world={workspace.draft}
+        validationMessages={workspace.validationMessages}
+        rawRulesEditorOpen={workspace.rawRulesEditorOpen}
+        rawRulesEditorScope={workspace.rawRulesEditorScope}
+        rawRulesText={workspace.rawRulesText}
+        rawRulesError={workspace.rawRulesError}
+        onOpenRawRulesEditor={workspace.openRawRulesEditor}
+        onCloseRawRulesEditor={workspace.closeRawRulesEditor}
+        onUpdateMeta={workspace.updateMeta}
+        onUpdateNarrative={workspace.updateNarrative}
+        onUpdatePrimaryAttribute={workspace.updatePrimaryAttribute}
+        onAddPrimaryAttribute={workspace.addPrimaryAttribute}
+        onRemovePrimaryAttribute={workspace.removePrimaryAttribute}
+        onUpdatePointBuyRules={workspace.updatePointBuyRules}
+        onUpdateCheckRules={workspace.updateCheckRules}
+        onAddDcPreset={workspace.addDcPreset}
+        onUpdateDcPreset={workspace.updateDcPreset}
+        onRemoveDcPreset={workspace.removeDcPreset}
+        onAddOpposedPreset={workspace.addOpposedPreset}
+        onUpdateOpposedPreset={workspace.updateOpposedPreset}
+        onRemoveOpposedPreset={workspace.removeOpposedPreset}
+        onAddDCGuidelineItem={workspace.addDCGuidelineItem}
+        onUpdateDCGuidelineItem={workspace.updateDCGuidelineItem}
+        onRemoveDCGuidelineItem={workspace.removeDCGuidelineItem}
+        onUpdateDerivedStat={workspace.updateDerivedStat}
+        onAddDerivedStat={workspace.addDerivedStat}
+        onRemoveDerivedStat={workspace.removeDerivedStat}
+        onUpdateCondition={workspace.updateCondition}
+        onAddCondition={workspace.addCondition}
+        onRemoveCondition={workspace.removeCondition}
+        onUpdateDimension={workspace.updateDimension}
+        onAddDimension={workspace.addDimension}
+        onRemoveDimension={workspace.removeDimension}
+        onUpdateDimensionOption={workspace.updateDimensionOption}
+        onAddDimensionOption={workspace.addDimensionOption}
+        onRemoveDimensionOption={workspace.removeDimensionOption}
+        onUpdateTalentRules={workspace.updateTalentRules}
+        onUpdateTalent={workspace.updateTalent}
+        onAddTalent={workspace.addTalent}
+        onRemoveTalent={workspace.removeTalent}
+        onSetRawRulesText={workspace.setRawRulesText}
+        onApplyRawRulesText={handleApplyRawRulesText}
+      />
+    ),
+    [handleApplyRawRulesText, workspace],
+  );
+
   const renderMobilePage = useCallback(
     (page: WorldWorkspaceMobilePage) => {
       switch (page) {
@@ -185,44 +271,12 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
               onDeleteWorld={handleDeleteWorld}
             />
           );
-        case "assistant":
-          return (
-            <WorldAssistantPane
-              world={workspace.draft}
-              validationMessages={workspace.validationMessages}
-            />
-          );
         case "editor":
         default:
-          return (
-            <WorldEditorPane
-              world={workspace.draft}
-              validationMessages={workspace.validationMessages}
-              rawRulesEditorOpen={workspace.rawRulesEditorOpen}
-              rawRulesText={workspace.rawRulesText}
-              rawRulesError={workspace.rawRulesError}
-              onUpdateMeta={workspace.updateMeta}
-              onUpdateNarrative={workspace.updateNarrative}
-              onUpdatePrimaryAttribute={workspace.updatePrimaryAttribute}
-              onAddPrimaryAttribute={workspace.addPrimaryAttribute}
-              onRemovePrimaryAttribute={workspace.removePrimaryAttribute}
-              onUpdatePointBuyRules={workspace.updatePointBuyRules}
-              onUpdateDimension={workspace.updateDimension}
-              onAddDimension={workspace.addDimension}
-              onRemoveDimension={workspace.removeDimension}
-              onUpdateDimensionOption={workspace.updateDimensionOption}
-              onAddDimensionOption={workspace.addDimensionOption}
-              onRemoveDimensionOption={workspace.removeDimensionOption}
-              onUpdateTalent={workspace.updateTalent}
-              onAddTalent={workspace.addTalent}
-              onRemoveTalent={workspace.removeTalent}
-              onSetRawRulesText={workspace.setRawRulesText}
-              onApplyRawRulesText={handleApplyRawRulesText}
-            />
-          );
+          return editorPane;
       }
     },
-    [handleApplyRawRulesText, handleDeleteWorld, workspace],
+    [editorPane, handleDeleteWorld, workspace],
   );
 
   return (
@@ -254,7 +308,7 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
               </div>
             )}
 
-            <div className="relative z-10 flex h-full flex-col">
+            <div className="relative z-10 flex h-full min-h-0 flex-col">
               <WorldWorkspaceToolbar
                 isDesktop={isDesktop}
                 mobilePage={workspace.mobilePage}
@@ -262,6 +316,7 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
                 isSaving={workspace.isSaving}
                 hasSelection={!!workspace.draft}
                 rawRulesEditorOpen={workspace.rawRulesEditorOpen}
+                rawRulesEditorScope={workspace.rawRulesEditorScope}
                 onNavigateMobile={workspace.setMobilePage}
                 onCreateWorld={() => {
                   void handleCreateWorld();
@@ -278,7 +333,7 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
                 onClose={handleCloseRequest}
               />
 
-              <div className="relative flex-1 overflow-hidden">
+              <div className="relative min-h-0 flex-1 overflow-hidden">
                 {isDesktop ? (
                   <DesktopLayout
                     listPane={
@@ -291,46 +346,7 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
                         onDeleteWorld={handleDeleteWorld}
                       />
                     }
-                    editorPane={
-                      <WorldEditorPane
-                        world={workspace.draft}
-                        validationMessages={workspace.validationMessages}
-                        rawRulesEditorOpen={workspace.rawRulesEditorOpen}
-                        rawRulesText={workspace.rawRulesText}
-                        rawRulesError={workspace.rawRulesError}
-                        onUpdateMeta={workspace.updateMeta}
-                        onUpdateNarrative={workspace.updateNarrative}
-                        onUpdatePrimaryAttribute={
-                          workspace.updatePrimaryAttribute
-                        }
-                        onAddPrimaryAttribute={workspace.addPrimaryAttribute}
-                        onRemovePrimaryAttribute={
-                          workspace.removePrimaryAttribute
-                        }
-                        onUpdatePointBuyRules={workspace.updatePointBuyRules}
-                        onUpdateDimension={workspace.updateDimension}
-                        onAddDimension={workspace.addDimension}
-                        onRemoveDimension={workspace.removeDimension}
-                        onUpdateDimensionOption={
-                          workspace.updateDimensionOption
-                        }
-                        onAddDimensionOption={workspace.addDimensionOption}
-                        onRemoveDimensionOption={
-                          workspace.removeDimensionOption
-                        }
-                        onUpdateTalent={workspace.updateTalent}
-                        onAddTalent={workspace.addTalent}
-                        onRemoveTalent={workspace.removeTalent}
-                        onSetRawRulesText={workspace.setRawRulesText}
-                        onApplyRawRulesText={handleApplyRawRulesText}
-                      />
-                    }
-                    assistantPane={
-                      <WorldAssistantPane
-                        world={workspace.draft}
-                        validationMessages={workspace.validationMessages}
-                      />
-                    }
+                    editorPane={editorPane}
                   />
                 ) : (
                   <MobileLayout
@@ -359,27 +375,19 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
 function DesktopLayout({
   listPane,
   editorPane,
-  assistantPane,
 }: {
   listPane: React.ReactNode;
   editorPane: React.ReactNode;
-  assistantPane: React.ReactNode;
 }) {
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-0">
       <div
-        className="h-full w-72 shrink-0 border-r"
+        className="h-full min-h-0 w-72 shrink-0 border-r"
         style={{ borderColor: colorAlpha("primary", 0.16) }}
       >
         {listPane}
       </div>
-      <div
-        className="h-full min-w-0 flex-1 border-r"
-        style={{ borderColor: colorAlpha("primary", 0.12) }}
-      >
-        {editorPane}
-      </div>
-      <div className="h-full w-84 shrink-0">{assistantPane}</div>
+      <div className="h-full min-h-0 min-w-0 flex-1">{editorPane}</div>
     </div>
   );
 }
@@ -392,11 +400,11 @@ function MobileLayout({
   renderPage: (page: WorldWorkspaceMobilePage) => React.ReactNode;
 }) {
   return (
-    <div className="relative h-full overflow-hidden">
+    <div className="relative h-full min-h-0 overflow-hidden">
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={page}
-          className="h-full"
+          className="h-full min-h-0"
           variants={
             page === "list" ? stepBackwardVariants : stepForwardVariants
           }

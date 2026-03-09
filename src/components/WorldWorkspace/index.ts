@@ -8,7 +8,6 @@ export {
   type WorldWorkspaceMobilePage,
   type WorldWorkspaceState,
 } from "./hooks/useWorldWorkspaceState";
-export { WorldAssistantPane } from "./WorldAssistantPane";
 export { WorldEditorPane } from "./WorldEditorPane";
 export { WorldListPane } from "./WorldListPane";
 export { WorldWorkspace } from "./WorldWorkspace";

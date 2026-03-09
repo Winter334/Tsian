@@ -6,7 +6,6 @@ import {
   Download,
   FileCode2,
   Import,
-  Layers3,
   List,
   Loader2,
   Plus,
@@ -21,7 +20,10 @@ import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { animation, color, colorAlpha, gradientText } from "@/styles/tokens";
 
-import type { WorldWorkspaceMobilePage } from "./hooks/useWorldWorkspaceState";
+import type {
+  WorldRulesEditorScope,
+  WorldWorkspaceMobilePage,
+} from "./hooks/useWorldWorkspaceState";
 
 interface WorldWorkspaceToolbarProps {
   isDesktop: boolean;
@@ -30,6 +32,7 @@ interface WorldWorkspaceToolbarProps {
   isSaving: boolean;
   hasSelection: boolean;
   rawRulesEditorOpen: boolean;
+  rawRulesEditorScope: WorldRulesEditorScope;
   onNavigateMobile: (page: WorldWorkspaceMobilePage) => void;
   onCreateWorld: () => void;
   onImportFile: (file: File) => void;
@@ -47,6 +50,7 @@ export function WorldWorkspaceToolbar({
   isSaving,
   hasSelection,
   rawRulesEditorOpen,
+  rawRulesEditorScope,
   onNavigateMobile,
   onCreateWorld,
   onImportFile,
@@ -57,6 +61,8 @@ export function WorldWorkspaceToolbar({
   onClose,
 }: WorldWorkspaceToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isFullRawRulesEditorOpen =
+    rawRulesEditorOpen && rawRulesEditorScope === "full";
 
   const triggerImport = useCallback(() => {
     fileInputRef.current?.click();
@@ -103,7 +109,7 @@ export function WorldWorkspaceToolbar({
             className="mt-1 text-xs sm:text-sm"
             style={{ color: colorAlpha("textSecondary", 0.78) }}
           >
-            作者态世界配置编辑 · 结构化表单优先，原始规则兜底
+            作者态世界配置编辑 · 结构化表单优先，局部分区 / 全量规则 JSON 共存
           </p>
         </div>
 
@@ -181,14 +187,16 @@ export function WorldWorkspaceToolbar({
         <div className="flex flex-wrap items-center gap-2">
           <ToolbarActionButton
             icon={<FileCode2 className="h-4 w-4" />}
-            label={rawRulesEditorOpen ? "关闭原始规则" : "原始规则编辑"}
+            label={
+              isFullRawRulesEditorOpen ? "关闭全量高级规则" : "全量高级规则"
+            }
             onClick={onToggleRawRulesEditor}
             disabled={!hasSelection}
-            highlighted={rawRulesEditorOpen}
+            highlighted={isFullRawRulesEditorOpen}
           />
 
           {!isDesktop && (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <ToolbarActionButton
                 icon={<List className="h-4 w-4" />}
                 label="列表"
@@ -200,12 +208,6 @@ export function WorldWorkspaceToolbar({
                 label="编辑"
                 onClick={() => onNavigateMobile("editor")}
                 highlighted={mobilePage === "editor"}
-              />
-              <ToolbarActionButton
-                icon={<Layers3 className="h-4 w-4" />}
-                label="辅助"
-                onClick={() => onNavigateMobile("assistant")}
-                highlighted={mobilePage === "assistant"}
               />
             </div>
           )}

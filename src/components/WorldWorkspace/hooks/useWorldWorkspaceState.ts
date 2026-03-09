@@ -11,6 +11,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { topologicalSortDerivedStats } from "@/lib/rules/derived-stats";
+import {
+  evaluateExpression,
+  type ExpressionPrimitive,
+} from "@/lib/rules/expression";
 import {
   DEFAULT_WORLD_CONFIG,
   defaultWorld,
@@ -19,6 +24,9 @@ import {
 } from "@/lib/world";
 import type {
   CharacterDimension,
+  CheckRuleConfig,
+  ConditionConfig,
+  DerivedStatConfig,
   DimensionOption,
   PointBuyRules,
   PrimaryAttributeConfig,
@@ -30,12 +38,46 @@ import type {
   WorldNarrativeSeed,
 } from "@/lib/world/types";
 
-export type WorldWorkspaceMobilePage = "list" | "editor" | "assistant";
+export type WorldWorkspaceMobilePage = "list" | "editor";
+export type WorldRulesEditorScope =
+  | "full"
+  | "attributes"
+  | "derivedStats"
+  | "checkRules"
+  | "conditions"
+  | "dimensions"
+  | "talents";
+export type WorldScopedRulesEditorScope = Exclude<
+  WorldRulesEditorScope,
+  "full"
+>;
 
 type EditableWorldMeta = Pick<
   WorldMeta,
   "name" | "description" | "author" | "version" | "source"
 >;
+
+type EditableRulesAttributesSnapshot = Pick<
+  WorldConfig,
+  "primaryAttributes" | "pointBuyRules"
+>;
+type EditableRulesDerivedStatsSnapshot = Pick<WorldConfig, "derivedStats">;
+type EditableRulesCheckRulesSnapshot = Pick<WorldConfig, "checkRules">;
+type EditableRulesConditionsSnapshot = Pick<WorldConfig, "conditions">;
+type EditableRulesDimensionsSnapshot = Pick<WorldConfig, "dimensions">;
+type EditableRulesTalentsSnapshot = Pick<
+  WorldConfig,
+  "talents" | "talentRules"
+>;
+type EditableTalentRules = NonNullable<WorldConfig["talentRules"]>;
+
+type EditableDCPresets = NonNullable<CheckRuleConfig["dcPresets"]>;
+type EditableDCPreset = EditableDCPresets[string];
+type EditableOpposedPresets = NonNullable<CheckRuleConfig["opposedPresets"]>;
+type EditableOpposedPreset = EditableOpposedPresets[string];
+type EditableDCGuidelineScaleItem = NonNullable<
+  CheckRuleConfig["dcGuideline"]
+>["scale"][number];
 
 type EditableWorldSnapshot = {
   meta: EditableWorldMeta;
@@ -55,6 +97,7 @@ export interface WorldWorkspaceState {
   isSaving: boolean;
   isLoadingWorld: boolean;
   rawRulesEditorOpen: boolean;
+  rawRulesEditorScope: WorldRulesEditorScope;
   rawRulesText: string;
   rawRulesError: string | null;
   mobilePage: WorldWorkspaceMobilePage;
@@ -69,7 +112,8 @@ export interface WorldWorkspaceActions {
   saveSelectedWorld: () => Promise<World | null>;
   resetDraft: () => void;
   setMobilePage: (page: WorldWorkspaceMobilePage) => void;
-  setRawRulesEditorOpen: (open: boolean) => void;
+  openRawRulesEditor: (scope: WorldRulesEditorScope) => void;
+  closeRawRulesEditor: () => void;
   setRawRulesText: (value: string) => void;
   applyRawRulesText: () => void;
   exportSelectedWorld: () => void;
@@ -83,6 +127,31 @@ export interface WorldWorkspaceActions {
   addPrimaryAttribute: () => void;
   removePrimaryAttribute: (index: number) => void;
   updatePointBuyRules: (updates: Partial<PointBuyRules>) => void;
+  updateCheckRules: (updates: Partial<CheckRuleConfig>) => void;
+  addDcPreset: () => void;
+  updateDcPreset: (
+    presetKey: string,
+    updates: Partial<EditableDCPreset>,
+  ) => void;
+  removeDcPreset: (presetKey: string) => void;
+  addOpposedPreset: () => void;
+  updateOpposedPreset: (
+    presetKey: string,
+    updates: Partial<EditableOpposedPreset>,
+  ) => void;
+  removeOpposedPreset: (presetKey: string) => void;
+  addDCGuidelineItem: () => void;
+  updateDCGuidelineItem: (
+    index: number,
+    updates: Partial<EditableDCGuidelineScaleItem>,
+  ) => void;
+  removeDCGuidelineItem: (index: number) => void;
+  updateDerivedStat: (
+    index: number,
+    updates: Partial<DerivedStatConfig>,
+  ) => void;
+  addDerivedStat: () => void;
+  removeDerivedStat: (index: number) => void;
   updateDimension: (
     index: number,
     updates: Partial<CharacterDimension>,
@@ -96,6 +165,10 @@ export interface WorldWorkspaceActions {
   ) => void;
   addDimensionOption: (dimensionIndex: number) => void;
   removeDimensionOption: (dimensionIndex: number, optionIndex: number) => void;
+  updateCondition: (index: number, updates: Partial<ConditionConfig>) => void;
+  addCondition: () => void;
+  removeCondition: (index: number) => void;
+  updateTalentRules: (updates: Partial<EditableTalentRules>) => void;
   updateTalent: (index: number, updates: Partial<TalentConfig>) => void;
   addTalent: () => void;
   removeTalent: (index: number) => void;
@@ -136,6 +209,21 @@ function toNumber(value: unknown, fallback: number): number {
   return toOptionalNumber(value) ?? fallback;
 }
 
+function toOptionalInteger(value: unknown): number | undefined {
+  const nextValue = toOptionalNumber(value);
+  return nextValue === undefined ? undefined : Math.trunc(nextValue);
+}
+
+function toOptionalPositiveInteger(value: unknown): number | undefined {
+  const nextValue = toOptionalInteger(value);
+  return nextValue !== undefined && nextValue > 0 ? nextValue : undefined;
+}
+
+function toOptionalNonNegativeInteger(value: unknown): number | undefined {
+  const nextValue = toOptionalInteger(value);
+  return nextValue !== undefined && nextValue >= 0 ? nextValue : undefined;
+}
+
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -144,6 +232,10 @@ function toStringArray(value: unknown): string[] {
   return value
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter((item) => item.length > 0);
+}
+
+function toUniqueStringArray(value: unknown): string[] {
+  return Array.from(new Set(toStringArray(value)));
 }
 
 function toStringRecord(value: unknown): Record<string, string> | undefined {
@@ -204,6 +296,88 @@ function getUniquePrimaryAttributeKey(rules: WorldConfig): string {
   return `attr_${index}`;
 }
 
+function getUniqueDerivedStatKey(rules: WorldConfig): string {
+  const existingKeys = new Set([
+    ...rules.primaryAttributes.map((item) => item.key),
+    ...rules.derivedStats.map((item) => item.key),
+  ]);
+  let index = rules.derivedStats.length + 1;
+
+  while (existingKeys.has(`derived_${index}`)) {
+    index += 1;
+  }
+
+  return `derived_${index}`;
+}
+
+function getUniqueRuleRecordKey(
+  existingKeys: Iterable<string>,
+  prefix: string,
+): string {
+  const usedKeys = new Set(existingKeys);
+  let index = usedKeys.size + 1;
+
+  while (usedKeys.has(`${prefix}_${index}`)) {
+    index += 1;
+  }
+
+  return `${prefix}_${index}`;
+}
+
+const DERIVED_STAT_FORMULA_BUILTINS = new Set([
+  "floor",
+  "ceil",
+  "min",
+  "max",
+  "abs",
+  "round",
+  "sqrt",
+  "pow",
+  "log",
+  "exp",
+  "sin",
+  "cos",
+  "tan",
+  "PI",
+  "E",
+  "true",
+  "false",
+]);
+const FORMULA_IDENTIFIER_REGEX = /\b[a-zA-Z_][a-zA-Z0-9_]*\b/g;
+
+function extractFormulaIdentifiers(formula: string): string[] {
+  const matched = formula.match(FORMULA_IDENTIFIER_REGEX);
+  if (!matched) {
+    return [];
+  }
+
+  const identifiers: string[] = [];
+  const seen = new Set<string>();
+
+  for (const identifier of matched) {
+    if (DERIVED_STAT_FORMULA_BUILTINS.has(identifier) || seen.has(identifier)) {
+      continue;
+    }
+
+    seen.add(identifier);
+    identifiers.push(identifier);
+  }
+
+  return identifiers;
+}
+
+function getDuplicateValues(values: string[]): string[] {
+  const counts = new Map<string, number>();
+
+  for (const value of values) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+
+  return Array.from(counts.entries())
+    .filter(([, count]) => count > 1)
+    .map(([value]) => value);
+}
+
 function normalizePrimaryAttribute(
   value: unknown,
   index: number,
@@ -221,6 +395,45 @@ function normalizePrimaryAttribute(
   };
 }
 
+function normalizeDerivedStat(
+  value: unknown,
+  index: number,
+): DerivedStatConfig {
+  const record = isRecord(value) ? value : {};
+  const fallbackKey = `derived_${index + 1}`;
+  const key = toRequiredString(record.key, fallbackKey);
+  const formula = toRequiredString(record.formula, "0");
+  const dependencies = extractFormulaIdentifiers(formula).filter(
+    (identifier) => identifier !== key,
+  );
+  const category = toOptionalString(record.category);
+  const normalizedCategory =
+    category === "resource" ||
+    category === "combat" ||
+    category === "defense" ||
+    category === "misc"
+      ? category
+      : undefined;
+  const isResource =
+    typeof record.isResource === "boolean" ? record.isResource : undefined;
+  const showInUI =
+    typeof record.showInUI === "boolean" ? record.showInUI : undefined;
+  const maxField = isResource ? toOptionalString(record.maxField) : undefined;
+
+  return {
+    key,
+    label: toRequiredString(record.label, `衍生属性 ${index + 1}`),
+    formula,
+    ...(dependencies.length > 0 ? { dependencies } : {}),
+    min: toOptionalNumber(record.min),
+    max: toOptionalNumber(record.max),
+    ...(showInUI === undefined ? {} : { showInUI }),
+    ...(normalizedCategory ? { category: normalizedCategory } : {}),
+    ...(isResource === undefined ? {} : { isResource }),
+    ...(maxField ? { maxField } : {}),
+  };
+}
+
 function normalizeDimensionOption(
   value: unknown,
   index: number,
@@ -228,8 +441,8 @@ function normalizeDimensionOption(
   const record = isRecord(value) ? value : {};
   const rawEffects = isRecord(record.effects) ? record.effects : undefined;
   const attributeModifiers = toNumberRecord(rawEffects?.attributeModifiers);
-  const grantedTalents = toStringArray(rawEffects?.grantedTalents);
-  const excludedTalents = toStringArray(rawEffects?.excludedTalents);
+  const grantedTalents = toUniqueStringArray(rawEffects?.grantedTalents);
+  const excludedTalents = toUniqueStringArray(rawEffects?.excludedTalents);
 
   return {
     id: toRequiredString(record.id, `option_${index + 1}`),
@@ -281,6 +494,181 @@ function normalizePointBuyRules(value: unknown): PointBuyRules | undefined {
   };
 }
 
+function normalizeDCPreset(value: unknown, index: number): EditableDCPreset {
+  const record = isRecord(value) ? value : {};
+  const defaultSkill = toOptionalString(record.defaultSkill);
+
+  return {
+    label: toRequiredString(record.label, `DC 预设 ${index + 1}`),
+    formula: toRequiredString(record.formula, "10"),
+    ...(defaultSkill ? { defaultSkill } : {}),
+  };
+}
+
+function normalizeOpposedPreset(
+  value: unknown,
+  index: number,
+): EditableOpposedPreset {
+  const record = isRecord(value) ? value : {};
+
+  return {
+    label: toRequiredString(record.label, `对抗预设 ${index + 1}`),
+    attackerSkill: toRequiredString(record.attackerSkill, "attack"),
+    defenderSkill: toRequiredString(record.defenderSkill, "defense"),
+  };
+}
+
+function normalizeDCGuideline(
+  value: unknown,
+): CheckRuleConfig["dcGuideline"] | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const scale = Array.isArray(value.scale)
+    ? value.scale.map((item, index) => {
+        const record = isRecord(item) ? item : {};
+        return {
+          label: toRequiredString(record.label, `难度 ${index + 1}`),
+          dc: toNumber(record.dc, 10),
+          description: toRequiredString(record.description, ""),
+        };
+      })
+    : [];
+
+  return scale.length > 0 ? { scale } : undefined;
+}
+
+function normalizeCheckRules(value: unknown): CheckRuleConfig {
+  const record = isRecord(value) ? value : {};
+  const defaultDice = toOptionalString(record.defaultDice);
+  const criticalSuccessThreshold = toOptionalInteger(
+    record.criticalSuccessThreshold,
+  );
+  const criticalFailureThreshold = toOptionalInteger(
+    record.criticalFailureThreshold,
+  );
+  const allowContest =
+    typeof record.allowContest === "boolean" ? record.allowContest : undefined;
+  const dcPresets = isRecord(record.dcPresets)
+    ? (Object.fromEntries(
+        Object.entries(record.dcPresets).map(([key, preset], index) => [
+          toRequiredString(key, `dc_preset_${index + 1}`),
+          normalizeDCPreset(preset, index),
+        ]),
+      ) as EditableDCPresets)
+    : undefined;
+  const opposedPresets = isRecord(record.opposedPresets)
+    ? (Object.fromEntries(
+        Object.entries(record.opposedPresets).map(([key, preset], index) => [
+          toRequiredString(key, `opposed_preset_${index + 1}`),
+          normalizeOpposedPreset(preset, index),
+        ]),
+      ) as EditableOpposedPresets)
+    : undefined;
+  const dcGuideline = normalizeDCGuideline(record.dcGuideline);
+
+  return {
+    ...(defaultDice ? { defaultDice } : {}),
+    ...(criticalSuccessThreshold === undefined
+      ? {}
+      : { criticalSuccessThreshold }),
+    ...(criticalFailureThreshold === undefined
+      ? {}
+      : { criticalFailureThreshold }),
+    ...(allowContest === undefined ? {} : { allowContest }),
+    ...(dcPresets && Object.keys(dcPresets).length > 0 ? { dcPresets } : {}),
+    ...(opposedPresets && Object.keys(opposedPresets).length > 0
+      ? { opposedPresets }
+      : {}),
+    ...(dcGuideline ? { dcGuideline } : {}),
+  };
+}
+
+function normalizeConditionTrigger(
+  value: unknown,
+): ConditionConfig["trigger"] | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const timing = toOptionalString(value.timing);
+  if (
+    timing !== "turn_start" &&
+    timing !== "on_damage" &&
+    timing !== "passive"
+  ) {
+    return undefined;
+  }
+
+  const actions = Array.isArray(value.actions)
+    ? cloneValue(value.actions)
+    : undefined;
+  const modifiers = Array.isArray(value.modifiers)
+    ? cloneValue(value.modifiers)
+    : undefined;
+  const autoDecrement =
+    typeof value.autoDecrement === "boolean" ? value.autoDecrement : undefined;
+  const damageTypes = isRecord(value.damageFilter)
+    ? toUniqueStringArray(value.damageFilter.damageTypes)
+    : [];
+
+  return {
+    timing,
+    ...(actions ? { actions } : {}),
+    ...(modifiers ? { modifiers } : {}),
+    ...(timing === "on_damage" && damageTypes.length > 0
+      ? { damageFilter: { damageTypes } }
+      : {}),
+    ...(autoDecrement === undefined ? {} : { autoDecrement }),
+  };
+}
+
+function normalizeCondition(value: unknown, index: number): ConditionConfig {
+  const record = isRecord(value) ? value : {};
+  const description = toOptionalString(record.description);
+  const tags = toUniqueStringArray(record.tags);
+  const trigger = normalizeConditionTrigger(record.trigger);
+  const duration = toOptionalPositiveInteger(record.duration);
+  const stackable =
+    typeof record.stackable === "boolean" ? record.stackable : undefined;
+  const icon = toOptionalString(record.icon);
+
+  return {
+    id: toRequiredString(record.id, `condition_${index + 1}`),
+    name: toRequiredString(record.name, `状态 ${index + 1}`),
+    ...(description ? { description } : {}),
+    ...(tags.length > 0 ? { tags } : {}),
+    ...(trigger ? { trigger } : {}),
+    ...(duration === undefined ? {} : { duration }),
+    ...(stackable === undefined ? {} : { stackable }),
+    ...(icon ? { icon } : {}),
+  };
+}
+
+function normalizeTalentRules(
+  value: unknown,
+): WorldConfig["talentRules"] | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const initialCount = toOptionalNonNegativeInteger(value.initialCount);
+  const allowAcquireDuringGame =
+    typeof value.allowAcquireDuringGame === "boolean"
+      ? value.allowAcquireDuringGame
+      : undefined;
+
+  if (initialCount === undefined && allowAcquireDuringGame === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(initialCount === undefined ? {} : { initialCount }),
+    ...(allowAcquireDuringGame === undefined ? {} : { allowAcquireDuringGame }),
+  };
+}
+
 function normalizeTalent(value: unknown, index: number): TalentConfig {
   const record = isRecord(value) ? value : {};
   const rawPrerequisites = isRecord(record.prerequisites)
@@ -308,7 +696,7 @@ function normalizeTalent(value: unknown, index: number): TalentConfig {
     prerequisites: prerequisiteAttributes
       ? { attributes: prerequisiteAttributes }
       : undefined,
-    exclusiveWith: toStringArray(record.exclusiveWith),
+    exclusiveWith: toUniqueStringArray(record.exclusiveWith),
   };
 }
 
@@ -340,6 +728,23 @@ function normalizeWorldRules(
   rules: WorldConfig,
 ): WorldConfig {
   const pointBuyRules = normalizePointBuyRules(rules.pointBuyRules);
+  const primaryAttributes = Array.isArray(rules.primaryAttributes)
+    ? rules.primaryAttributes.map((item, index) =>
+        normalizePrimaryAttribute(item, index),
+      )
+    : cloneValue(DEFAULT_WORLD_CONFIG.primaryAttributes);
+  const derivedStats = Array.isArray(rules.derivedStats)
+    ? rules.derivedStats.map((item, index) => normalizeDerivedStat(item, index))
+    : cloneValue(DEFAULT_WORLD_CONFIG.derivedStats);
+  const checkRules = {
+    ...normalizeCheckRules(DEFAULT_WORLD_CONFIG.checkRules),
+    ...normalizeCheckRules(rules.checkRules),
+  };
+  const conditions = Array.isArray(rules.conditions)
+    ? rules.conditions.map((item, index) => normalizeCondition(item, index))
+    : cloneValue(DEFAULT_WORLD_CONFIG.conditions ?? []).map((item, index) =>
+        normalizeCondition(item, index),
+      );
 
   return {
     ...cloneValue(DEFAULT_WORLD_CONFIG),
@@ -347,17 +752,10 @@ function normalizeWorldRules(
     version: 1,
     worldId,
     worldName,
-    primaryAttributes: Array.isArray(rules.primaryAttributes)
-      ? rules.primaryAttributes.map((item, index) =>
-          normalizePrimaryAttribute(item, index),
-        )
-      : cloneValue(DEFAULT_WORLD_CONFIG.primaryAttributes),
-    derivedStats: Array.isArray(rules.derivedStats)
-      ? cloneValue(rules.derivedStats)
-      : cloneValue(DEFAULT_WORLD_CONFIG.derivedStats),
-    checkRules: isRecord(rules.checkRules)
-      ? cloneValue(rules.checkRules)
-      : cloneValue(DEFAULT_WORLD_CONFIG.checkRules),
+    primaryAttributes,
+    derivedStats,
+    checkRules,
+    conditions,
     dimensions: Array.isArray(rules.dimensions)
       ? rules.dimensions.map((item, index) => normalizeDimension(item, index))
       : [],
@@ -365,6 +763,7 @@ function normalizeWorldRules(
     talents: Array.isArray(rules.talents)
       ? rules.talents.map((item, index) => normalizeTalent(item, index))
       : [],
+    talentRules: normalizeTalentRules(rules.talentRules),
   };
 }
 
@@ -386,6 +785,145 @@ function normalizeWorld(world: World): World {
     rules: normalizeWorldRules(world.id, metaName, world.rules),
     narrative: normalizeNarrative(world.narrative),
   };
+}
+
+function getRawRulesEditorPayload(
+  rules: WorldConfig,
+  scope: WorldRulesEditorScope,
+):
+  | WorldConfig
+  | EditableRulesAttributesSnapshot
+  | EditableRulesDerivedStatsSnapshot
+  | EditableRulesCheckRulesSnapshot
+  | EditableRulesConditionsSnapshot
+  | EditableRulesDimensionsSnapshot
+  | EditableRulesTalentsSnapshot {
+  switch (scope) {
+    case "attributes":
+      return {
+        primaryAttributes: cloneValue(rules.primaryAttributes),
+        ...(rules.pointBuyRules
+          ? { pointBuyRules: cloneValue(rules.pointBuyRules) }
+          : {}),
+      };
+    case "derivedStats":
+      return {
+        derivedStats: cloneValue(rules.derivedStats),
+      };
+    case "checkRules":
+      return {
+        checkRules: cloneValue(rules.checkRules),
+      };
+    case "conditions":
+      return {
+        conditions: cloneValue(rules.conditions ?? []),
+      };
+    case "dimensions":
+      return {
+        dimensions: cloneValue(rules.dimensions ?? []),
+      };
+    case "talents":
+      return {
+        talents: cloneValue(rules.talents ?? []),
+        ...(rules.talentRules
+          ? { talentRules: cloneValue(rules.talentRules) }
+          : {}),
+      };
+    case "full":
+    default:
+      return cloneValue(rules);
+  }
+}
+
+function getRawRulesEditorText(
+  rules: WorldConfig,
+  scope: WorldRulesEditorScope,
+): string {
+  return JSON.stringify(getRawRulesEditorPayload(rules, scope), null, 2);
+}
+
+function applyRawRulesEditorPayload(
+  world: World,
+  scope: WorldRulesEditorScope,
+  parsed: unknown,
+): WorldConfig {
+  if (scope === "full") {
+    if (!isWorldConfig(parsed)) {
+      throw new Error("规则 JSON 未通过基础 schema 校验");
+    }
+
+    return normalizeWorldRules(world.id, world.meta.name, parsed);
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error("当前分区规则 JSON 必须是对象");
+  }
+
+  const nextRules = cloneValue(world.rules);
+
+  switch (scope) {
+    case "attributes":
+      if (!Array.isArray(parsed.primaryAttributes)) {
+        throw new Error("属性与点数分区必须包含 primaryAttributes 数组");
+      }
+
+      nextRules.primaryAttributes = parsed.primaryAttributes.map(
+        (item, index) => normalizePrimaryAttribute(item, index),
+      );
+      nextRules.pointBuyRules = normalizePointBuyRules(parsed.pointBuyRules);
+      break;
+
+    case "derivedStats":
+      if (!Array.isArray(parsed.derivedStats)) {
+        throw new Error("衍生属性分区必须包含 derivedStats 数组");
+      }
+
+      nextRules.derivedStats = parsed.derivedStats.map((item, index) =>
+        normalizeDerivedStat(item, index),
+      );
+      break;
+
+    case "checkRules":
+      if (!isRecord(parsed.checkRules)) {
+        throw new Error("检定规则分区必须包含 checkRules 对象");
+      }
+
+      nextRules.checkRules = normalizeCheckRules(parsed.checkRules);
+      break;
+
+    case "conditions":
+      if (!Array.isArray(parsed.conditions)) {
+        throw new Error("状态分区必须包含 conditions 数组");
+      }
+
+      nextRules.conditions = parsed.conditions.map((item, index) =>
+        normalizeCondition(item, index),
+      );
+      break;
+
+    case "dimensions":
+      if (!Array.isArray(parsed.dimensions)) {
+        throw new Error("角色维度分区必须包含 dimensions 数组");
+      }
+
+      nextRules.dimensions = parsed.dimensions.map((item, index) =>
+        normalizeDimension(item, index),
+      );
+      break;
+
+    case "talents":
+      if (!Array.isArray(parsed.talents)) {
+        throw new Error("天赋分区必须包含 talents 数组");
+      }
+
+      nextRules.talents = parsed.talents.map((item, index) =>
+        normalizeTalent(item, index),
+      );
+      nextRules.talentRules = normalizeTalentRules(parsed.talentRules);
+      break;
+  }
+
+  return normalizeWorldRules(world.id, world.meta.name, nextRules);
 }
 
 function getEditableSnapshot(
@@ -483,6 +1021,8 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingWorld, setIsLoadingWorld] = useState(false);
   const [rawRulesEditorOpen, setRawRulesEditorOpenState] = useState(false);
+  const [rawRulesEditorScope, setRawRulesEditorScope] =
+    useState<WorldRulesEditorScope>("full");
   const [rawRulesText, setRawRulesTextState] = useState(EMPTY_RULES_JSON);
   const [rawRulesError, setRawRulesError] = useState<string | null>(null);
   const [mobilePage, setMobilePage] =
@@ -505,17 +1045,41 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     }
 
     const messages: string[] = [];
-    const attributeKeys = new Set(
+    const primaryAttributeKeys = new Set(
       draft.rules.primaryAttributes.map((item) => item.key),
     );
+    const derivedStats = draft.rules.derivedStats;
+    const derivedKeys = derivedStats.map((item) => item.key);
+    const duplicateDerivedKeys = getDuplicateValues(derivedKeys);
+    const conflictingDerivedKeys = derivedKeys.filter(
+      (key) => key === "level" || primaryAttributeKeys.has(key),
+    );
+    const knownStatKeys = new Set([
+      ...primaryAttributeKeys,
+      "level",
+      ...derivedKeys,
+    ]);
     const allocatableAttributes =
       draft.rules.pointBuyRules?.allocatableAttributes ?? [];
     const invalidAllocatableKeys = allocatableAttributes.filter(
-      (key) => !attributeKeys.has(key),
+      (key) => !primaryAttributeKeys.has(key),
     );
     const emptyDimensions = (draft.rules.dimensions ?? []).filter(
       (item) => item.options.length === 0,
     );
+    const talents = draft.rules.talents ?? [];
+    const talentIds = talents.map((item) => item.id);
+    const duplicateTalentIds = getDuplicateValues(talentIds);
+    const talentIdSet = new Set(talentIds);
+    const formulaScope: Record<string, ExpressionPrimitive> = { level: 1 };
+
+    for (const attribute of draft.rules.primaryAttributes) {
+      formulaScope[attribute.key] = attribute.defaultValue;
+    }
+
+    for (const stat of derivedStats) {
+      formulaScope[stat.key] = 0;
+    }
 
     if (!draft.meta.name.trim()) {
       messages.push("世界名称不能为空。");
@@ -535,12 +1099,258 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
       );
     }
 
+    if (duplicateDerivedKeys.length > 0) {
+      messages.push(
+        `衍生属性存在重复 key：${duplicateDerivedKeys.join("、")}。`,
+      );
+    }
+
+    if (conflictingDerivedKeys.length > 0) {
+      messages.push(
+        `衍生属性 key 不能与主要属性或保留字段冲突：${conflictingDerivedKeys.join("、")}。`,
+      );
+    }
+
+    for (const stat of derivedStats) {
+      const statLabel = `${stat.label}（${stat.key}）`;
+      const referencedFields = extractFormulaIdentifiers(stat.formula);
+      const selfReference = referencedFields.includes(stat.key);
+      const unknownFields = referencedFields.filter(
+        (key) => key !== stat.key && !knownStatKeys.has(key),
+      );
+
+      if (selfReference) {
+        messages.push(`衍生属性 ${statLabel} 的公式不能引用自身 key。`);
+      }
+
+      if (unknownFields.length > 0) {
+        messages.push(
+          `衍生属性 ${statLabel} 的公式引用了不存在的字段：${unknownFields.join("、")}。`,
+        );
+      }
+
+      if (
+        stat.min !== undefined &&
+        stat.max !== undefined &&
+        stat.min > stat.max
+      ) {
+        messages.push(`衍生属性 ${statLabel} 的最小值不能大于最大值。`);
+      }
+
+      if (stat.isResource) {
+        if (!stat.maxField) {
+          messages.push(`资源型衍生属性 ${statLabel} 缺少上限字段 maxField。`);
+        } else if (stat.maxField === stat.key) {
+          messages.push(
+            `资源型衍生属性 ${statLabel} 的 maxField 不能指向自身。`,
+          );
+        } else if (!knownStatKeys.has(stat.maxField)) {
+          messages.push(
+            `资源型衍生属性 ${statLabel} 的 maxField 引用了不存在的字段：${stat.maxField}。`,
+          );
+        }
+      }
+
+      if (unknownFields.length === 0 && !selfReference) {
+        try {
+          const result = evaluateExpression(
+            stat.formula,
+            formulaScope,
+            () => 0.5,
+          );
+          if (
+            typeof result.value !== "number" ||
+            !Number.isFinite(result.value)
+          ) {
+            messages.push(`衍生属性 ${statLabel} 的公式结果不是稳定数值。`);
+          }
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "未知错误";
+          messages.push(`衍生属性 ${statLabel} 的公式校验失败：${reason}`);
+        }
+      }
+    }
+
+    if (duplicateDerivedKeys.length === 0) {
+      try {
+        topologicalSortDerivedStats(derivedStats);
+      } catch (error) {
+        const reason =
+          error instanceof Error ? error.message : "衍生属性依赖校验失败。";
+        messages.push(reason);
+      }
+    }
+
+    const dcPresetKeys = Object.keys(draft.rules.checkRules.dcPresets ?? {});
+    const duplicateConditionIds = getDuplicateValues(
+      (draft.rules.conditions ?? []).map((item) => item.id),
+    );
+    const duplicateConditionNames = getDuplicateValues(
+      (draft.rules.conditions ?? []).map((item) => item.name),
+    );
+
     if (emptyDimensions.length > 0) {
       messages.push(
         `以下维度没有可选项，将不会在创建向导中显示：${emptyDimensions
           .map((item) => item.label)
           .join("、")}。`,
       );
+    }
+
+    if (duplicateTalentIds.length > 0) {
+      messages.push(`天赋存在重复 id：${duplicateTalentIds.join("、")}。`);
+    }
+
+    for (const dimension of draft.rules.dimensions ?? []) {
+      for (const option of dimension.options) {
+        const optionLabel = `${dimension.label} / ${option.name}`;
+        const invalidModifierKeys = Object.keys(
+          option.effects?.attributeModifiers ?? {},
+        ).filter((key) => !primaryAttributeKeys.has(key));
+        const invalidGrantedTalents = (
+          option.effects?.grantedTalents ?? []
+        ).filter((id) => !talentIdSet.has(id));
+        const invalidExcludedTalents = (
+          option.effects?.excludedTalents ?? []
+        ).filter((id) => !talentIdSet.has(id));
+
+        if (invalidModifierKeys.length > 0) {
+          messages.push(
+            `维度选项 ${optionLabel} 的属性修正引用了不存在的主要属性：${invalidModifierKeys.join("、")}。`,
+          );
+        }
+
+        if (invalidGrantedTalents.length > 0) {
+          messages.push(
+            `维度选项 ${optionLabel} 的赠送天赋引用了不存在的天赋：${invalidGrantedTalents.join("、")}。`,
+          );
+        }
+
+        if (invalidExcludedTalents.length > 0) {
+          messages.push(
+            `维度选项 ${optionLabel} 的排除天赋引用了不存在的天赋：${invalidExcludedTalents.join("、")}。`,
+          );
+        }
+      }
+    }
+
+    if (!draft.rules.checkRules.defaultDice?.trim()) {
+      messages.push(
+        "检定规则缺少默认骰子表达式，系统会在保存前回退到内置默认值。",
+      );
+    }
+
+    for (const presetKey of dcPresetKeys) {
+      const preset = draft.rules.checkRules.dcPresets?.[presetKey];
+      if (!preset) {
+        continue;
+      }
+
+      if (!preset.formula.trim()) {
+        messages.push(`DC 预设 ${preset.label || presetKey} 缺少公式。`);
+      }
+    }
+
+    const guidelineScale = draft.rules.checkRules.dcGuideline?.scale ?? [];
+    for (const [index, item] of guidelineScale.entries()) {
+      if (item.label.trim().length === 0) {
+        messages.push(`AI 难度刻度 #${index + 1} 缺少难度名称。`);
+      }
+    }
+
+    if (duplicateConditionIds.length > 0) {
+      messages.push(`状态存在重复 id：${duplicateConditionIds.join("、")}。`);
+    }
+
+    if (duplicateConditionNames.length > 0) {
+      messages.push(
+        `状态存在重复显示名：${duplicateConditionNames.join("、")}。`,
+      );
+    }
+
+    for (const condition of draft.rules.conditions ?? []) {
+      const trigger = condition.trigger;
+      const conditionLabel = `${condition.name}（${condition.id}）`;
+      if (condition.duration !== undefined && condition.duration <= 0) {
+        messages.push(`状态 ${conditionLabel} 的持续回合必须大于 0。`);
+      }
+
+      if (trigger?.timing === "on_damage") {
+        const damageTypes = trigger.damageFilter?.damageTypes ?? [];
+        const duplicatedDamageTypes = getDuplicateValues(damageTypes);
+        if (duplicatedDamageTypes.length > 0) {
+          messages.push(
+            `状态 ${conditionLabel} 的伤害类型过滤存在重复项：${duplicatedDamageTypes.join("、")}。`,
+          );
+        }
+      }
+
+      if (trigger?.timing === "passive") {
+        for (const [modifierIndex, modifier] of (
+          trigger.modifiers ?? []
+        ).entries()) {
+          if (modifier.scope !== "stat") {
+            continue;
+          }
+
+          const field = modifier.field?.trim();
+          if (!field) {
+            messages.push(
+              `状态 ${conditionLabel} 的被动修正 #${modifierIndex + 1} 缺少目标字段。`,
+            );
+            continue;
+          }
+
+          if (!knownStatKeys.has(field)) {
+            messages.push(
+              `状态 ${conditionLabel} 的被动修正 #${modifierIndex + 1} 引用了不存在的属性字段：${field}。`,
+            );
+          }
+        }
+      }
+    }
+
+    const talentInitialCount = draft.rules.talentRules?.initialCount;
+    if (
+      talentInitialCount !== undefined &&
+      (!Number.isInteger(talentInitialCount) || talentInitialCount < 0)
+    ) {
+      messages.push("天赋规则的初始可选数量必须是大于等于 0 的整数。");
+    }
+
+    for (const talent of talents) {
+      const talentLabel = `${talent.name}（${talent.id}）`;
+      const invalidPrerequisiteKeys = Object.keys(
+        talent.prerequisites?.attributes ?? {},
+      ).filter((key) => !primaryAttributeKeys.has(key));
+      const duplicateExclusiveIds = getDuplicateValues(
+        talent.exclusiveWith ?? [],
+      );
+      const invalidExclusiveIds = (talent.exclusiveWith ?? []).filter(
+        (id) => !talentIdSet.has(id),
+      );
+
+      if (invalidPrerequisiteKeys.length > 0) {
+        messages.push(
+          `天赋 ${talentLabel} 的前置属性引用了不存在的主要属性：${invalidPrerequisiteKeys.join("、")}。`,
+        );
+      }
+
+      if (duplicateExclusiveIds.length > 0) {
+        messages.push(
+          `天赋 ${talentLabel} 的互斥列表存在重复项：${duplicateExclusiveIds.join("、")}。`,
+        );
+      }
+
+      if (invalidExclusiveIds.length > 0) {
+        messages.push(
+          `天赋 ${talentLabel} 的互斥列表引用了不存在的天赋：${invalidExclusiveIds.join("、")}。`,
+        );
+      }
+
+      if ((talent.exclusiveWith ?? []).includes(talent.id)) {
+        messages.push(`天赋 ${talentLabel} 不能将自己配置为互斥对象。`);
+      }
     }
 
     if ((draft.rules.talents ?? []).length === 0) {
@@ -561,16 +1371,25 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     });
   }, []);
 
-  const syncRawRulesFromDraft = useCallback((world: World | null) => {
-    if (!world) {
-      setRawRulesTextState(EMPTY_RULES_JSON);
-      setRawRulesError(null);
-      return;
-    }
+  const syncRawRulesFromDraft = useCallback(
+    (world: World | null, scope: WorldRulesEditorScope = "full") => {
+      if (!world) {
+        setRawRulesTextState(
+          scope === "full"
+            ? EMPTY_RULES_JSON
+            : getRawRulesEditorText(DEFAULT_WORLD_CONFIG, scope),
+        );
+        setRawRulesError(null);
+        return;
+      }
 
-    setRawRulesTextState(JSON.stringify(normalizeWorld(world).rules, null, 2));
-    setRawRulesError(null);
-  }, []);
+      setRawRulesTextState(
+        getRawRulesEditorText(normalizeWorld(world).rules, scope),
+      );
+      setRawRulesError(null);
+    },
+    [],
+  );
 
   const confirmDiscardChanges = useCallback(
     (message = "当前世界有未保存修改，继续操作会丢失这些更改。是否继续？") => {
@@ -588,7 +1407,8 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
       setSelectedWorldId(null);
       setSelectedWorld(null);
       setDraft(null);
-      syncRawRulesFromDraft(null);
+      setRawRulesEditorScope("full");
+      syncRawRulesFromDraft(null, "full");
       setMobilePage("list");
       return;
     }
@@ -627,7 +1447,8 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
       setSelectedWorld(normalizedWorld);
       setDraft(cloneValue(normalizedWorld));
       setRawRulesEditorOpenState(false);
-      syncRawRulesFromDraft(normalizedWorld);
+      setRawRulesEditorScope("full");
+      syncRawRulesFromDraft(normalizedWorld, "full");
       setIsLoadingWorld(false);
     }
 
@@ -730,12 +1551,18 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
       const nextWorld = normalizeWorld(persisted ?? normalizedDraft);
       setSelectedWorld(nextWorld);
       setDraft(cloneValue(nextWorld));
-      syncRawRulesFromDraft(nextWorld);
+      syncRawRulesFromDraft(nextWorld, rawRulesEditorScope);
       return nextWorld;
     } finally {
       setIsSaving(false);
     }
-  }, [draft, getWorld, syncRawRulesFromDraft, updateWorldInStore]);
+  }, [
+    draft,
+    getWorld,
+    rawRulesEditorScope,
+    syncRawRulesFromDraft,
+    updateWorldInStore,
+  ]);
 
   const resetDraft = useCallback(() => {
     if (!selectedWorld) {
@@ -745,20 +1572,24 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     const nextWorld = normalizeWorld(selectedWorld);
     setDraft(cloneValue(nextWorld));
     setRawRulesEditorOpenState(false);
-    syncRawRulesFromDraft(nextWorld);
+    setRawRulesEditorScope("full");
+    syncRawRulesFromDraft(nextWorld, "full");
   }, [selectedWorld, syncRawRulesFromDraft]);
 
-  const setRawRulesEditorOpen = useCallback(
-    (open: boolean) => {
-      setRawRulesEditorOpenState(open);
+  const openRawRulesEditor = useCallback(
+    (scope: WorldRulesEditorScope) => {
+      setRawRulesEditorScope(scope);
+      setRawRulesEditorOpenState(true);
       setRawRulesError(null);
-
-      if (open && draft) {
-        syncRawRulesFromDraft(draft);
-      }
+      syncRawRulesFromDraft(draft, scope);
     },
     [draft, syncRawRulesFromDraft],
   );
+
+  const closeRawRulesEditor = useCallback(() => {
+    setRawRulesEditorOpenState(false);
+    setRawRulesError(null);
+  }, []);
 
   const setRawRulesText = useCallback((value: string) => {
     setRawRulesTextState(value);
@@ -772,18 +1603,19 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
 
     try {
       const parsed = JSON.parse(rawRulesText) as unknown;
-      if (!isWorldConfig(parsed)) {
-        throw new Error("规则 JSON 未通过基础 schema 校验");
-      }
+      const nextRules = applyRawRulesEditorPayload(
+        draft,
+        rawRulesEditorScope,
+        parsed,
+      );
 
       updateDraft((current) => {
-        current.rules = normalizeWorldRules(
-          current.id,
-          current.meta.name,
-          parsed,
-        );
+        current.rules = nextRules;
         return current;
       });
+      setRawRulesTextState(
+        getRawRulesEditorText(nextRules, rawRulesEditorScope),
+      );
       setRawRulesError(null);
     } catch (error) {
       const message =
@@ -791,7 +1623,7 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
       setRawRulesError(message);
       throw error;
     }
-  }, [draft, rawRulesText, updateDraft]);
+  }, [draft, rawRulesEditorScope, rawRulesText, updateDraft]);
 
   const exportSelectedWorld = useCallback(() => {
     if (!draft) {
@@ -978,6 +1810,270 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     [updateDraft],
   );
 
+  const updateCheckRules = useCallback(
+    (updates: Partial<CheckRuleConfig>) => {
+      updateDraft((current) => {
+        current.rules.checkRules = normalizeCheckRules({
+          ...current.rules.checkRules,
+          ...updates,
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const addDcPreset = useCallback(() => {
+    updateDraft((current) => {
+      const currentPresets = current.rules.checkRules.dcPresets ?? {};
+      const presetKey = getUniqueRuleRecordKey(
+        Object.keys(currentPresets),
+        "dc_preset",
+      );
+      current.rules.checkRules = normalizeCheckRules({
+        ...current.rules.checkRules,
+        dcPresets: {
+          ...currentPresets,
+          [presetKey]: normalizeDCPreset(
+            {},
+            Object.keys(currentPresets).length,
+          ),
+        },
+      });
+      return current;
+    });
+  }, [updateDraft]);
+
+  const updateDcPreset = useCallback(
+    (presetKey: string, updates: Partial<EditableDCPreset>) => {
+      updateDraft((current) => {
+        const currentPresets = current.rules.checkRules.dcPresets ?? {};
+        const target = currentPresets[presetKey];
+        if (!target) {
+          return current;
+        }
+
+        current.rules.checkRules = normalizeCheckRules({
+          ...current.rules.checkRules,
+          dcPresets: {
+            ...currentPresets,
+            [presetKey]: normalizeDCPreset(
+              {
+                ...target,
+                ...updates,
+              },
+              Object.keys(currentPresets).indexOf(presetKey),
+            ),
+          },
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const removeDcPreset = useCallback(
+    (presetKey: string) => {
+      updateDraft((current) => {
+        const currentPresets = current.rules.checkRules.dcPresets;
+        if (!currentPresets?.[presetKey]) {
+          return current;
+        }
+
+        const { [presetKey]: _removed, ...rest } = currentPresets;
+        current.rules.checkRules = normalizeCheckRules({
+          ...current.rules.checkRules,
+          dcPresets: rest,
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const addOpposedPreset = useCallback(() => {
+    updateDraft((current) => {
+      const currentPresets = current.rules.checkRules.opposedPresets ?? {};
+      const presetKey = getUniqueRuleRecordKey(
+        Object.keys(currentPresets),
+        "opposed_preset",
+      );
+      current.rules.checkRules = normalizeCheckRules({
+        ...current.rules.checkRules,
+        opposedPresets: {
+          ...currentPresets,
+          [presetKey]: normalizeOpposedPreset(
+            {},
+            Object.keys(currentPresets).length,
+          ),
+        },
+      });
+      return current;
+    });
+  }, [updateDraft]);
+
+  const updateOpposedPreset = useCallback(
+    (presetKey: string, updates: Partial<EditableOpposedPreset>) => {
+      updateDraft((current) => {
+        const currentPresets = current.rules.checkRules.opposedPresets ?? {};
+        const target = currentPresets[presetKey];
+        if (!target) {
+          return current;
+        }
+
+        current.rules.checkRules = normalizeCheckRules({
+          ...current.rules.checkRules,
+          opposedPresets: {
+            ...currentPresets,
+            [presetKey]: normalizeOpposedPreset(
+              {
+                ...target,
+                ...updates,
+              },
+              Object.keys(currentPresets).indexOf(presetKey),
+            ),
+          },
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const removeOpposedPreset = useCallback(
+    (presetKey: string) => {
+      updateDraft((current) => {
+        const currentPresets = current.rules.checkRules.opposedPresets;
+        if (!currentPresets?.[presetKey]) {
+          return current;
+        }
+
+        const { [presetKey]: _removed, ...rest } = currentPresets;
+        current.rules.checkRules = normalizeCheckRules({
+          ...current.rules.checkRules,
+          opposedPresets: rest,
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const addDCGuidelineItem = useCallback(() => {
+    updateDraft((current) => {
+      const scale = current.rules.checkRules.dcGuideline?.scale ?? [];
+      current.rules.checkRules = normalizeCheckRules({
+        ...current.rules.checkRules,
+        dcGuideline: {
+          scale: [
+            ...scale,
+            {
+              label: `难度 ${scale.length + 1}`,
+              dc: 10,
+              description: "",
+            },
+          ],
+        },
+      });
+      return current;
+    });
+  }, [updateDraft]);
+
+  const updateDCGuidelineItem = useCallback(
+    (index: number, updates: Partial<EditableDCGuidelineScaleItem>) => {
+      updateDraft((current) => {
+        const scale = current.rules.checkRules.dcGuideline?.scale ?? [];
+        const target = scale[index];
+        if (!target) {
+          return current;
+        }
+
+        current.rules.checkRules = normalizeCheckRules({
+          ...current.rules.checkRules,
+          dcGuideline: {
+            scale: scale.map((item, itemIndex) =>
+              itemIndex === index
+                ? {
+                    ...item,
+                    ...updates,
+                  }
+                : item,
+            ),
+          },
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const removeDCGuidelineItem = useCallback(
+    (index: number) => {
+      updateDraft((current) => {
+        const scale = current.rules.checkRules.dcGuideline?.scale ?? [];
+        if (!scale[index]) {
+          return current;
+        }
+
+        current.rules.checkRules = normalizeCheckRules({
+          ...current.rules.checkRules,
+          dcGuideline: {
+            scale: scale.filter((_, itemIndex) => itemIndex !== index),
+          },
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const updateDerivedStat = useCallback(
+    (index: number, updates: Partial<DerivedStatConfig>) => {
+      updateDraft((current) => {
+        const target = current.rules.derivedStats[index];
+        if (!target) {
+          return current;
+        }
+
+        current.rules.derivedStats[index] = normalizeDerivedStat(
+          {
+            ...target,
+            ...updates,
+          },
+          index,
+        );
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const addDerivedStat = useCallback(() => {
+    updateDraft((current) => {
+      current.rules.derivedStats.push({
+        key: getUniqueDerivedStatKey(current.rules),
+        label: `衍生属性 ${current.rules.derivedStats.length + 1}`,
+        formula: "0",
+        showInUI: true,
+      });
+      return current;
+    });
+  }, [updateDraft]);
+
+  const removeDerivedStat = useCallback(
+    (index: number) => {
+      updateDraft((current) => {
+        if (!current.rules.derivedStats[index]) {
+          return current;
+        }
+
+        current.rules.derivedStats.splice(index, 1);
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
   const updateDimension = useCallback(
     (index: number, updates: Partial<CharacterDimension>) => {
       updateDraft((current) => {
@@ -1090,6 +2186,73 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     [updateDraft],
   );
 
+  const updateCondition = useCallback(
+    (index: number, updates: Partial<ConditionConfig>) => {
+      updateDraft((current) => {
+        current.rules.conditions = current.rules.conditions ?? [];
+        const target = current.rules.conditions[index];
+        if (!target) {
+          return current;
+        }
+
+        current.rules.conditions[index] = normalizeCondition(
+          {
+            ...target,
+            ...updates,
+          },
+          index,
+        );
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const addCondition = useCallback(() => {
+    updateDraft((current) => {
+      current.rules.conditions = current.rules.conditions ?? [];
+      current.rules.conditions.push({
+        id: generateId("condition"),
+        name: `状态 ${current.rules.conditions.length + 1}`,
+        description: "",
+      });
+      current.rules.conditions = current.rules.conditions.map((item, index) =>
+        normalizeCondition(item, index),
+      );
+      return current;
+    });
+  }, [updateDraft]);
+
+  const removeCondition = useCallback(
+    (index: number) => {
+      updateDraft((current) => {
+        if (!current.rules.conditions?.[index]) {
+          return current;
+        }
+
+        current.rules.conditions.splice(index, 1);
+        current.rules.conditions = current.rules.conditions.map(
+          (item, itemIndex) => normalizeCondition(item, itemIndex),
+        );
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const updateTalentRules = useCallback(
+    (updates: Partial<EditableTalentRules>) => {
+      updateDraft((current) => {
+        current.rules.talentRules = normalizeTalentRules({
+          ...(current.rules.talentRules ?? {}),
+          ...updates,
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
   const updateTalent = useCallback(
     (index: number, updates: Partial<TalentConfig>) => {
       updateDraft((current) => {
@@ -1148,6 +2311,7 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     isSaving,
     isLoadingWorld,
     rawRulesEditorOpen,
+    rawRulesEditorScope,
     rawRulesText,
     rawRulesError,
     mobilePage,
@@ -1159,7 +2323,8 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     saveSelectedWorld,
     resetDraft,
     setMobilePage,
-    setRawRulesEditorOpen,
+    openRawRulesEditor,
+    closeRawRulesEditor,
     setRawRulesText,
     applyRawRulesText,
     exportSelectedWorld,
@@ -1170,12 +2335,29 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     addPrimaryAttribute,
     removePrimaryAttribute,
     updatePointBuyRules,
+    updateCheckRules,
+    addDcPreset,
+    updateDcPreset,
+    removeDcPreset,
+    addOpposedPreset,
+    updateOpposedPreset,
+    removeOpposedPreset,
+    addDCGuidelineItem,
+    updateDCGuidelineItem,
+    removeDCGuidelineItem,
+    updateDerivedStat,
+    addDerivedStat,
+    removeDerivedStat,
     updateDimension,
     addDimension,
     removeDimension,
     updateDimensionOption,
     addDimensionOption,
     removeDimensionOption,
+    updateCondition,
+    addCondition,
+    removeCondition,
+    updateTalentRules,
     updateTalent,
     addTalent,
     removeTalent,
