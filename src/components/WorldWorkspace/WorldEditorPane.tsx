@@ -11,11 +11,11 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  Card as BaseCard,
   Button,
-  Card,
   Input,
   Panel,
   ScrollArea,
@@ -66,6 +66,18 @@ const EMPTY_CONDITIONS: ConditionConfig[] = [];
 const EMPTY_PASSIVE_MODIFIERS: PassiveModifier[] = [];
 const EMPTY_NUMERIC_RECORD: Record<string, number> = {};
 
+const EDITOR_CARD_HOVER_STYLE = {
+  scale: 1,
+  y: 0,
+  borderColor: colorAlpha("primary", 0.52),
+} as const;
+
+type WorkspaceEditorCardProps = {
+  children: React.ReactNode;
+  className?: string;
+  variant?: "default" | "elevated" | "outlined";
+};
+
 type CheckRulesValue = World["rules"]["checkRules"];
 type TalentRulesValue = NonNullable<World["rules"]["talentRules"]>;
 type DCPresetConfig = NonNullable<CheckRulesValue["dcPresets"]>[string];
@@ -82,6 +94,7 @@ type NumericFieldEntry = {
   field: string;
   value: number | "";
 };
+type DimensionCardTabId = "settings" | "options";
 
 type WorldEditorSectionId =
   | "meta"
@@ -335,6 +348,19 @@ export function WorldEditorPane({
 }: WorldEditorPaneProps) {
   const [activeSection, setActiveSection] =
     useState<WorldEditorSectionId>("meta");
+  const [activeAttributeIndex, setActiveAttributeIndex] = useState(0);
+  const [activeDerivedStatIndex, setActiveDerivedStatIndex] = useState(0);
+  const [activeConditionIndex, setActiveConditionIndex] = useState(0);
+  const [activeTalentIndex, setActiveTalentIndex] = useState(0);
+  const [activeDimensionIndex, setActiveDimensionIndex] = useState(0);
+  const attributeDetailRef = useRef<HTMLDivElement>(null);
+  const attributeLabelInputRef = useRef<HTMLInputElement>(null);
+  const derivedStatDetailRef = useRef<HTMLDivElement>(null);
+  const derivedStatLabelInputRef = useRef<HTMLInputElement>(null);
+  const conditionDetailRef = useRef<HTMLDivElement>(null);
+  const conditionNameInputRef = useRef<HTMLInputElement>(null);
+  const talentDetailRef = useRef<HTMLDivElement>(null);
+  const talentNameInputRef = useRef<HTMLInputElement>(null);
 
   const primaryAttributes =
     world?.rules.primaryAttributes ?? EMPTY_PRIMARY_ATTRIBUTES;
@@ -362,6 +388,26 @@ export function WorldEditorPane({
     setActiveSection("meta");
   }, [world?.id]);
 
+  useEffect(() => {
+    setActiveAttributeIndex(0);
+  }, [world?.id]);
+
+  useEffect(() => {
+    setActiveDerivedStatIndex(0);
+  }, [world?.id]);
+
+  useEffect(() => {
+    setActiveConditionIndex(0);
+  }, [world?.id]);
+
+  useEffect(() => {
+    setActiveTalentIndex(0);
+  }, [world?.id]);
+
+  useEffect(() => {
+    setActiveDimensionIndex(0);
+  }, [world?.id]);
+
   const allocatableAttributeOptions = useMemo(
     () =>
       (world?.rules.primaryAttributes ?? []).map((attribute) => ({
@@ -381,6 +427,298 @@ export function WorldEditorPane({
   const dcPresetEntries = Object.entries(checkRules?.dcPresets ?? {});
   const opposedPresetEntries = Object.entries(checkRules?.opposedPresets ?? {});
   const dcGuidelineScale = checkRules?.dcGuideline?.scale ?? [];
+  const resolvedActiveAttributeIndex =
+    primaryAttributes.length === 0
+      ? -1
+      : Math.min(activeAttributeIndex, primaryAttributes.length - 1);
+  const activeAttribute =
+    resolvedActiveAttributeIndex >= 0
+      ? primaryAttributes[resolvedActiveAttributeIndex]
+      : null;
+  const resolvedActiveDerivedStatIndex =
+    derivedStats.length === 0
+      ? -1
+      : Math.min(activeDerivedStatIndex, derivedStats.length - 1);
+  const activeDerivedStat =
+    resolvedActiveDerivedStatIndex >= 0
+      ? derivedStats[resolvedActiveDerivedStatIndex]
+      : null;
+  const resolvedActiveConditionIndex =
+    conditions.length === 0
+      ? -1
+      : Math.min(activeConditionIndex, conditions.length - 1);
+  const activeCondition =
+    resolvedActiveConditionIndex >= 0
+      ? conditions[resolvedActiveConditionIndex]
+      : null;
+  const resolvedActiveTalentIndex =
+    talents.length === 0 ? -1 : Math.min(activeTalentIndex, talents.length - 1);
+  const activeTalent =
+    resolvedActiveTalentIndex >= 0 ? talents[resolvedActiveTalentIndex] : null;
+  const resolvedActiveDimensionIndex =
+    dimensions.length === 0
+      ? -1
+      : Math.min(activeDimensionIndex, dimensions.length - 1);
+  const activeDimension =
+    resolvedActiveDimensionIndex >= 0
+      ? dimensions[resolvedActiveDimensionIndex]
+      : null;
+
+  useEffect(() => {
+    if (primaryAttributes.length === 0) {
+      if (activeAttributeIndex !== 0) {
+        setActiveAttributeIndex(0);
+      }
+      return;
+    }
+
+    if (activeAttributeIndex > primaryAttributes.length - 1) {
+      setActiveAttributeIndex(primaryAttributes.length - 1);
+    }
+  }, [activeAttributeIndex, primaryAttributes.length]);
+
+  useEffect(() => {
+    if (activeSection !== "attributes" || resolvedActiveAttributeIndex < 0) {
+      return;
+    }
+
+    const animationFrameId = window.requestAnimationFrame(() => {
+      attributeDetailRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      });
+      attributeLabelInputRef.current?.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrameId);
+  }, [activeSection, resolvedActiveAttributeIndex, primaryAttributes.length]);
+
+  useEffect(() => {
+    if (derivedStats.length === 0) {
+      if (activeDerivedStatIndex !== 0) {
+        setActiveDerivedStatIndex(0);
+      }
+      return;
+    }
+
+    if (activeDerivedStatIndex > derivedStats.length - 1) {
+      setActiveDerivedStatIndex(derivedStats.length - 1);
+    }
+  }, [activeDerivedStatIndex, derivedStats.length]);
+
+  useEffect(() => {
+    if (
+      activeSection !== "derivedStats" ||
+      resolvedActiveDerivedStatIndex < 0
+    ) {
+      return;
+    }
+
+    const animationFrameId = window.requestAnimationFrame(() => {
+      derivedStatDetailRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      });
+      derivedStatLabelInputRef.current?.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrameId);
+  }, [activeSection, derivedStats.length, resolvedActiveDerivedStatIndex]);
+
+  useEffect(() => {
+    if (conditions.length === 0) {
+      if (activeConditionIndex !== 0) {
+        setActiveConditionIndex(0);
+      }
+      return;
+    }
+
+    if (activeConditionIndex > conditions.length - 1) {
+      setActiveConditionIndex(conditions.length - 1);
+    }
+  }, [activeConditionIndex, conditions.length]);
+
+  useEffect(() => {
+    if (activeSection !== "conditions" || resolvedActiveConditionIndex < 0) {
+      return;
+    }
+
+    const animationFrameId = window.requestAnimationFrame(() => {
+      conditionDetailRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      });
+      conditionNameInputRef.current?.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrameId);
+  }, [activeSection, conditions.length, resolvedActiveConditionIndex]);
+
+  useEffect(() => {
+    if (talents.length === 0) {
+      if (activeTalentIndex !== 0) {
+        setActiveTalentIndex(0);
+      }
+      return;
+    }
+
+    if (activeTalentIndex > talents.length - 1) {
+      setActiveTalentIndex(talents.length - 1);
+    }
+  }, [activeTalentIndex, talents.length]);
+
+  useEffect(() => {
+    if (activeSection !== "talents" || resolvedActiveTalentIndex < 0) {
+      return;
+    }
+
+    const animationFrameId = window.requestAnimationFrame(() => {
+      talentDetailRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      });
+      talentNameInputRef.current?.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrameId);
+  }, [activeSection, resolvedActiveTalentIndex, talents.length]);
+
+  useEffect(() => {
+    if (dimensions.length === 0) {
+      if (activeDimensionIndex !== 0) {
+        setActiveDimensionIndex(0);
+      }
+      return;
+    }
+
+    if (activeDimensionIndex > dimensions.length - 1) {
+      setActiveDimensionIndex(dimensions.length - 1);
+    }
+  }, [activeDimensionIndex, dimensions.length]);
+
+  const handleAddPrimaryAttribute = () => {
+    onAddPrimaryAttribute();
+    setActiveAttributeIndex(primaryAttributes.length);
+  };
+
+  const handleRemovePrimaryAttribute = (attributeIndex: number) => {
+    onRemovePrimaryAttribute(attributeIndex);
+    setActiveAttributeIndex((currentIndex) => {
+      if (primaryAttributes.length <= 1) {
+        return 0;
+      }
+
+      if (currentIndex > attributeIndex) {
+        return currentIndex - 1;
+      }
+
+      if (currentIndex === attributeIndex) {
+        return Math.min(attributeIndex, primaryAttributes.length - 2);
+      }
+
+      return currentIndex;
+    });
+  };
+
+  const handleAddDerivedStat = () => {
+    onAddDerivedStat();
+    setActiveDerivedStatIndex(derivedStats.length);
+  };
+
+  const handleRemoveDerivedStat = (statIndex: number) => {
+    onRemoveDerivedStat(statIndex);
+    setActiveDerivedStatIndex((currentIndex) => {
+      if (derivedStats.length <= 1) {
+        return 0;
+      }
+
+      if (currentIndex > statIndex) {
+        return currentIndex - 1;
+      }
+
+      if (currentIndex === statIndex) {
+        return Math.min(statIndex, derivedStats.length - 2);
+      }
+
+      return currentIndex;
+    });
+  };
+
+  const handleAddCondition = () => {
+    onAddCondition();
+    setActiveConditionIndex(conditions.length);
+  };
+
+  const handleRemoveCondition = (conditionIndex: number) => {
+    onRemoveCondition(conditionIndex);
+    setActiveConditionIndex((currentIndex) => {
+      if (conditions.length <= 1) {
+        return 0;
+      }
+
+      if (currentIndex > conditionIndex) {
+        return currentIndex - 1;
+      }
+
+      if (currentIndex === conditionIndex) {
+        return Math.min(conditionIndex, conditions.length - 2);
+      }
+
+      return currentIndex;
+    });
+  };
+
+  const handleAddTalent = () => {
+    onAddTalent();
+    setActiveTalentIndex(talents.length);
+  };
+
+  const handleRemoveTalent = (talentIndex: number) => {
+    onRemoveTalent(talentIndex);
+    setActiveTalentIndex((currentIndex) => {
+      if (talents.length <= 1) {
+        return 0;
+      }
+
+      if (currentIndex > talentIndex) {
+        return currentIndex - 1;
+      }
+
+      if (currentIndex === talentIndex) {
+        return Math.min(talentIndex, talents.length - 2);
+      }
+
+      return currentIndex;
+    });
+  };
+
+  const handleAddDimension = () => {
+    onAddDimension();
+    setActiveDimensionIndex(dimensions.length);
+  };
+
+  const handleRemoveDimension = (dimensionIndex: number) => {
+    onRemoveDimension(dimensionIndex);
+    setActiveDimensionIndex((currentIndex) => {
+      if (dimensions.length <= 1) {
+        return 0;
+      }
+
+      if (currentIndex > dimensionIndex) {
+        return currentIndex - 1;
+      }
+
+      if (currentIndex === dimensionIndex) {
+        return Math.max(dimensionIndex - 1, 0);
+      }
+
+      return currentIndex;
+    });
+  };
 
   if (!world) {
     return (
@@ -525,7 +863,7 @@ export function WorldEditorPane({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={onAddPrimaryAttribute}
+                onClick={handleAddPrimaryAttribute}
               >
                 <Plus className="mr-1 h-4 w-4" />
                 添加属性
@@ -533,20 +871,195 @@ export function WorldEditorPane({
             </div>
           }
         >
-          <div className="space-y-3">
-            {primaryAttributes.map((attribute, index) => (
-              <AttributeCard
-                key={`${attribute.key}-${index}`}
-                attribute={attribute}
-                onChange={(updates) => onUpdatePrimaryAttribute(index, updates)}
-                onRemove={() => onRemovePrimaryAttribute(index)}
-              />
-            ))}
+          {primaryAttributes.length > 0 ? (
+            <div className="grid gap-3 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+              <Panel
+                variant="outlined"
+                className="max-h-72 overflow-y-auto p-3 sm:max-h-80 xl:max-h-144"
+              >
+                <div
+                  className="space-y-2"
+                  role="tablist"
+                  aria-label="主要属性切换"
+                >
+                  {primaryAttributes.map((attribute, index) => {
+                    const isActive = resolvedActiveAttributeIndex === index;
+                    const attributeTitle =
+                      attribute.label.trim() ||
+                      attribute.key.trim() ||
+                      `未命名属性 ${index + 1}`;
+                    const attributeDescription =
+                      attribute.description?.trim() ?? "";
+                    const rangeText =
+                      attribute.min !== undefined || attribute.max !== undefined
+                        ? `范围 ${attribute.min ?? "未设"} ~ ${attribute.max ?? "未设"}`
+                        : "未设置上下限";
 
-            {primaryAttributes.length === 0 && (
-              <EmptySectionHint message="当前还没有主要属性，可先添加基础属性，再配置点数分配规则。" />
-            )}
-          </div>
+                    return (
+                      <button
+                        key={`${attribute.key || "attribute"}-${index}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => setActiveAttributeIndex(index)}
+                        className="w-full rounded-xl border px-3 py-3 text-left transition-all duration-150"
+                        style={{
+                          borderColor: colorAlpha(
+                            isActive ? "primary" : "border",
+                            isActive ? 0.42 : 0.28,
+                          ),
+                          background: colorAlpha(
+                            isActive ? "primary" : "bgCard",
+                            isActive ? 0.12 : 0.16,
+                          ),
+                          boxShadow: isActive
+                            ? `0 0 18px ${colorAlpha("primary", 0.12)}`
+                            : "none",
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className="wrap-break-word text-sm font-medium leading-5"
+                              style={{
+                                color: isActive
+                                  ? color("primary")
+                                  : color("textPrimary"),
+                              }}
+                              title={attributeTitle}
+                            >
+                              {attributeTitle}
+                            </p>
+                            <p
+                              className="mt-1 text-[11px]"
+                              style={{ color: colorAlpha("textMuted", 0.74) }}
+                            >
+                              Key：{attribute.key || "未设置"}
+                            </p>
+                          </div>
+                          <span
+                            className="shrink-0 rounded-full border px-2 py-0.5 text-[11px]"
+                            style={{
+                              borderColor: colorAlpha(
+                                isActive ? "primary" : "border",
+                                isActive ? 0.36 : 0.28,
+                              ),
+                              color: isActive
+                                ? color("primary")
+                                : colorAlpha("textMuted", 0.76),
+                            }}
+                          >
+                            {isActive ? "当前" : `#${index + 1}`}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <DimensionMetaBadge
+                            label="默认"
+                            value={String(attribute.defaultValue)}
+                            accent
+                          />
+                          <DimensionMetaBadge label="范围" value={rangeText} />
+                        </div>
+                        <p
+                          className="mt-2 text-[11px] leading-5"
+                          style={{
+                            color: colorAlpha(
+                              "textMuted",
+                              isActive ? 0.82 : 0.72,
+                            ),
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                          title={attributeDescription || "当前属性尚未填写说明"}
+                        >
+                          {attributeDescription || "当前属性尚未填写说明"}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Panel>
+
+              {activeAttribute ? (
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    ref={attributeDetailRef}
+                    key={`attribute-${resolvedActiveAttributeIndex}`}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.14 }}
+                    className="space-y-3"
+                  >
+                    <Panel variant="outlined" className="p-3 sm:p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="text-xs font-medium uppercase tracking-[0.2em]"
+                            style={{ color: colorAlpha("primary", 0.82) }}
+                          >
+                            当前详情
+                          </p>
+                          <h5
+                            className="mt-2 wrap-break-word text-sm font-semibold leading-6"
+                            style={{ color: color("textPrimary") }}
+                            title={
+                              activeAttribute.label.trim() ||
+                              activeAttribute.key.trim() ||
+                              `未命名属性 ${resolvedActiveAttributeIndex + 1}`
+                            }
+                          >
+                            {activeAttribute.label.trim() ||
+                              activeAttribute.key.trim() ||
+                              `未命名属性 ${resolvedActiveAttributeIndex + 1}`}
+                          </h5>
+                          <p
+                            className="mt-2 text-xs leading-5"
+                            style={{ color: colorAlpha("textMuted", 0.74) }}
+                          >
+                            {activeAttribute.description?.trim() ||
+                              "当前属性尚未填写说明，可直接在下方详情中补充。"}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <DimensionMetaBadge
+                            label="Key"
+                            value={activeAttribute.key || "未设置"}
+                            mono
+                          />
+                          <DimensionMetaBadge
+                            label="默认"
+                            value={String(activeAttribute.defaultValue)}
+                            accent
+                          />
+                        </div>
+                      </div>
+                    </Panel>
+
+                    <AttributeCard
+                      attribute={activeAttribute}
+                      labelInputRef={attributeLabelInputRef}
+                      onChange={(updates) =>
+                        onUpdatePrimaryAttribute(
+                          resolvedActiveAttributeIndex,
+                          updates,
+                        )
+                      }
+                      onRemove={() =>
+                        handleRemovePrimaryAttribute(
+                          resolvedActiveAttributeIndex,
+                        )
+                      }
+                    />
+                  </motion.div>
+                </AnimatePresence>
+              ) : null}
+            </div>
+          ) : (
+            <EmptySectionHint message="当前还没有主要属性，可先添加基础属性，再配置点数分配规则。" />
+          )}
 
           <PointBuyPanel
             value={world.rules.pointBuyRules}
@@ -571,28 +1084,208 @@ export function WorldEditorPane({
                 }
                 onOpen={onOpenRawRulesEditor}
               />
-              <Button variant="outline" size="sm" onClick={onAddDerivedStat}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAddDerivedStat}
+              >
                 <Plus className="mr-1 h-4 w-4" />
                 添加衍生属性
               </Button>
             </div>
           }
         >
-          <div className="space-y-3">
-            {derivedStats.map((stat, index) => (
-              <DerivedStatCardEditor
-                key={`${stat.key}-${index}`}
-                stat={stat}
-                statFieldOptions={statFieldOptions}
-                onChange={(updates) => onUpdateDerivedStat(index, updates)}
-                onRemove={() => onRemoveDerivedStat(index)}
-              />
-            ))}
+          {derivedStats.length > 0 ? (
+            <div className="grid gap-3 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+              <Panel
+                variant="outlined"
+                className="max-h-72 overflow-y-auto p-3 sm:max-h-80 xl:max-h-144"
+              >
+                <div
+                  className="space-y-2"
+                  role="tablist"
+                  aria-label="衍生属性切换"
+                >
+                  {derivedStats.map((stat, index) => {
+                    const isActive = resolvedActiveDerivedStatIndex === index;
+                    const statTitle =
+                      stat.label.trim() ||
+                      stat.key.trim() ||
+                      `未命名衍生属性 ${index + 1}`;
+                    const categoryText = stat.category ?? "未分类";
+                    const maxFieldText = stat.maxField?.trim() || "未绑定";
 
-            {derivedStats.length === 0 && (
-              <EmptySectionHint message="当前还没有衍生属性。可先补充资源字段、修正值或防御类公式。" />
-            )}
-          </div>
+                    return (
+                      <button
+                        key={`${stat.key || "derived-stat"}-${index}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => setActiveDerivedStatIndex(index)}
+                        className="w-full rounded-xl border px-3 py-3 text-left transition-all duration-150"
+                        style={{
+                          borderColor: colorAlpha(
+                            isActive ? "primary" : "border",
+                            isActive ? 0.42 : 0.28,
+                          ),
+                          background: colorAlpha(
+                            isActive ? "primary" : "bgCard",
+                            isActive ? 0.12 : 0.16,
+                          ),
+                          boxShadow: isActive
+                            ? `0 0 18px ${colorAlpha("primary", 0.12)}`
+                            : "none",
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className="wrap-break-word text-sm font-medium leading-5"
+                              style={{
+                                color: isActive
+                                  ? color("primary")
+                                  : color("textPrimary"),
+                              }}
+                              title={statTitle}
+                            >
+                              {statTitle}
+                            </p>
+                            <p
+                              className="mt-1 text-[11px]"
+                              style={{ color: colorAlpha("textMuted", 0.74) }}
+                            >
+                              Key：{stat.key || "未设置"}
+                            </p>
+                          </div>
+                          <span
+                            className="shrink-0 rounded-full border px-2 py-0.5 text-[11px]"
+                            style={{
+                              borderColor: colorAlpha(
+                                isActive ? "primary" : "border",
+                                isActive ? 0.36 : 0.28,
+                              ),
+                              color: isActive
+                                ? color("primary")
+                                : colorAlpha("textMuted", 0.76),
+                            }}
+                          >
+                            {isActive ? "当前" : `#${index + 1}`}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <DimensionMetaBadge
+                            label="分类"
+                            value={categoryText}
+                          />
+                          <DimensionMetaBadge
+                            label="资源"
+                            value={stat.isResource ? "是" : "否"}
+                            accent={stat.isResource ?? false}
+                          />
+                          <DimensionMetaBadge
+                            label="上限字段"
+                            value={maxFieldText}
+                          />
+                        </div>
+                        <p
+                          className="mt-2 text-[11px] leading-5"
+                          style={{
+                            color: colorAlpha(
+                              "textMuted",
+                              isActive ? 0.82 : 0.72,
+                            ),
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                          title={stat.formula || "当前衍生属性尚未填写公式"}
+                        >
+                          {stat.formula || "当前衍生属性尚未填写公式"}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Panel>
+
+              {activeDerivedStat ? (
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    ref={derivedStatDetailRef}
+                    key={`derived-stat-${resolvedActiveDerivedStatIndex}`}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.14 }}
+                    className="space-y-3"
+                  >
+                    <Panel variant="outlined" className="p-3 sm:p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="text-xs font-medium uppercase tracking-[0.2em]"
+                            style={{ color: colorAlpha("primary", 0.82) }}
+                          >
+                            当前详情
+                          </p>
+                          <h5
+                            className="mt-2 wrap-break-word text-sm font-semibold leading-6"
+                            style={{ color: color("textPrimary") }}
+                            title={
+                              activeDerivedStat.label.trim() ||
+                              activeDerivedStat.key.trim() ||
+                              `未命名衍生属性 ${resolvedActiveDerivedStatIndex + 1}`
+                            }
+                          >
+                            {activeDerivedStat.label.trim() ||
+                              activeDerivedStat.key.trim() ||
+                              `未命名衍生属性 ${resolvedActiveDerivedStatIndex + 1}`}
+                          </h5>
+                          <p
+                            className="mt-2 text-xs leading-5"
+                            style={{ color: colorAlpha("textMuted", 0.74) }}
+                          >
+                            {activeDerivedStat.formula ||
+                              "当前衍生属性尚未填写公式，可直接在下方详情中补充。"}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <DimensionMetaBadge
+                            label="Key"
+                            value={activeDerivedStat.key || "未设置"}
+                            mono
+                          />
+                          <DimensionMetaBadge
+                            label="资源"
+                            value={activeDerivedStat.isResource ? "是" : "否"}
+                            accent={activeDerivedStat.isResource ?? false}
+                          />
+                        </div>
+                      </div>
+                    </Panel>
+
+                    <DerivedStatCardEditor
+                      stat={activeDerivedStat}
+                      statFieldOptions={statFieldOptions}
+                      labelInputRef={derivedStatLabelInputRef}
+                      onChange={(updates) =>
+                        onUpdateDerivedStat(
+                          resolvedActiveDerivedStatIndex,
+                          updates,
+                        )
+                      }
+                      onRemove={() =>
+                        handleRemoveDerivedStat(resolvedActiveDerivedStatIndex)
+                      }
+                    />
+                  </motion.div>
+                </AnimatePresence>
+              ) : null}
+            </div>
+          ) : (
+            <EmptySectionHint message="当前还没有衍生属性。可先补充资源字段、修正值或防御类公式。" />
+          )}
         </FormSection>
       );
       break;
@@ -694,28 +1387,215 @@ export function WorldEditorPane({
                 }
                 onOpen={onOpenRawRulesEditor}
               />
-              <Button variant="outline" size="sm" onClick={onAddCondition}>
+              <Button variant="outline" size="sm" onClick={handleAddCondition}>
                 <Plus className="mr-1 h-4 w-4" />
                 添加状态
               </Button>
             </div>
           }
         >
-          <div className="space-y-3">
-            {conditions.map((condition, index) => (
-              <ConditionCardEditor
-                key={`${condition.id}-${index}`}
-                condition={condition}
-                statFieldOptions={statFieldOptions}
-                onChange={(updates) => onUpdateCondition(index, updates)}
-                onRemove={() => onRemoveCondition(index)}
-              />
-            ))}
+          {conditions.length > 0 ? (
+            <div className="grid gap-3 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+              <Panel
+                variant="outlined"
+                className="max-h-72 overflow-y-auto p-3 sm:max-h-80 xl:max-h-144"
+              >
+                <div className="space-y-2" role="tablist" aria-label="状态切换">
+                  {conditions.map((condition, index) => {
+                    const isActive = resolvedActiveConditionIndex === index;
+                    const conditionTitle =
+                      condition.name.trim() ||
+                      condition.id.trim() ||
+                      `未命名状态 ${index + 1}`;
+                    const triggerLabel = CONDITION_TRIGGER_MODE_OPTIONS.find(
+                      (option) =>
+                        option.value === getConditionTriggerMode(condition),
+                    )?.label;
+                    const tagSummary =
+                      condition.tags && condition.tags.length > 0
+                        ? condition.tags.join(" / ")
+                        : "未设置分类标签";
 
-            {conditions.length === 0 && (
-              <EmptySectionHint message="当前还没有预定义状态；若保持为空，AI 添加标签时将缺少作者态命名、持续时间与基础触发参考。" />
-            )}
-          </div>
+                    return (
+                      <button
+                        key={`${condition.id || "condition"}-${index}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => setActiveConditionIndex(index)}
+                        className="w-full rounded-xl border px-3 py-3 text-left transition-all duration-150"
+                        style={{
+                          borderColor: colorAlpha(
+                            isActive ? "primary" : "border",
+                            isActive ? 0.42 : 0.28,
+                          ),
+                          background: colorAlpha(
+                            isActive ? "primary" : "bgCard",
+                            isActive ? 0.12 : 0.16,
+                          ),
+                          boxShadow: isActive
+                            ? `0 0 18px ${colorAlpha("primary", 0.12)}`
+                            : "none",
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className="wrap-break-word text-sm font-medium leading-5"
+                              style={{
+                                color: isActive
+                                  ? color("primary")
+                                  : color("textPrimary"),
+                              }}
+                              title={conditionTitle}
+                            >
+                              {conditionTitle}
+                            </p>
+                            <p
+                              className="mt-1 text-[11px]"
+                              style={{ color: colorAlpha("textMuted", 0.74) }}
+                            >
+                              ID：{condition.id || "未设置"}
+                            </p>
+                          </div>
+                          <span
+                            className="shrink-0 rounded-full border px-2 py-0.5 text-[11px]"
+                            style={{
+                              borderColor: colorAlpha(
+                                isActive ? "primary" : "border",
+                                isActive ? 0.36 : 0.28,
+                              ),
+                              color: isActive
+                                ? color("primary")
+                                : colorAlpha("textMuted", 0.76),
+                            }}
+                          >
+                            {isActive ? "当前" : `#${index + 1}`}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <DimensionMetaBadge
+                            label="触发"
+                            value={triggerLabel ?? "AI 管理"}
+                            accent={getConditionTriggerMode(condition) !== "ai"}
+                          />
+                          <DimensionMetaBadge
+                            label="持续"
+                            value={
+                              condition.duration !== undefined
+                                ? `${condition.duration} 回合`
+                                : "未设置"
+                            }
+                          />
+                          <DimensionMetaBadge
+                            label="叠加"
+                            value={condition.stackable ? "允许" : "关闭"}
+                          />
+                        </div>
+                        <p
+                          className="mt-2 text-[11px] leading-5"
+                          style={{
+                            color: colorAlpha(
+                              "textMuted",
+                              isActive ? 0.82 : 0.72,
+                            ),
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                          title={tagSummary}
+                        >
+                          {tagSummary}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Panel>
+
+              {activeCondition ? (
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    ref={conditionDetailRef}
+                    key={`condition-${resolvedActiveConditionIndex}`}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.14 }}
+                    className="space-y-3"
+                  >
+                    <Panel variant="outlined" className="p-3 sm:p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="text-xs font-medium uppercase tracking-[0.2em]"
+                            style={{ color: colorAlpha("primary", 0.82) }}
+                          >
+                            当前详情
+                          </p>
+                          <h5
+                            className="mt-2 wrap-break-word text-sm font-semibold leading-6"
+                            style={{ color: color("textPrimary") }}
+                            title={
+                              activeCondition.name.trim() ||
+                              activeCondition.id.trim() ||
+                              `未命名状态 ${resolvedActiveConditionIndex + 1}`
+                            }
+                          >
+                            {activeCondition.name.trim() ||
+                              activeCondition.id.trim() ||
+                              `未命名状态 ${resolvedActiveConditionIndex + 1}`}
+                          </h5>
+                          <p
+                            className="mt-2 text-xs leading-5"
+                            style={{ color: colorAlpha("textMuted", 0.74) }}
+                          >
+                            {activeCondition.description?.trim() ||
+                              "当前状态尚未填写说明，可直接在下方详情中补充。"}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <DimensionMetaBadge
+                            label="ID"
+                            value={activeCondition.id || "未设置"}
+                            mono
+                          />
+                          <DimensionMetaBadge
+                            label="触发"
+                            value={
+                              CONDITION_TRIGGER_MODE_OPTIONS.find(
+                                (option) =>
+                                  option.value ===
+                                  getConditionTriggerMode(activeCondition),
+                              )?.label ?? "AI 管理"
+                            }
+                            accent={
+                              getConditionTriggerMode(activeCondition) !== "ai"
+                            }
+                          />
+                        </div>
+                      </div>
+                    </Panel>
+
+                    <ConditionCardEditor
+                      condition={activeCondition}
+                      statFieldOptions={statFieldOptions}
+                      nameInputRef={conditionNameInputRef}
+                      onChange={(updates) =>
+                        onUpdateCondition(resolvedActiveConditionIndex, updates)
+                      }
+                      onRemove={() =>
+                        handleRemoveCondition(resolvedActiveConditionIndex)
+                      }
+                    />
+                  </motion.div>
+                </AnimatePresence>
+              ) : null}
+            </div>
+          ) : (
+            <EmptySectionHint message="当前还没有预定义状态；若保持为空，AI 添加标签时将缺少作者态命名、持续时间与基础触发参考。" />
+          )}
         </FormSection>
       );
       break;
@@ -734,7 +1614,7 @@ export function WorldEditorPane({
                 }
                 onOpen={onOpenRawRulesEditor}
               />
-              <Button variant="outline" size="sm" onClick={onAddDimension}>
+              <Button variant="outline" size="sm" onClick={handleAddDimension}>
                 <Plus className="mr-1 h-4 w-4" />
                 添加维度
               </Button>
@@ -742,27 +1622,187 @@ export function WorldEditorPane({
           }
         >
           <div className="space-y-4">
-            {dimensions.map((dimension, dimensionIndex) => (
-              <DimensionCard
-                key={`${dimension.id}-${dimensionIndex}`}
-                dimension={dimension}
-                talentOptions={talents}
-                attributeOptions={primaryAttributes}
-                onChange={(updates) =>
-                  onUpdateDimension(dimensionIndex, updates)
-                }
-                onRemove={() => onRemoveDimension(dimensionIndex)}
-                onAddOption={() => onAddDimensionOption(dimensionIndex)}
-                onUpdateOption={(optionIndex, updates) =>
-                  onUpdateDimensionOption(dimensionIndex, optionIndex, updates)
-                }
-                onRemoveOption={(optionIndex) =>
-                  onRemoveDimensionOption(dimensionIndex, optionIndex)
-                }
-              />
-            ))}
+            {dimensions.length > 0 ? (
+              <>
+                <div
+                  className="rounded-xl border px-3 py-3"
+                  style={{
+                    borderColor: colorAlpha("border", 0.3),
+                    background: colorAlpha("bgCard", 0.2),
+                  }}
+                >
+                  <div
+                    className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3"
+                    role="tablist"
+                    aria-label="角色维度切换"
+                  >
+                    {dimensions.map((dimension, dimensionIndex) => {
+                      const isActive =
+                        resolvedActiveDimensionIndex === dimensionIndex;
+                      const dimensionTitle =
+                        dimension.label.trim() ||
+                        dimension.id.trim() ||
+                        `未命名维度 ${dimensionIndex + 1}`;
+                      const descriptionText =
+                        dimension.description?.trim() ?? "";
+                      const optionPreviewItems = dimension.options
+                        .map((option) => option.name.trim() || option.id.trim())
+                        .filter(Boolean);
+                      const optionPreview =
+                        optionPreviewItems.length > 0
+                          ? optionPreviewItems.slice(0, 2).join(" / ")
+                          : "尚未添加维度选项";
 
-            {dimensions.length === 0 && (
+                      return (
+                        <button
+                          key={`${dimension.id}-${dimensionIndex}`}
+                          type="button"
+                          role="tab"
+                          aria-selected={isActive}
+                          onClick={() =>
+                            setActiveDimensionIndex(dimensionIndex)
+                          }
+                          className="rounded-xl border px-3 py-3 text-left transition-colors duration-150"
+                          style={{
+                            borderColor: colorAlpha(
+                              isActive ? "primary" : "border",
+                              isActive ? 0.42 : 0.28,
+                            ),
+                            background: colorAlpha(
+                              isActive ? "primary" : "bgCard",
+                              isActive ? 0.14 : 0.12,
+                            ),
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="min-w-0 flex-1">
+                              <span
+                                className="block text-sm font-medium leading-5"
+                                style={{
+                                  color: isActive
+                                    ? color("primary")
+                                    : color("textPrimary"),
+                                  display: "-webkit-box",
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: "vertical",
+                                  overflow: "hidden",
+                                }}
+                                title={dimensionTitle}
+                              >
+                                {dimensionTitle}
+                              </span>
+                            </span>
+                            <span
+                              className="shrink-0 rounded-full border px-2 py-0.5 text-[11px]"
+                              style={{
+                                borderColor: colorAlpha(
+                                  isActive ? "primary" : "border",
+                                  isActive ? 0.38 : 0.24,
+                                ),
+                                color: isActive
+                                  ? color("primary")
+                                  : colorAlpha("textMuted", 0.78),
+                              }}
+                            >
+                              {dimension.options.length} 项
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <span
+                              className="rounded-full border px-2 py-0.5 text-[11px]"
+                              style={{
+                                borderColor: colorAlpha(
+                                  dimension.required === false
+                                    ? "border"
+                                    : "primary",
+                                  dimension.required === false ? 0.24 : 0.34,
+                                ),
+                                color:
+                                  dimension.required === false
+                                    ? colorAlpha("textMuted", 0.8)
+                                    : color("primary"),
+                              }}
+                            >
+                              {dimension.required === false ? "可跳过" : "必选"}
+                            </span>
+                            <span
+                              className="rounded-full border px-2 py-0.5 text-[11px]"
+                              style={{
+                                borderColor: colorAlpha("border", 0.24),
+                                color: colorAlpha("textMuted", 0.8),
+                              }}
+                            >
+                              排序 {dimension.order ?? 0}
+                            </span>
+                          </div>
+                          <p
+                            className="mt-2 text-[11px] leading-5"
+                            style={{
+                              color: colorAlpha(
+                                "textMuted",
+                                isActive ? 0.8 : 0.72,
+                              ),
+                              display: "-webkit-box",
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                            }}
+                            title={
+                              descriptionText || `选项预览：${optionPreview}`
+                            }
+                          >
+                            {descriptionText || `选项预览：${optionPreview}`}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {activeDimension ? (
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      key={`${activeDimension.id}-${resolvedActiveDimensionIndex}`}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.16 }}
+                    >
+                      <DimensionCard
+                        dimension={activeDimension}
+                        talentOptions={talents}
+                        attributeOptions={primaryAttributes}
+                        onChange={(updates) =>
+                          onUpdateDimension(
+                            resolvedActiveDimensionIndex,
+                            updates,
+                          )
+                        }
+                        onRemove={() =>
+                          handleRemoveDimension(resolvedActiveDimensionIndex)
+                        }
+                        onAddOption={() =>
+                          onAddDimensionOption(resolvedActiveDimensionIndex)
+                        }
+                        onUpdateOption={(optionIndex, updates) =>
+                          onUpdateDimensionOption(
+                            resolvedActiveDimensionIndex,
+                            optionIndex,
+                            updates,
+                          )
+                        }
+                        onRemoveOption={(optionIndex) =>
+                          onRemoveDimensionOption(
+                            resolvedActiveDimensionIndex,
+                            optionIndex,
+                          )
+                        }
+                      />
+                    </motion.div>
+                  </AnimatePresence>
+                ) : null}
+              </>
+            ) : (
               <EmptySectionHint message="当前还没有角色维度。添加后，创建流程才能展示种族、背景等选择分区。" />
             )}
           </div>
@@ -783,7 +1823,7 @@ export function WorldEditorPane({
                 active={rawRulesEditorOpen && rawRulesEditorScope === "talents"}
                 onOpen={onOpenRawRulesEditor}
               />
-              <Button variant="outline" size="sm" onClick={onAddTalent}>
+              <Button variant="outline" size="sm" onClick={handleAddTalent}>
                 <Plus className="mr-1 h-4 w-4" />
                 添加天赋
               </Button>
@@ -796,17 +1836,204 @@ export function WorldEditorPane({
               onChange={onUpdateTalentRules}
             />
 
-            {talents.map((talent, index) => (
-              <TalentCardEditor
-                key={`${talent.id}-${index}`}
-                talent={talent}
-                attributeOptions={primaryAttributes}
-                onChange={(updates) => onUpdateTalent(index, updates)}
-                onRemove={() => onRemoveTalent(index)}
-              />
-            ))}
+            {talents.length > 0 ? (
+              <div className="grid gap-3 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+                <Panel
+                  variant="outlined"
+                  className="max-h-72 overflow-y-auto p-3 sm:max-h-80 xl:max-h-144"
+                >
+                  <div
+                    className="space-y-2"
+                    role="tablist"
+                    aria-label="天赋切换"
+                  >
+                    {talents.map((talent, index) => {
+                      const isActive = resolvedActiveTalentIndex === index;
+                      const talentTitle =
+                        talent.name.trim() ||
+                        talent.id.trim() ||
+                        `未命名天赋 ${index + 1}`;
+                      const categoryLabel = TALENT_CATEGORY_OPTIONS.find(
+                        (option) =>
+                          option.value === (talent.category ?? "misc"),
+                      )?.label;
+                      const prerequisiteCount = Object.keys(
+                        talent.prerequisites?.attributes ?? {},
+                      ).length;
+                      const exclusiveCount = talent.exclusiveWith?.length ?? 0;
 
-            {talents.length === 0 && (
+                      return (
+                        <button
+                          key={`${talent.id || "talent"}-${index}`}
+                          type="button"
+                          role="tab"
+                          aria-selected={isActive}
+                          onClick={() => setActiveTalentIndex(index)}
+                          className="w-full rounded-xl border px-3 py-3 text-left transition-all duration-150"
+                          style={{
+                            borderColor: colorAlpha(
+                              isActive ? "primary" : "border",
+                              isActive ? 0.42 : 0.28,
+                            ),
+                            background: colorAlpha(
+                              isActive ? "primary" : "bgCard",
+                              isActive ? 0.12 : 0.16,
+                            ),
+                            boxShadow: isActive
+                              ? `0 0 18px ${colorAlpha("primary", 0.12)}`
+                              : "none",
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p
+                                className="wrap-break-word text-sm font-medium leading-5"
+                                style={{
+                                  color: isActive
+                                    ? color("primary")
+                                    : color("textPrimary"),
+                                }}
+                                title={talentTitle}
+                              >
+                                {talentTitle}
+                              </p>
+                              <p
+                                className="mt-1 text-[11px]"
+                                style={{ color: colorAlpha("textMuted", 0.74) }}
+                              >
+                                ID：{talent.id || "未设置"}
+                              </p>
+                            </div>
+                            <span
+                              className="shrink-0 rounded-full border px-2 py-0.5 text-[11px]"
+                              style={{
+                                borderColor: colorAlpha(
+                                  isActive ? "primary" : "border",
+                                  isActive ? 0.36 : 0.28,
+                                ),
+                                color: isActive
+                                  ? color("primary")
+                                  : colorAlpha("textMuted", 0.76),
+                              }}
+                            >
+                              {isActive ? "当前" : `#${index + 1}`}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <DimensionMetaBadge
+                              label="分类"
+                              value={categoryLabel ?? "其他"}
+                            />
+                            <DimensionMetaBadge
+                              label="前置属性"
+                              value={String(prerequisiteCount)}
+                              accent={prerequisiteCount > 0}
+                            />
+                            <DimensionMetaBadge
+                              label="互斥"
+                              value={String(exclusiveCount)}
+                              accent={exclusiveCount > 0}
+                            />
+                          </div>
+                          <p
+                            className="mt-2 text-[11px] leading-5"
+                            style={{
+                              color: colorAlpha(
+                                "textMuted",
+                                isActive ? 0.82 : 0.72,
+                              ),
+                              display: "-webkit-box",
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                            }}
+                            title={talent.description || "当前天赋尚未填写描述"}
+                          >
+                            {talent.description || "当前天赋尚未填写描述"}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Panel>
+
+                {activeTalent ? (
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      ref={talentDetailRef}
+                      key={`talent-${resolvedActiveTalentIndex}`}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.14 }}
+                      className="space-y-3"
+                    >
+                      <Panel variant="outlined" className="p-3 sm:p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className="text-xs font-medium uppercase tracking-[0.2em]"
+                              style={{ color: colorAlpha("primary", 0.82) }}
+                            >
+                              当前详情
+                            </p>
+                            <h5
+                              className="mt-2 wrap-break-word text-sm font-semibold leading-6"
+                              style={{ color: color("textPrimary") }}
+                              title={
+                                activeTalent.name.trim() ||
+                                activeTalent.id.trim() ||
+                                `未命名天赋 ${resolvedActiveTalentIndex + 1}`
+                              }
+                            >
+                              {activeTalent.name.trim() ||
+                                activeTalent.id.trim() ||
+                                `未命名天赋 ${resolvedActiveTalentIndex + 1}`}
+                            </h5>
+                            <p
+                              className="mt-2 text-xs leading-5"
+                              style={{ color: colorAlpha("textMuted", 0.74) }}
+                            >
+                              {activeTalent.description ||
+                                "当前天赋尚未填写描述，可直接在下方详情中补充。"}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <DimensionMetaBadge
+                              label="ID"
+                              value={activeTalent.id || "未设置"}
+                              mono
+                            />
+                            <DimensionMetaBadge
+                              label="分类"
+                              value={
+                                TALENT_CATEGORY_OPTIONS.find(
+                                  (option) =>
+                                    option.value ===
+                                    (activeTalent.category ?? "misc"),
+                                )?.label ?? "其他"
+                              }
+                            />
+                          </div>
+                        </div>
+                      </Panel>
+
+                      <TalentCardEditor
+                        talent={activeTalent}
+                        attributeOptions={primaryAttributes}
+                        nameInputRef={talentNameInputRef}
+                        onChange={(updates) =>
+                          onUpdateTalent(resolvedActiveTalentIndex, updates)
+                        }
+                        onRemove={() =>
+                          handleRemoveTalent(resolvedActiveTalentIndex)
+                        }
+                      />
+                    </motion.div>
+                  </AnimatePresence>
+                ) : null}
+              </div>
+            ) : (
               <EmptySectionHint message="当前世界还没有可选天赋；若继续为空，角色创建流程会跳过天赋步骤。" />
             )}
           </div>
@@ -818,7 +2045,7 @@ export function WorldEditorPane({
   return (
     <div className="relative flex h-full min-h-0 flex-col lg:flex-row">
       <div
-        className="border-b lg:flex lg:h-full lg:min-h-0 lg:w-76 lg:shrink-0 lg:flex-col lg:border-b-0 lg:border-r lg:overflow-hidden"
+        className="hidden border-b lg:flex lg:h-full lg:min-h-0 lg:w-76 lg:shrink-0 lg:flex-col lg:border-b-0 lg:border-r lg:overflow-hidden"
         style={{ borderColor: colorAlpha("primary", 0.14) }}
       >
         <div className="space-y-4 px-4 py-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
@@ -839,10 +2066,19 @@ export function WorldEditorPane({
         key={`${world.id}-${activeSection}`}
         className="min-h-0 flex-1"
       >
-        <div className="space-y-5 px-4 py-4 sm:px-5">
-          <ValidationPanel messages={validationMessages} />
+        <div className="space-y-4 px-3 py-3 sm:space-y-5 sm:px-5 sm:py-4">
+          <div className="lg:hidden">
+            <MobileSectionNavigation
+              activeSection={activeSection}
+              onSelectSection={setActiveSection}
+            />
+          </div>
 
-          <Panel variant="outlined" className="p-4 sm:p-5">
+          <div className="hidden lg:block">
+            <ValidationPanel messages={validationMessages} />
+          </div>
+
+          <Panel variant="outlined" className="hidden p-4 sm:p-5 lg:block">
             <div>
               <div>
                 <p
@@ -870,14 +2106,18 @@ export function WorldEditorPane({
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={activeSection}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.18 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.16 }}
             >
               {sectionContent}
             </motion.div>
           </AnimatePresence>
+
+          <div className="lg:hidden">
+            <ValidationPanel messages={validationMessages} />
+          </div>
         </div>
       </ScrollArea>
 
@@ -1128,6 +2368,54 @@ function SectionNavigation({
   );
 }
 
+function MobileSectionNavigation({
+  activeSection,
+  onSelectSection,
+}: {
+  activeSection: WorldEditorSectionId;
+  onSelectSection: (section: WorldEditorSectionId) => void;
+}) {
+  return (
+    <div
+      className="overflow-x-auto pb-1"
+      role="tablist"
+      aria-label="编辑分区快速切换"
+    >
+      <div className="flex min-w-max gap-2">
+        {WORLD_EDITOR_SECTIONS.map((section) => {
+          const selected = section.id === activeSection;
+          return (
+            <button
+              key={section.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => onSelectSection(section.id)}
+              className="shrink-0 rounded-full border px-3 py-2 text-xs font-medium whitespace-nowrap transition-all"
+              style={{
+                color: selected ? color("primary") : color("textSecondary"),
+                background: selected
+                  ? colorAlpha("primary", 0.12)
+                  : colorAlpha("bgCard", 0.24),
+                borderColor: colorAlpha(
+                  selected ? "primary" : "border",
+                  selected ? 0.42 : 0.28,
+                ),
+                boxShadow: selected
+                  ? `0 0 16px ${colorAlpha("primary", 0.12)}`
+                  : "none",
+              }}
+              title={section.description}
+            >
+              {section.title}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function SummaryMetric({ label, value }: { label: string; value: string }) {
   return (
     <div
@@ -1352,6 +2640,61 @@ function SectionRulesEditorButton({
   );
 }
 
+function Card({
+  children,
+  className,
+  variant = "outlined",
+}: WorkspaceEditorCardProps) {
+  return (
+    <BaseCard
+      variant={variant}
+      whileHover={EDITOR_CARD_HOVER_STYLE}
+      className={className}
+    >
+      {children}
+    </BaseCard>
+  );
+}
+
+function DimensionMetaBadge({
+  label,
+  value,
+  accent = false,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+  mono?: boolean;
+}) {
+  return (
+    <div
+      className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border px-2.5 py-1 text-[11px]"
+      style={{
+        borderColor: colorAlpha(
+          accent ? "primary" : "border",
+          accent ? 0.38 : 0.3,
+        ),
+        background: colorAlpha(
+          accent ? "primary" : "bgCard",
+          accent ? 0.12 : 0.32,
+        ),
+      }}
+    >
+      <span style={{ color: colorAlpha("textMuted", 0.72) }}>{label}</span>
+      <span
+        className={cn(
+          "max-w-full font-medium wrap-break-word",
+          mono && "font-mono break-all",
+        )}
+        style={{ color: accent ? color("primary") : color("textPrimary") }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
 function EmptySectionHint({ message }: { message: string }) {
   return (
     <Card variant="outlined" className="p-4">
@@ -1438,10 +2781,12 @@ function ReadonlyMeta({ label, value }: { label: string; value: string }) {
 
 function AttributeCard({
   attribute,
+  labelInputRef,
   onChange,
   onRemove,
 }: {
   attribute: PrimaryAttributeConfig;
+  labelInputRef?: React.RefObject<HTMLInputElement | null>;
   onChange: (updates: Partial<PrimaryAttributeConfig>) => void;
   onRemove: () => void;
 }) {
@@ -1457,6 +2802,7 @@ function AttributeCard({
         </Field>
         <Field label="显示名">
           <Input
+            ref={labelInputRef}
             value={attribute.label}
             onChange={(event) => onChange({ label: event.target.value })}
             placeholder="力量"
@@ -1632,11 +2978,13 @@ const DERIVED_STAT_CATEGORY_OPTIONS = [
 function DerivedStatCardEditor({
   stat,
   statFieldOptions,
+  labelInputRef,
   onChange,
   onRemove,
 }: {
   stat: DerivedStatConfig;
   statFieldOptions: Array<{ value: string; label: string }>;
+  labelInputRef?: React.RefObject<HTMLInputElement | null>;
   onChange: (updates: Partial<DerivedStatConfig>) => void;
   onRemove: () => void;
 }) {
@@ -1671,6 +3019,7 @@ function DerivedStatCardEditor({
       <div className="grid gap-3 lg:grid-cols-2">
         <Field label="显示名">
           <Input
+            ref={labelInputRef}
             value={stat.label}
             onChange={(event) => onChange({ label: event.target.value })}
             placeholder="生命值"
@@ -2219,11 +3568,13 @@ function buildPassiveStatModifiers(
 function ConditionCardEditor({
   condition,
   statFieldOptions,
+  nameInputRef,
   onChange,
   onRemove,
 }: {
   condition: ConditionConfig;
   statFieldOptions: Array<{ value: string; label: string }>;
+  nameInputRef?: React.RefObject<HTMLInputElement | null>;
   onChange: (updates: Partial<ConditionConfig>) => void;
   onRemove: () => void;
 }) {
@@ -2278,9 +3629,10 @@ function ConditionCardEditor({
         </Button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
         <Field label="显示名">
           <Input
+            ref={nameInputRef}
             value={condition.name}
             onChange={(event) => onChange({ name: event.target.value })}
             placeholder="中毒"
@@ -2318,7 +3670,7 @@ function ConditionCardEditor({
         />
       </Field>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
         <Field label="基础触发模式">
           <Select
             value={triggerMode}
@@ -2685,94 +4037,553 @@ function DimensionCard({
   ) => void;
   onRemoveOption: (optionIndex: number) => void;
 }) {
-  return (
-    <Card variant="outlined" className="space-y-4 p-4">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Field label="维度 ID">
-          <Input
-            value={dimension.id}
-            onChange={(event) => onChange({ id: event.target.value })}
-            placeholder="race"
-          />
-        </Field>
-        <Field label="维度名称">
-          <Input
-            value={dimension.label}
-            onChange={(event) => onChange({ label: event.target.value })}
-            placeholder="种族"
-          />
-        </Field>
-        <Field label="排序">
-          <Input
-            type="number"
-            value={dimension.order ?? 0}
-            onChange={(event) =>
-              onChange({ order: Number(event.target.value) || 0 })
-            }
-          />
-        </Field>
-        <div className="flex items-end">
-          <label
-            className="flex items-center gap-2 text-sm"
-            style={{ color: color("textSecondary") }}
-          >
-            <input
-              type="checkbox"
-              checked={dimension.required ?? false}
-              onChange={(event) => onChange({ required: event.target.checked })}
-            />
-            必选维度
-          </label>
+  const [activeTab, setActiveTab] = useState<DimensionCardTabId>("settings");
+  const [activeOptionIndex, setActiveOptionIndex] = useState(0);
+  const isRequired = dimension.required ?? false;
+  const dimensionTitle =
+    dimension.label.trim() || dimension.id.trim() || "未命名维度";
+  const descriptionText = dimension.description?.trim() ?? "";
+  const optionPreviewItems = dimension.options
+    .map((option) => option.name.trim() || option.id.trim())
+    .filter(Boolean);
+  const optionPreview =
+    optionPreviewItems.length > 0
+      ? optionPreviewItems.slice(0, 3).join(" / ")
+      : "尚未添加维度选项";
+  const collapsedPreview =
+    optionPreviewItems.length > 3
+      ? `${optionPreview} 等 ${optionPreviewItems.length} 项`
+      : optionPreview;
+  const resolvedActiveOptionIndex =
+    dimension.options.length === 0
+      ? -1
+      : Math.min(activeOptionIndex, dimension.options.length - 1);
+  const activeOption =
+    resolvedActiveOptionIndex >= 0
+      ? dimension.options[resolvedActiveOptionIndex]
+      : null;
+  const activeOptionTitle =
+    activeOption?.name.trim() ||
+    activeOption?.id.trim() ||
+    (activeOption
+      ? `未命名选项 ${resolvedActiveOptionIndex + 1}`
+      : "未选择选项");
+  const tabItems: Array<{
+    id: DimensionCardTabId;
+    label: string;
+    description: string;
+  }> = [
+    {
+      id: "settings",
+      label: "基础设置",
+      description: "编辑名称、排序与说明",
+    },
+    {
+      id: "options",
+      label: "维度选项",
+      description:
+        dimension.options.length > 0
+          ? `${dimension.options.length} 项待编辑`
+          : "添加并维护选项",
+    },
+  ];
+  const optionDetailRef = useRef<HTMLDivElement>(null);
+  const optionNameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (dimension.options.length === 0) {
+      if (activeOptionIndex !== 0) {
+        setActiveOptionIndex(0);
+      }
+      return;
+    }
+
+    if (activeOptionIndex > dimension.options.length - 1) {
+      setActiveOptionIndex(dimension.options.length - 1);
+    }
+  }, [activeOptionIndex, dimension.options.length]);
+
+  useEffect(() => {
+    if (activeTab !== "options" || resolvedActiveOptionIndex < 0) {
+      return;
+    }
+
+    const animationFrameId = window.requestAnimationFrame(() => {
+      optionDetailRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      });
+      optionNameInputRef.current?.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrameId);
+  }, [activeTab, resolvedActiveOptionIndex, dimension.options.length]);
+
+  const handleAddOption = () => {
+    setActiveTab("options");
+    onAddOption();
+    setActiveOptionIndex(dimension.options.length);
+  };
+
+  const handleRemoveOption = (optionIndex: number) => {
+    onRemoveOption(optionIndex);
+    setActiveOptionIndex((currentIndex) => {
+      if (dimension.options.length <= 1) {
+        return 0;
+      }
+
+      if (currentIndex > optionIndex) {
+        return currentIndex - 1;
+      }
+
+      if (currentIndex === optionIndex) {
+        return Math.min(optionIndex, dimension.options.length - 2);
+      }
+
+      return currentIndex;
+    });
+  };
+
+  let tabContent: React.ReactNode;
+
+  switch (activeTab) {
+    case "options":
+      tabContent = (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p
+                className="text-sm font-medium"
+                style={{ color: color("textPrimary") }}
+              >
+                维度选项
+              </p>
+              <p
+                className="mt-1 text-xs"
+                style={{ color: colorAlpha("textMuted", 0.72) }}
+              >
+                先从摘要列表定位要编辑的选项，再维护该项的描述、属性修正与天赋影响。
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <DimensionMetaBadge
+                label="当前"
+                value={`${dimension.options.length} 项`}
+                accent={dimension.options.length > 0}
+              />
+              {activeOption ? (
+                <DimensionMetaBadge
+                  label="正在编辑"
+                  value={activeOptionTitle}
+                  accent
+                />
+              ) : null}
+            </div>
+          </div>
+
+          {dimension.options.length > 0 ? (
+            <div className="grid gap-3 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+              <Panel
+                variant="outlined"
+                className="max-h-72 overflow-y-auto p-3 sm:max-h-80 xl:max-h-144"
+              >
+                <div className="space-y-2">
+                  {dimension.options.map((option, optionIndex) => {
+                    const isActive = resolvedActiveOptionIndex === optionIndex;
+                    const optionTitle =
+                      option.name.trim() ||
+                      option.id.trim() ||
+                      `未命名选项 ${optionIndex + 1}`;
+                    const optionDescription = option.description?.trim() ?? "";
+                    const attributeModifierCount = Object.values(
+                      option.effects?.attributeModifiers ??
+                        EMPTY_NUMERIC_RECORD,
+                    ).filter((value) => value !== 0).length;
+                    const grantedTalentCount =
+                      option.effects?.grantedTalents?.length ?? 0;
+                    const excludedTalentCount =
+                      option.effects?.excludedTalents?.length ?? 0;
+
+                    return (
+                      <button
+                        key={`${option.id}-${optionIndex}`}
+                        type="button"
+                        onClick={() => setActiveOptionIndex(optionIndex)}
+                        className="w-full rounded-xl border px-3 py-3 text-left transition-all duration-150"
+                        style={{
+                          borderColor: colorAlpha(
+                            isActive ? "primary" : "border",
+                            isActive ? 0.42 : 0.28,
+                          ),
+                          background: colorAlpha(
+                            isActive ? "primary" : "bgCard",
+                            isActive ? 0.12 : 0.16,
+                          ),
+                          boxShadow: isActive
+                            ? `0 0 18px ${colorAlpha("primary", 0.12)}`
+                            : "none",
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className="wrap-break-word text-sm font-medium leading-5"
+                              style={{
+                                color: isActive
+                                  ? color("primary")
+                                  : color("textPrimary"),
+                                display: "-webkit-box",
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                              }}
+                              title={optionTitle}
+                            >
+                              {optionTitle}
+                            </p>
+                            <p
+                              className="mt-1 text-[11px]"
+                              style={{ color: colorAlpha("textMuted", 0.74) }}
+                            >
+                              ID：{option.id || "未设置"}
+                            </p>
+                          </div>
+                          <span
+                            className="shrink-0 rounded-full border px-2 py-0.5 text-[11px]"
+                            style={{
+                              borderColor: colorAlpha(
+                                isActive ? "primary" : "border",
+                                isActive ? 0.36 : 0.28,
+                              ),
+                              color: isActive
+                                ? color("primary")
+                                : colorAlpha("textMuted", 0.76),
+                            }}
+                          >
+                            {isActive ? "当前" : `#${optionIndex + 1}`}
+                          </span>
+                        </div>
+                        <p
+                          className="mt-2 text-[11px] leading-5"
+                          style={{
+                            color: colorAlpha(
+                              "textMuted",
+                              isActive ? 0.82 : 0.72,
+                            ),
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                          title={optionDescription || "当前选项尚未填写描述"}
+                        >
+                          {optionDescription || "当前选项尚未填写描述"}
+                        </p>
+                        <p
+                          className="mt-2 text-[11px]"
+                          style={{ color: colorAlpha("textMuted", 0.74) }}
+                        >
+                          属性修正 {attributeModifierCount} · 赠送天赋{" "}
+                          {grantedTalentCount}· 排除天赋 {excludedTalentCount}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Panel>
+
+              {activeOption ? (
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    ref={optionDetailRef}
+                    key={`${activeOption.id}-${resolvedActiveOptionIndex}`}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.14 }}
+                    className="space-y-3"
+                  >
+                    <Panel variant="outlined" className="p-3 sm:p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="text-xs font-medium uppercase tracking-[0.2em]"
+                            style={{ color: colorAlpha("primary", 0.82) }}
+                          >
+                            当前详情
+                          </p>
+                          <h5
+                            className="mt-2 wrap-break-word text-sm font-semibold leading-6"
+                            style={{ color: color("textPrimary") }}
+                            title={activeOptionTitle}
+                          >
+                            {activeOptionTitle}
+                          </h5>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <DimensionMetaBadge
+                              label="序号"
+                              value={String(resolvedActiveOptionIndex + 1)}
+                            />
+                          </div>
+                          <p
+                            className="mt-2 text-xs leading-5"
+                            style={{ color: colorAlpha("textMuted", 0.74) }}
+                          >
+                            {activeOption.description?.trim() ||
+                              "当前选项尚未填写说明，可直接在下方详情中补充。"}
+                          </p>
+                        </div>
+                      </div>
+                    </Panel>
+
+                    <DimensionOptionCardEditor
+                      option={activeOption}
+                      attributeOptions={attributeOptions}
+                      talentOptions={talentOptions}
+                      nameInputRef={optionNameInputRef}
+                      onChange={(updates) =>
+                        onUpdateOption(resolvedActiveOptionIndex, updates)
+                      }
+                      onRemove={() =>
+                        handleRemoveOption(resolvedActiveOptionIndex)
+                      }
+                    />
+                  </motion.div>
+                </AnimatePresence>
+              ) : null}
+            </div>
+          ) : (
+            <EmptySectionHint message="当前还没有维度选项。切换到该分区后添加选项，可继续配置描述、属性修正与天赋影响。" />
+          )}
         </div>
-      </div>
+      );
+      break;
 
-      <Field label="维度说明">
-        <Textarea
-          value={dimension.description ?? ""}
-          onChange={(event) => onChange({ description: event.target.value })}
-          className="min-h-24"
-          placeholder="说明该维度在角色创建中的定位"
-        />
-      </Field>
-
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <p
-            className="text-sm font-medium"
-            style={{ color: color("textPrimary") }}
-          >
-            维度选项
-          </p>
+    case "settings":
+    default:
+      tabContent = (
+        <div className="space-y-3">
           <p
             className="text-xs"
             style={{ color: colorAlpha("textMuted", 0.72) }}
           >
-            每个选项可定义属性修正、赠送天赋和排除天赋
+            编辑创建流程中的标题、标识、排序与说明文案。
+          </p>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(140px,0.7fr)_minmax(0,1fr)]">
+            <Field label="维度名称">
+              <Input
+                value={dimension.label}
+                onChange={(event) => onChange({ label: event.target.value })}
+                placeholder="种族"
+              />
+            </Field>
+            <Field label="维度 ID">
+              <Input
+                value={dimension.id}
+                onChange={(event) => onChange({ id: event.target.value })}
+                placeholder="race"
+              />
+            </Field>
+            <Field label="排序">
+              <Input
+                type="number"
+                value={dimension.order ?? 0}
+                onChange={(event) =>
+                  onChange({ order: Number(event.target.value) || 0 })
+                }
+              />
+            </Field>
+            <div
+              className="rounded-xl border px-4 py-3"
+              style={{
+                borderColor: colorAlpha("border", 0.3),
+                background: colorAlpha("bgCard", 0.22),
+              }}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p
+                    className="text-sm font-medium"
+                    style={{ color: color("textPrimary") }}
+                  >
+                    必选维度
+                  </p>
+                  <p
+                    className="mt-1 text-xs"
+                    style={{ color: colorAlpha("textMuted", 0.72) }}
+                  >
+                    关闭后，角色创建流程允许跳过该维度。
+                  </p>
+                </div>
+                <Toggle
+                  checked={isRequired}
+                  onCheckedChange={(checked) => onChange({ required: checked })}
+                />
+              </div>
+            </div>
+          </div>
+
+          <Field label="维度说明">
+            <Textarea
+              value={dimension.description ?? ""}
+              onChange={(event) =>
+                onChange({ description: event.target.value })
+              }
+              className="min-h-20"
+              placeholder="说明该维度在角色创建中的定位"
+            />
+          </Field>
+        </div>
+      );
+      break;
+  }
+
+  return (
+    <Card variant="outlined" className="space-y-4 p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <h4
+              className="min-w-0 wrap-break-word text-base font-semibold leading-6"
+              style={{ color: color("textPrimary") }}
+              title={dimensionTitle}
+            >
+              {dimensionTitle}
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              <DimensionMetaBadge
+                label="流程"
+                value={isRequired ? "必选" : "可跳过"}
+                accent={isRequired}
+              />
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <DimensionMetaBadge
+              label="ID"
+              value={dimension.id || "未设置"}
+              mono
+            />
+            <DimensionMetaBadge
+              label="排序"
+              value={String(dimension.order ?? 0)}
+            />
+            <DimensionMetaBadge
+              label="选项"
+              value={String(dimension.options.length)}
+              accent={dimension.options.length > 0}
+            />
+          </div>
+          <p
+            className="mt-3 text-xs leading-6"
+            style={{
+              color: colorAlpha("textMuted", 0.72),
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+            title={
+              descriptionText ||
+              "当前尚未填写维度说明，可在基础设置中补充该维度在角色创建中的定位。"
+            }
+          >
+            {descriptionText ||
+              "当前尚未填写维度说明，可在基础设置中补充该维度在角色创建中的定位。"}
+          </p>
+          <p
+            className="mt-2 text-xs"
+            style={{ color: colorAlpha("textMuted", 0.72) }}
+          >
+            当前仅渲染这个维度的详情；选项预览：{collapsedPreview}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={onAddOption}>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap lg:shrink-0 lg:justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleAddOption}
+            className="w-full justify-center sm:w-auto"
+          >
             <Plus className="mr-1 h-4 w-4" />
             添加选项
           </Button>
-          <Button variant="outline" size="sm" onClick={onRemove}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRemove}
+            className="w-full justify-center sm:w-auto"
+          >
             <Trash2 className="mr-1 h-4 w-4" />
             删除维度
           </Button>
         </div>
       </div>
 
-      <div className="space-y-3">
-        {dimension.options.map((option, optionIndex) => (
-          <DimensionOptionCardEditor
-            key={`${option.id}-${optionIndex}`}
-            option={option}
-            attributeOptions={attributeOptions}
-            talentOptions={talentOptions}
-            onChange={(updates) => onUpdateOption(optionIndex, updates)}
-            onRemove={() => onRemoveOption(optionIndex)}
-          />
-        ))}
+      <div
+        className="rounded-xl border px-3 py-3"
+        style={{
+          borderColor: colorAlpha("border", 0.3),
+          background: colorAlpha("bgCard", 0.22),
+        }}
+      >
+        <div className="grid gap-2 sm:grid-cols-2" role="tablist">
+          {tabItems.map((tab) => {
+            const isActive = activeTab === tab.id;
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setActiveTab(tab.id)}
+                className="rounded-lg border px-3 py-2 text-left transition-colors duration-150"
+                style={{
+                  borderColor: colorAlpha(
+                    isActive ? "primary" : "border",
+                    isActive ? 0.38 : 0.28,
+                  ),
+                  background: colorAlpha(
+                    isActive ? "primary" : "bgCard",
+                    isActive ? 0.14 : 0.12,
+                  ),
+                }}
+              >
+                <span
+                  className="block text-sm font-medium"
+                  style={{
+                    color: isActive ? color("primary") : color("textPrimary"),
+                  }}
+                >
+                  {tab.label}
+                </span>
+                <span
+                  className="mt-1 block text-[11px] leading-5"
+                  style={{ color: colorAlpha("textMuted", 0.72) }}
+                >
+                  {tab.description}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={activeTab}
+            role="tabpanel"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.14 }}
+            className="mt-3"
+          >
+            {tabContent}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </Card>
   );
@@ -2782,12 +4593,14 @@ function DimensionOptionCardEditor({
   option,
   attributeOptions,
   talentOptions,
+  nameInputRef,
   onChange,
   onRemove,
 }: {
   option: DimensionOption;
   attributeOptions: PrimaryAttributeConfig[];
   talentOptions: TalentConfig[];
+  nameInputRef?: React.RefObject<HTMLInputElement | null>;
   onChange: (updates: Partial<DimensionOption>) => void;
   onRemove: () => void;
 }) {
@@ -2812,6 +4625,7 @@ function DimensionOptionCardEditor({
         </Field>
         <Field label="选项名称">
           <Input
+            ref={nameInputRef}
             value={option.name}
             onChange={(event) => onChange({ name: event.target.value })}
             placeholder="人类"
@@ -2988,11 +4802,13 @@ function TalentRulesCardEditor({
 function TalentCardEditor({
   talent,
   attributeOptions,
+  nameInputRef,
   onChange,
   onRemove,
 }: {
   talent: TalentConfig;
   attributeOptions: PrimaryAttributeConfig[];
+  nameInputRef?: React.RefObject<HTMLInputElement | null>;
   onChange: (updates: Partial<TalentConfig>) => void;
   onRemove: () => void;
 }) {
@@ -3012,6 +4828,7 @@ function TalentCardEditor({
         </Field>
         <Field label="天赋名称">
           <Input
+            ref={nameInputRef}
             value={talent.name}
             onChange={(event) => onChange({ name: event.target.value })}
             placeholder="锐眼"

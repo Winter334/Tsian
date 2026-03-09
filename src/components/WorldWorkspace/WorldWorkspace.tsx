@@ -290,7 +290,9 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
             initial="hidden"
             animate="visible"
             exit="exit"
-            className={cn("fixed inset-4 z-50 flex flex-col overflow-hidden")}
+            className={cn(
+              "fixed inset-1 z-50 flex flex-col overflow-hidden sm:inset-3 lg:inset-4",
+            )}
             style={{
               background: colorAlpha("bgBase", 0.95),
               borderRadius: borders.radius.lg,

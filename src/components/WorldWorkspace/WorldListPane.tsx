@@ -38,7 +38,7 @@ export function WorldListPane({
   return (
     <div className="flex h-full flex-col">
       <div
-        className="border-b px-4 py-3"
+        className="border-b px-3 py-2.5 sm:px-4 sm:py-3"
         style={{ borderColor: colorAlpha("primary", 0.16) }}
       >
         <h2
@@ -55,8 +55,8 @@ export function WorldListPane({
         </p>
       </div>
 
-      <ScrollArea className="flex-1 px-3 py-3">
-        <div className="space-y-3">
+      <ScrollArea className="flex-1 px-2.5 py-2.5 sm:px-3 sm:py-3">
+        <div className="space-y-2.5 sm:space-y-3">
           {worlds.map((world) => {
             const isSelected = world.id === selectedWorldId;
             const isActive = world.id === activeWorldId;
@@ -68,7 +68,7 @@ export function WorldListPane({
                 variant={isSelected ? "elevated" : "outlined"}
                 hover
                 onClick={() => onSelectWorld(world.id)}
-                className="p-4"
+                className="p-3 sm:p-4"
                 style={
                   isSelected
                     ? {
@@ -130,7 +130,7 @@ export function WorldListPane({
                   ) : null}
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-2">
+                <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap sm:items-center">
                   <Button
                     variant={isActive ? "secondary" : "outline"}
                     size="sm"
@@ -138,7 +138,7 @@ export function WorldListPane({
                       event.stopPropagation();
                       onSetActiveWorld(world.id);
                     }}
-                    className="gap-1.5"
+                    className="w-full gap-1.5 justify-center sm:w-auto"
                   >
                     <Radio className="h-4 w-4" />
                     {isActive ? "已活动" : "设为活动"}
@@ -152,7 +152,7 @@ export function WorldListPane({
                       event.stopPropagation();
                       onDeleteWorld(world.id);
                     }}
-                    className="gap-1.5"
+                    className="w-full gap-1.5 justify-center sm:w-auto"
                   >
                     <Trash2 className="h-4 w-4" />
                     删除

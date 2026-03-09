@@ -83,7 +83,7 @@ export function WorldWorkspaceToolbar({
 
   return (
     <div
-      className={cn("border-b px-3 py-3 sm:px-4")}
+      className={cn("border-b px-2.5 py-2 sm:px-4 sm:py-3")}
       style={{
         borderColor: colorAlpha("primary", 0.25),
         background: colorAlpha("bgElevated", 0.5),
@@ -97,29 +97,29 @@ export function WorldWorkspaceToolbar({
         onChange={handleFileChange}
       />
 
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center justify-between gap-2 sm:gap-3">
         <div className="min-w-0">
           <h1
-            className="truncate text-base font-semibold sm:text-lg"
+            className="truncate text-sm font-semibold sm:text-lg"
             style={gradientText()}
           >
             世界编辑工作台
           </h1>
           <p
-            className="mt-1 text-xs sm:text-sm"
+            className="mt-0.5 hidden text-xs sm:block sm:text-sm"
             style={{ color: colorAlpha("textSecondary", 0.78) }}
           >
             作者态世界配置编辑 · 结构化表单优先，局部分区 / 全量规则 JSON 共存
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={onSave}
             disabled={!hasSelection || !isDirty || isSaving}
-            className="gap-1.5 px-2.5 sm:px-3"
+            className="gap-1.5 px-2 sm:px-3"
           >
             {isSaving ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -138,7 +138,7 @@ export function WorldWorkspaceToolbar({
           <button
             type="button"
             onClick={onClose}
-            className={cn("rounded-md p-2 transition-all")}
+            className={cn("rounded-md p-1.5 transition-all sm:p-2")}
             style={{
               color: color("textMuted"),
               transitionDuration: `${animation.duration.fast * 1000}ms`,
@@ -158,59 +158,70 @@ export function WorldWorkspaceToolbar({
         </div>
       </div>
 
-      <div className="mt-3 flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-          <ToolbarActionButton
-            icon={<Plus className="h-4 w-4" />}
-            label="新建世界"
-            onClick={onCreateWorld}
-          />
-          <ToolbarActionButton
-            icon={<Import className="h-4 w-4" />}
-            label="导入"
-            onClick={triggerImport}
-          />
-          <ToolbarActionButton
-            icon={<Download className="h-4 w-4" />}
-            label="导出当前"
-            onClick={onExportWorld}
-            disabled={!hasSelection}
-          />
-          <ToolbarActionButton
-            icon={<RefreshCcw className="h-4 w-4" />}
-            label="重置草稿"
-            onClick={onReset}
-            disabled={!hasSelection || !isDirty}
-          />
+      <div className="mt-2 flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+        <div className="overflow-x-auto pb-1">
+          <div className="flex min-w-max gap-2 sm:min-w-0 sm:flex-wrap sm:items-center">
+            <ToolbarActionButton
+              icon={<Plus className="h-4 w-4" />}
+              label="新建世界"
+              onClick={onCreateWorld}
+              compact={!isDesktop}
+            />
+            <ToolbarActionButton
+              icon={<Import className="h-4 w-4" />}
+              label="导入"
+              onClick={triggerImport}
+              compact={!isDesktop}
+            />
+            <ToolbarActionButton
+              icon={<Download className="h-4 w-4" />}
+              label="导出当前"
+              onClick={onExportWorld}
+              disabled={!hasSelection}
+              compact={!isDesktop}
+            />
+            <ToolbarActionButton
+              icon={<RefreshCcw className="h-4 w-4" />}
+              label="重置草稿"
+              onClick={onReset}
+              disabled={!hasSelection || !isDirty}
+              compact={!isDesktop}
+            />
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <ToolbarActionButton
-            icon={<FileCode2 className="h-4 w-4" />}
-            label={
-              isFullRawRulesEditorOpen ? "关闭全量高级规则" : "全量高级规则"
-            }
-            onClick={onToggleRawRulesEditor}
-            disabled={!hasSelection}
-            highlighted={isFullRawRulesEditorOpen}
-          />
+        <div className="overflow-x-auto pb-1">
+          <div className="flex min-w-max items-center gap-2 sm:min-w-0 sm:flex-wrap">
+            {!isDesktop && (
+              <>
+                <ToolbarActionButton
+                  icon={<List className="h-4 w-4" />}
+                  label="列表"
+                  onClick={() => onNavigateMobile("list")}
+                  highlighted={mobilePage === "list"}
+                  compact
+                />
+                <ToolbarActionButton
+                  icon={<Sparkles className="h-4 w-4" />}
+                  label="编辑"
+                  onClick={() => onNavigateMobile("editor")}
+                  highlighted={mobilePage === "editor"}
+                  compact
+                />
+              </>
+            )}
 
-          {!isDesktop && (
-            <div className="grid grid-cols-2 gap-2">
-              <ToolbarActionButton
-                icon={<List className="h-4 w-4" />}
-                label="列表"
-                onClick={() => onNavigateMobile("list")}
-                highlighted={mobilePage === "list"}
-              />
-              <ToolbarActionButton
-                icon={<Sparkles className="h-4 w-4" />}
-                label="编辑"
-                onClick={() => onNavigateMobile("editor")}
-                highlighted={mobilePage === "editor"}
-              />
-            </div>
-          )}
+            <ToolbarActionButton
+              icon={<FileCode2 className="h-4 w-4" />}
+              label={
+                isFullRawRulesEditorOpen ? "关闭全量高级规则" : "全量高级规则"
+              }
+              onClick={onToggleRawRulesEditor}
+              disabled={!hasSelection}
+              highlighted={isFullRawRulesEditorOpen}
+              compact={!isDesktop}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -223,6 +234,7 @@ interface ToolbarActionButtonProps {
   onClick: () => void;
   disabled?: boolean;
   highlighted?: boolean;
+  compact?: boolean;
 }
 
 function ToolbarActionButton({
@@ -231,6 +243,7 @@ function ToolbarActionButton({
   onClick,
   disabled = false,
   highlighted = false,
+  compact = false,
 }: ToolbarActionButtonProps) {
   return (
     <button
@@ -238,7 +251,8 @@ function ToolbarActionButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex min-h-9 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-all",
+        "flex items-center justify-center gap-1.5 rounded-md font-medium transition-all whitespace-nowrap",
+        compact ? "min-h-8 px-2.5 py-1.5 text-xs" : "min-h-9 px-3 py-2 text-sm",
         disabled && "cursor-not-allowed opacity-50",
       )}
       style={{
