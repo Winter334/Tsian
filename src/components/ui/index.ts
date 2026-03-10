@@ -55,4 +55,4 @@ export { Select, type SelectOption } from "./select";
 export { Slider } from "./slider";
 export { Textarea, type TextareaProps } from "./textarea";
 export { ToastProvider, type Toast, type ToastType } from "./toast";
-export { Toggle, ToggleCard } from "./toggle";
+export { MiniToggle, Toggle, ToggleCard } from "./toggle";

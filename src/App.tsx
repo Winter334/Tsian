@@ -39,7 +39,6 @@ import {
   CheckpointPanel,
   GameView,
   MemoryManagerDialog,
-  useCurrentSaveId,
   useSaveSlots,
 } from "./modules";
 import { selectIsOnline, useSessionStore } from "./stores";
@@ -586,7 +585,6 @@ function AppContent() {
 
   // 获取存档槽位信息（从 Yjs）
   const saves = useSaveSlots();
-  const currentSaveId = useCurrentSaveId();
 
   // 检查是否有存档槽位
   const hasSaveData = saves.length > 0;
@@ -645,12 +643,6 @@ function AppContent() {
       clearHubGameTransitionTimer();
     };
   }, [clearHubGameTransitionTimer]);
-
-  // 获取最近的存档槽位
-  const getLatestSave = () => {
-    if (saves.length === 0) return null;
-    return saves[0]; // 已按 updatedAt 倒序排序
-  };
 
   // 加载设置
   useEffect(() => {
@@ -809,25 +801,6 @@ function AppContent() {
   };
 
   /**
-   * 加载单人存档并进入 Hub
-   */
-  const loadSoloSave = async (saveId: string): Promise<boolean> => {
-    const loadResult = await dispatch({
-      type: SaveCommands.LOAD_SAVE,
-      payload: { saveId },
-    });
-
-    if (loadResult.success) {
-      // 注意：房间状态会在 SAVE_LOADED 事件触发后由 Room 模块自动重置
-      resetHubGameTransition();
-      setAppState("hub");
-      return true;
-    } else {
-      return false;
-    }
-  };
-
-  /**
    * 处理联机存档 - 弹出选择对话框
    */
   const handleMultiplayerSave = (save: SaveSlotInfo) => {
@@ -896,38 +869,13 @@ function AppContent() {
     [dispatch],
   );
 
-  // 继续游戏 - 使用当前存档或加载最近的存档
-  const handleContinue = async () => {
-    // 获取要加载的存档
-    let targetSave: SaveSlotInfo | null = null;
-
-    if (currentSaveId) {
-      // 如果已经有当前存档，找到它
-      targetSave = saves.find((s) => s.id === currentSaveId) || null;
-    } else {
-      // 如果没有当前存档，使用最近的存档
-      targetSave = getLatestSave();
-    }
-
-    if (!targetSave) return;
-
-    // 检查存档类型
-    if (targetSave.type === "multiplayer") {
-      // 联机存档：弹出选择对话框
-      handleMultiplayerSave(targetSave);
-    } else {
-      // 单人存档：直接加载
-      await loadSoloSave(targetSave.id);
-    }
-  };
-
   // 打开设置
   const handleSettings = () => {
     setSettingsOpen(true);
   };
 
-  // 打开存档管理
-  const handleSaveManager = () => {
+  // 继续冒险 - 打开存档选择面板
+  const handleSelectSave = () => {
     setSaveManagerOpen(true);
   };
 
@@ -1059,9 +1007,8 @@ function AppContent() {
         {appState === "title" && (
           <TitleScreen
             onStart={handleStart}
-            onContinue={handleContinue}
+            onSelectSave={handleSelectSave}
             onSettings={handleSettings}
-            onSaveManager={handleSaveManager}
             hasSaveData={hasSaveData}
           />
         )}
@@ -1087,7 +1034,6 @@ function AppContent() {
                 onEnterGame={handleEnterGame}
                 onBackToTitle={handleBackToTitle}
                 onSettings={handleSettings}
-                onSaveManager={handleSaveManager}
                 onPresetWorkspace={handleOpenPresetWorkspace}
                 onLorebookWorkspace={handleOpenLorebookWorkspace}
                 transitionState={hubGameTransition}

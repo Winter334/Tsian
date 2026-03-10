@@ -107,8 +107,10 @@ export interface WorldWorkspaceState {
 export interface WorldWorkspaceActions {
   selectWorld: (id: WorldId) => void;
   setActiveWorld: (id: WorldId) => void;
-  createWorld: () => Promise<World>;
-  deleteWorld: (id: WorldId) => Promise<void>;
+  createWorld: (onCreated?: (world: World) => void) => void;
+  deleteWorld: (id: WorldId) => void;
+  confirmDeleteWorld: () => Promise<void>;
+  cancelDeleteWorld: () => void;
   saveSelectedWorld: () => Promise<World | null>;
   resetDraft: () => void;
   setMobilePage: (page: WorldWorkspaceMobilePage) => void;
@@ -117,7 +119,13 @@ export interface WorldWorkspaceActions {
   setRawRulesText: (value: string) => void;
   applyRawRulesText: () => void;
   exportSelectedWorld: () => void;
-  importWorldFromFile: (file: File) => Promise<World>;
+  importWorldFromFile: (
+    file: File,
+    callbacks?: {
+      onSuccess?: (world: World) => void;
+      onError?: (err: Error) => void;
+    },
+  ) => void;
   updateMeta: (updates: Partial<EditableWorldMeta>) => void;
   updateNarrative: (updates: Partial<WorldNarrativeSeed>) => void;
   updatePrimaryAttribute: (
@@ -172,6 +180,13 @@ export interface WorldWorkspaceActions {
   updateTalent: (index: number, updates: Partial<TalentConfig>) => void;
   addTalent: () => void;
   removeTalent: (index: number) => void;
+  pendingDeleteWorld: { id: WorldId; name: string } | null;
+  discardConfirm: {
+    open: boolean;
+    message: string;
+  };
+  handleConfirmDiscard: () => void;
+  handleCancelDiscard: () => void;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1027,6 +1042,15 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
   const [rawRulesError, setRawRulesError] = useState<string | null>(null);
   const [mobilePage, setMobilePage] =
     useState<WorldWorkspaceMobilePage>("list");
+  const [pendingDeleteWorld, setPendingDeleteWorld] = useState<{
+    id: WorldId;
+    name: string;
+  } | null>(null);
+  const [discardConfirm, setDiscardConfirm] = useState<{
+    open: boolean;
+    message: string;
+    onConfirm: (() => void) | null;
+  }>({ open: false, message: "", onConfirm: null });
 
   const isDirty = useMemo(() => {
     const baseSnapshot = getEditableSnapshot(selectedWorld);
@@ -1392,15 +1416,27 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
   );
 
   const confirmDiscardChanges = useCallback(
-    (message = "当前世界有未保存修改，继续操作会丢失这些更改。是否继续？") => {
+    (
+      onConfirm: () => void,
+      message = "当前世界有未保存修改，继续操作会丢失这些更改。是否继续？",
+    ) => {
       if (!isDirty) {
-        return true;
+        onConfirm();
+        return;
       }
-
-      return window.confirm(message);
+      setDiscardConfirm({ open: true, message, onConfirm });
     },
     [isDirty],
   );
+
+  const handleConfirmDiscard = useCallback(() => {
+    discardConfirm.onConfirm?.();
+    setDiscardConfirm({ open: false, message: "", onConfirm: null });
+  }, [discardConfirm]);
+
+  const handleCancelDiscard = useCallback(() => {
+    setDiscardConfirm({ open: false, message: "", onConfirm: null });
+  }, []);
 
   useEffect(() => {
     if (worlds.length === 0) {
@@ -1466,12 +1502,10 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
         return;
       }
 
-      if (!confirmDiscardChanges()) {
-        return;
-      }
-
-      setSelectedWorldId(id);
-      setMobilePage("editor");
+      confirmDiscardChanges(() => {
+        setSelectedWorldId(id);
+        setMobilePage("editor");
+      });
     },
     [confirmDiscardChanges, selectedWorldId],
   );
@@ -1483,44 +1517,43 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     [setActiveWorldInStore],
   );
 
-  const createWorld = useCallback(async () => {
-    if (!confirmDiscardChanges("新建世界会放弃当前未保存修改。是否继续？")) {
-      throw new Error("已取消新建世界");
-    }
-
-    const name = getNextWorldName(worlds);
-    const world = await createWorldInStore(name, "");
-    setActiveWorldInStore(world.id);
-    setSelectedWorldId(world.id);
-    setMobilePage("editor");
-    return normalizeWorld({
-      ...world,
-      narrative: world.narrative ?? {},
-      rules: normalizeWorldRules(world.id, world.meta.name, world.rules),
-    });
-  }, [
-    confirmDiscardChanges,
-    createWorldInStore,
-    setActiveWorldInStore,
-    worlds,
-  ]);
+  const createWorld = useCallback(
+    (onCreated?: (world: World) => void) => {
+      confirmDiscardChanges(async () => {
+        const name = getNextWorldName(worlds);
+        const world = await createWorldInStore(name, "");
+        setActiveWorldInStore(world.id);
+        setSelectedWorldId(world.id);
+        setMobilePage("editor");
+        const normalized = normalizeWorld({
+          ...world,
+          narrative: world.narrative ?? {},
+          rules: normalizeWorldRules(world.id, world.meta.name, world.rules),
+        });
+        onCreated?.(normalized);
+      }, "新建世界会放弃当前未保存修改。是否继续？");
+    },
+    [confirmDiscardChanges, createWorldInStore, setActiveWorldInStore, worlds],
+  );
 
   const deleteWorld = useCallback(
-    async (id: WorldId) => {
+    (id: WorldId) => {
       const target = worlds.find((item) => item.id === id);
       const targetName = target?.name ?? "该世界";
-      const confirmed = window.confirm(
-        `确定删除「${targetName}」吗？此操作不可撤销。`,
-      );
-
-      if (!confirmed) {
-        return;
-      }
-
-      await deleteWorldInStore(id);
+      setPendingDeleteWorld({ id, name: targetName });
     },
-    [deleteWorldInStore, worlds],
+    [worlds],
   );
+
+  const confirmDeleteWorld = useCallback(async () => {
+    if (!pendingDeleteWorld) return;
+    await deleteWorldInStore(pendingDeleteWorld.id);
+    setPendingDeleteWorld(null);
+  }, [deleteWorldInStore, pendingDeleteWorld]);
+
+  const cancelDeleteWorld = useCallback(() => {
+    setPendingDeleteWorld(null);
+  }, []);
 
   const saveSelectedWorld = useCallback(async () => {
     if (!draft) {
@@ -1634,48 +1667,59 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
   }, [draft]);
 
   const importWorldFromFile = useCallback(
-    async (file: File) => {
-      if (!confirmDiscardChanges("导入新世界会切换当前编辑对象，是否继续？")) {
-        throw new Error("已取消导入");
-      }
+    (
+      file: File,
+      callbacks?: {
+        onSuccess?: (world: World) => void;
+        onError?: (err: Error) => void;
+      },
+    ) => {
+      confirmDiscardChanges(async () => {
+        try {
+          const text = await file.text();
+          let parsed: unknown;
 
-      const text = await file.text();
-      let parsed: unknown;
+          try {
+            parsed = JSON.parse(text) as unknown;
+          } catch {
+            throw new Error("世界文件不是有效的 JSON");
+          }
 
-      try {
-        parsed = JSON.parse(text) as unknown;
-      } catch {
-        throw new Error("世界文件不是有效的 JSON");
-      }
+          const importedWorld = parseImportedWorld(parsed);
+          const createdWorld = await createWorldInStore(
+            importedWorld.meta.name,
+            importedWorld.meta.description,
+          );
 
-      const importedWorld = parseImportedWorld(parsed);
-      const createdWorld = await createWorldInStore(
-        importedWorld.meta.name,
-        importedWorld.meta.description,
-      );
+          await updateWorldInStore(createdWorld.id, {
+            meta: {
+              name: importedWorld.meta.name,
+              description: importedWorld.meta.description,
+              author: importedWorld.meta.author,
+              version: importedWorld.meta.version,
+              source: "custom",
+            },
+            rules: normalizeWorldRules(
+              createdWorld.id,
+              importedWorld.meta.name,
+              importedWorld.rules,
+            ),
+            narrative: normalizeNarrative(importedWorld.narrative),
+          });
 
-      await updateWorldInStore(createdWorld.id, {
-        meta: {
-          name: importedWorld.meta.name,
-          description: importedWorld.meta.description,
-          author: importedWorld.meta.author,
-          version: importedWorld.meta.version,
-          source: "custom",
-        },
-        rules: normalizeWorldRules(
-          createdWorld.id,
-          importedWorld.meta.name,
-          importedWorld.rules,
-        ),
-        narrative: normalizeNarrative(importedWorld.narrative),
-      });
+          setActiveWorldInStore(createdWorld.id);
+          setSelectedWorldId(createdWorld.id);
+          setMobilePage("editor");
 
-      setActiveWorldInStore(createdWorld.id);
-      setSelectedWorldId(createdWorld.id);
-      setMobilePage("editor");
-
-      const persisted = await getWorld(createdWorld.id);
-      return normalizeWorld(persisted ?? createdWorld);
+          const persisted = await getWorld(createdWorld.id);
+          const normalized = normalizeWorld(persisted ?? createdWorld);
+          callbacks?.onSuccess?.(normalized);
+        } catch (err) {
+          callbacks?.onError?.(
+            err instanceof Error ? err : new Error("未知错误"),
+          );
+        }
+      }, "导入新世界会切换当前编辑对象，是否继续？");
     },
     [
       confirmDiscardChanges,
@@ -2320,6 +2364,8 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     setActiveWorld,
     createWorld,
     deleteWorld,
+    confirmDeleteWorld,
+    cancelDeleteWorld,
     saveSelectedWorld,
     resetDraft,
     setMobilePage,
@@ -2361,5 +2407,12 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     updateTalent,
     addTalent,
     removeTalent,
+    pendingDeleteWorld,
+    discardConfirm: {
+      open: discardConfirm.open,
+      message: discardConfirm.message,
+    },
+    handleConfirmDiscard,
+    handleCancelDiscard,
   };
 }

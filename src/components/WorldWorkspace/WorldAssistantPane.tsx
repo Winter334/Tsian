@@ -143,8 +143,16 @@ export function WorldAssistantPane({
               className="mt-2 list-disc space-y-1 pl-4 text-xs"
               style={{ color: colorAlpha("textMuted", 0.78) }}
             >
-              {validationMessages.map((message) => (
-                <li key={message}>{message}</li>
+              {validationMessages.map((message, index) => (
+                <li
+                  key={
+                    message
+                      ? `${message}-${index}`
+                      : `validation-message-${index}`
+                  }
+                >
+                  {message}
+                </li>
               ))}
             </ul>
           ) : (

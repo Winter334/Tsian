@@ -116,7 +116,7 @@ export function Select({
           }
         }}
       >
-        <span>
+        <span className="min-w-0 truncate">
           {loading ? "加载中..." : selectedOption?.label || placeholder}
         </span>
         {loading ? (

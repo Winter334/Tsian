@@ -4,7 +4,7 @@ import { TITLE_CONFIG } from "@/config/splash";
 import { useThemeEffects } from "@/hooks";
 import { color, colorAlpha, glow, gradientText } from "@/styles/tokens";
 import { motion } from "framer-motion";
-import { FolderOpen, Play, RotateCcw, Settings } from "lucide-react";
+import { FolderOpen, Play, Settings } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DiagonalBanners } from "./DiagonalBanners";
 import { FloatingParticles } from "./FloatingParticles";
@@ -21,9 +21,8 @@ import { PixiBackground } from "./PixiBackground";
 
 interface TitleScreenProps {
   onStart?: () => void;
-  onContinue?: () => void;
+  onSelectSave?: () => void;
   onSettings?: () => void;
-  onSaveManager?: () => void;
   hasSaveData?: boolean;
 }
 
@@ -49,9 +48,8 @@ interface TitleScreenProps {
  */
 export function TitleScreen({
   onStart,
-  onContinue,
+  onSelectSave,
   onSettings,
-  onSaveManager,
   hasSaveData = false,
 }: TitleScreenProps) {
   const [isBackgroundReady, setIsBackgroundReady] = useState(false);
@@ -148,9 +146,8 @@ export function TitleScreen({
           cornerGradient={cornerGradient}
           cornerGradientReverse={cornerGradientReverse}
           onStart={onStart}
-          onContinue={onContinue}
+          onSelectSave={onSelectSave}
           onSettings={onSettings}
-          onSaveManager={onSaveManager}
           hasSaveData={hasSaveData}
         />
       ),
@@ -166,9 +163,8 @@ export function TitleScreen({
     isNoiseEnabled,
     isParticlesEnabled,
     onStart,
-    onContinue,
+    onSelectSave,
     onSettings,
-    onSaveManager,
     hasSaveData,
   ]);
 
@@ -211,9 +207,8 @@ interface UILayerProps {
   cornerGradient: string;
   cornerGradientReverse: string;
   onStart?: () => void;
-  onContinue?: () => void;
+  onSelectSave?: () => void;
   onSettings?: () => void;
-  onSaveManager?: () => void;
   hasSaveData: boolean;
 }
 
@@ -222,9 +217,8 @@ function UILayer({
   cornerGradient,
   cornerGradientReverse,
   onStart,
-  onContinue,
+  onSelectSave,
   onSettings,
-  onSaveManager,
   hasSaveData,
 }: UILayerProps) {
   return (
@@ -331,28 +325,19 @@ function UILayer({
         </MenuButton>
 
         <MenuButton
-          onClick={onContinue}
-          icon={<RotateCcw size={16} />}
+          onClick={onSelectSave}
+          icon={<FolderOpen size={16} />}
           disabled={!hasSaveData}
           delay={0.5}
           variant="secondary"
         >
-          继续游戏
-        </MenuButton>
-
-        <MenuButton
-          onClick={onSaveManager}
-          icon={<FolderOpen size={16} />}
-          delay={0.6}
-          variant="secondary"
-        >
-          存档管理
+          继续冒险
         </MenuButton>
 
         <MenuButton
           onClick={onSettings}
           icon={<Settings size={16} />}
-          delay={0.7}
+          delay={0.6}
           variant="secondary"
         >
           系统设置

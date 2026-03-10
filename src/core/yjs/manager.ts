@@ -138,33 +138,7 @@ export class YjsManager {
     // 5. 检查并执行数据迁移
     await this.checkAndMigrate();
 
-    // 6. 恢复上次的存档 ID
-    this.restoreCurrentSave();
-
     this.initialized = true;
-  }
-
-  /**
-   * 恢复上次的存档 ID
-   */
-  private restoreCurrentSave(): void {
-    try {
-      const savedId = localStorage.getItem(CURRENT_SAVE_KEY);
-      if (savedId) {
-        const saves = this.getSaveSlots();
-        if (saves.has(savedId)) {
-          if (this.currentSaveId !== savedId) {
-            this.currentSaveId = savedId;
-            this.notifySaveIdChange();
-          }
-        } else {
-          // 存档已被删除，清除 localStorage
-          localStorage.removeItem(CURRENT_SAVE_KEY);
-        }
-      }
-    } catch {
-      // Silently ignore restore errors
-    }
   }
 
   /**

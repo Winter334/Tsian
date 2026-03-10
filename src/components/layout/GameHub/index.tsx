@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { BookOpen, FolderOpen, Home, Settings, Wand2 } from "lucide-react";
+import { BookOpen, Home, Settings, Wand2 } from "lucide-react";
 
 import { animation } from "@/styles/tokens";
 
@@ -14,7 +14,6 @@ interface GameHubProps {
   onEnterGame: () => void;
   onBackToTitle: () => void;
   onSettings: () => void;
-  onSaveManager: () => void;
   onPresetWorkspace: () => void;
   onLorebookWorkspace: () => void;
   transitionState?: HubGameTransitionState;
@@ -54,7 +53,6 @@ export function GameHub({
   onEnterGame,
   onBackToTitle,
   onSettings,
-  onSaveManager,
   onPresetWorkspace,
   onLorebookWorkspace,
   transitionState = "idle",
@@ -188,19 +186,6 @@ export function GameHub({
               label="设置"
               sublabel="SETTINGS"
               onClick={onSettings}
-            />
-          </motion.div>
-
-          <motion.div
-            className="absolute bottom-4 md:bottom-8 left-1/2 -translate-x-1/2 z-20 flex items-end gap-6 md:gap-8"
-            variants={itemVariants}
-          >
-            <HubFeatureIcon
-              position="inline"
-              icon={FolderOpen}
-              label="存档"
-              sublabel="SAVES"
-              onClick={onSaveManager}
             />
           </motion.div>
         </motion.div>

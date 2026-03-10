@@ -13,69 +13,16 @@ import { motion } from "framer-motion";
 import { GripVertical, Pencil, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
 
-import { ConfirmDialog } from "@/components/ui";
+import { ConfirmDialog, MiniToggle } from "@/components/ui";
 import type { PostProcessRule } from "@/lib/post-process";
 import { cn } from "@/lib/utils";
-import { animation, color, colorAlpha, glow } from "@/styles/tokens";
+import { animation, color, colorAlpha } from "@/styles/tokens";
 
 export interface RuleItemProps {
   rule: PostProcessRule;
   onToggleEnabled: (id: string, enabled: boolean) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
-}
-
-interface MiniToggleProps {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  disabled?: boolean;
-}
-
-/**
- * 紧凑型开关，风格与 BlockItem 保持一致。
- */
-function MiniToggle({ checked, onChange, disabled = false }: MiniToggleProps) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={(event) => {
-        event.stopPropagation();
-        onChange(!checked);
-      }}
-      className={cn(
-        "relative inline-flex h-4 w-7 items-center rounded-full",
-        "transition-all duration-200",
-        disabled && "cursor-not-allowed opacity-50",
-        !disabled && "cursor-pointer",
-      )}
-      style={{
-        background: checked
-          ? `linear-gradient(135deg, ${color("primary")} 0%, ${color("secondary")} 100%)`
-          : colorAlpha("bgCard", 0.6),
-        border: `1px solid ${colorAlpha(checked ? "primary" : "border", checked ? 0.6 : 0.4)}`,
-        boxShadow: checked ? glow("primary", "sm", 0.3) : "none",
-      }}
-      title={checked ? "点击禁用" : "点击启用"}
-    >
-      <motion.span
-        initial={false}
-        animate={{ x: checked ? 12 : 2 }}
-        transition={{ type: "spring", stiffness: 500, damping: 30 }}
-        className="inline-block h-2.5 w-2.5 rounded-full"
-        style={{
-          background: checked
-            ? color("textPrimary")
-            : colorAlpha("textMuted", 0.75),
-          boxShadow: checked
-            ? `0 0 6px ${colorAlpha("primary", 0.55)}`
-            : `0 0 4px ${colorAlpha("border", 0.3)}`,
-        }}
-      />
-    </button>
-  );
 }
 
 const PHASE_LABEL: Record<PostProcessRule["phase"], string> = {
@@ -226,7 +173,10 @@ export function RuleItem({
             {rule.source === "builtin" ? "内置" : "用户"}
           </span>
 
-          <MiniToggle checked={rule.enabled} onChange={handleToggleEnabled} />
+          <MiniToggle
+            checked={rule.enabled}
+            onCheckedChange={handleToggleEnabled}
+          />
         </div>
       </div>
 

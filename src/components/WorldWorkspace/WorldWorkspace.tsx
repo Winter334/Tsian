@@ -9,6 +9,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -17,7 +18,7 @@ import {
 } from "react";
 
 import { StarfieldBackground } from "@/components/effects/StarfieldBackground";
-import { Overlay, useToast } from "@/components/ui";
+import { ConfirmDialog, Overlay, useToast } from "@/components/ui";
 import { useThemeEffectSwitches } from "@/hooks";
 import { cn } from "@/lib/utils";
 import {
@@ -98,29 +99,22 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
     onOpenChange(false);
   }, [onOpenChange, workspace]);
 
-  const handleCreateWorld = useCallback(async () => {
-    try {
-      const created = await workspace.createWorld();
+  const handleCreateWorld = useCallback(() => {
+    workspace.createWorld((created) => {
       success("已创建", `世界「${created.meta.name}」已加入工作台`);
-    } catch (err) {
-      if (err instanceof Error && err.message === "已取消新建世界") {
-        return;
-      }
-      error("创建世界失败", err instanceof Error ? err.message : "未知错误");
-    }
-  }, [error, success, workspace]);
+    });
+  }, [success, workspace]);
 
   const handleImportWorld = useCallback(
-    async (file: File) => {
-      try {
-        const imported = await workspace.importWorldFromFile(file);
-        success("导入成功", `已导入世界「${imported.meta.name}」`);
-      } catch (err) {
-        if (err instanceof Error && err.message === "已取消导入") {
-          return;
-        }
-        error("导入世界失败", err instanceof Error ? err.message : "未知错误");
-      }
+    (file: File) => {
+      workspace.importWorldFromFile(file, {
+        onSuccess: (imported) => {
+          success("导入成功", `已导入世界「${imported.meta.name}」`);
+        },
+        onError: (err) => {
+          error("导入世界失败", err.message);
+        },
+      });
     },
     [error, success, workspace],
   );
@@ -173,15 +167,10 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
   }, [success, workspace]);
 
   const handleDeleteWorld = useCallback(
-    async (id: string) => {
-      try {
-        await workspace.deleteWorld(id);
-        success("已删除", "世界已从作者态存储中移除");
-      } catch (err) {
-        error("删除失败", err instanceof Error ? err.message : "未知错误");
-      }
+    (id: string) => {
+      workspace.deleteWorld(id);
     },
-    [error, success, workspace],
+    [workspace],
   );
 
   useEffect(() => {
@@ -282,7 +271,7 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
   return (
     <AnimatePresence>
       {open && (
-        <>
+        <Fragment key="workspace-shell">
           <Overlay onClick={handleCloseRequest} />
 
           <motion.div
@@ -368,8 +357,44 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
               />
             )}
           </AnimatePresence>
-        </>
+        </Fragment>
       )}
+
+      <ConfirmDialog
+        key="discard-confirm"
+        open={workspace.discardConfirm.open}
+        onOpenChange={(open: boolean) => {
+          if (!open) {
+            workspace.handleCancelDiscard();
+          }
+        }}
+        title="确认放弃修改"
+        description={workspace.discardConfirm.message}
+        confirmText="继续"
+        cancelText="取消"
+        onConfirm={workspace.handleConfirmDiscard}
+        onCancel={workspace.handleCancelDiscard}
+      />
+
+      <ConfirmDialog
+        key="delete-confirm"
+        open={workspace.pendingDeleteWorld !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) {
+            workspace.cancelDeleteWorld();
+          }
+        }}
+        title="确认删除"
+        description={`确定删除「${workspace.pendingDeleteWorld?.name ?? ""}」吗？此操作不可撤销。`}
+        variant="destructive"
+        confirmText="删除"
+        cancelText="取消"
+        onConfirm={async () => {
+          await workspace.confirmDeleteWorld();
+          success("已删除", "世界已从作者态存储中移除");
+        }}
+        onCancel={workspace.cancelDeleteWorld}
+      />
     </AnimatePresence>
   );
 }

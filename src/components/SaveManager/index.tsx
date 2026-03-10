@@ -189,7 +189,7 @@ function SaveCard({
                 e.stopPropagation();
                 onLoad();
               }}
-              disabled={isActive}
+              disabled={isActive && save.type === "multiplayer"}
               style={{
                 color: color("primaryLight"),
               }}
@@ -293,10 +293,17 @@ export function SaveManagerDialog({
   // 加载存档 - 通过 CommandBus
   const handleLoad = useCallback(
     async (save: SaveSlotInfo) => {
-      // 联机存档：弹出选择对话框
+      // 联机存档：保持原有联机流程，弹出选择对话框
       if (save.type === "multiplayer" && onMultiplayerSave) {
         onOpenChange(false);
         onMultiplayerSave(save);
+        return;
+      }
+
+      // 当前单人存档已在内存中，无需重复 LOAD_SAVE，直接进入 Hub
+      if (save.id === currentSaveId) {
+        onOpenChange(false);
+        onLoadSave?.(save.id);
         return;
       }
 
@@ -311,7 +318,7 @@ export function SaveManagerDialog({
         onLoadSave?.(save.id);
       }
     },
-    [dispatch, onOpenChange, onLoadSave, onMultiplayerSave],
+    [currentSaveId, dispatch, onOpenChange, onLoadSave, onMultiplayerSave],
   );
 
   // 确认删除存档 - 通过 CommandBus
@@ -352,8 +359,8 @@ export function SaveManagerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        title="存档管理"
-        description="管理你的游戏存档"
+        title="选择存档"
+        description="选择一个存档继续冒险"
         width="md"
         background="starfield"
         borderGlow

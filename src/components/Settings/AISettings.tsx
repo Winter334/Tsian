@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   Button,
+  ConfirmDialog,
   Input,
   Panel,
   ScrollArea,
@@ -115,6 +116,8 @@ export function AISettings({ onBack }: AISettingsProps) {
   const [loadingModels, setLoadingModels] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<boolean | null>(null);
+  const [pendingDeleteProfile, setPendingDeleteProfile] =
+    useState<AIProfile | null>(null);
 
   const selectedProfile =
     profiles.find((profile) => profile.id === selectedProfileId) ?? null;
@@ -239,29 +242,30 @@ export function AISettings({ onBack }: AISettingsProps) {
       const target = getProfileById(profileId);
       if (!target) return;
 
-      const shouldDelete = window.confirm(
-        `确定删除 Profile「${target.name}」吗？此操作不可撤销。`,
-      );
-      if (!shouldDelete) return;
-
-      const fallbackId = profiles.find(
-        (profile) => profile.id !== profileId,
-      )?.id;
-      const deleted = deleteProfile(profileId);
-
-      if (deleted && selectedProfileId === profileId && fallbackId) {
-        setSelectedProfileId(fallbackId);
-      }
+      setPendingDeleteProfile(target);
     },
-    [
-      canDeleteProfile,
-      deleteProfile,
-      getProfileById,
-      profiles,
-      selectedProfileId,
-      setSelectedProfileId,
-    ],
+    [canDeleteProfile, getProfileById],
   );
+
+  const handleConfirmDeleteProfile = useCallback(() => {
+    if (!pendingDeleteProfile) return;
+
+    const profileId = pendingDeleteProfile.id;
+    const fallbackId = profiles.find((profile) => profile.id !== profileId)?.id;
+    const deleted = deleteProfile(profileId);
+
+    if (deleted && selectedProfileId === profileId && fallbackId) {
+      setSelectedProfileId(fallbackId);
+    }
+
+    setPendingDeleteProfile(null);
+  }, [
+    pendingDeleteProfile,
+    deleteProfile,
+    profiles,
+    selectedProfileId,
+    setSelectedProfileId,
+  ]);
 
   const providerOptions = useMemo(
     () =>
@@ -873,6 +877,20 @@ export function AISettings({ onBack }: AISettingsProps) {
           )}
         </Panel>
       </div>
+
+      {/* 删除 Profile 确认对话框 */}
+      <ConfirmDialog
+        open={pendingDeleteProfile !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteProfile(null);
+        }}
+        title="确认删除"
+        description={`确定删除 Profile「${pendingDeleteProfile?.name ?? ""}」吗？此操作不可撤销。`}
+        variant="destructive"
+        confirmText="删除"
+        cancelText="取消"
+        onConfirm={handleConfirmDeleteProfile}
+      />
     </div>
   );
 }

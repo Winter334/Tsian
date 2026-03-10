@@ -15,10 +15,10 @@ import { motion } from "framer-motion";
 import { GripVertical, Pencil, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 
-import { ConfirmDialog } from "@/components/ui";
+import { ConfirmDialog, MiniToggle } from "@/components/ui";
 import type { PromptBlock } from "@/lib/prompt";
 import { cn } from "@/lib/utils";
-import { animation, color, colorAlpha, glow } from "@/styles/tokens";
+import { animation, color, colorAlpha } from "@/styles/tokens";
 
 import { useWorkspace } from "./context";
 
@@ -33,66 +33,6 @@ export interface BlockItemProps {
   isDragging?: boolean;
   /** 是否为拖拽覆盖层（DragOverlay 中使用） */
   isOverlay?: boolean;
-}
-
-// ===== 小型滑块开关 =====
-
-interface MiniToggleProps {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  disabled?: boolean;
-}
-
-/**
- * 紧凑型滑块开关，专用于 BlockItem
- */
-function MiniToggle({ checked, onChange, disabled = false }: MiniToggleProps) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={(e) => {
-        e.stopPropagation();
-        onChange(!checked);
-      }}
-      className={cn(
-        "relative inline-flex h-4 w-7 items-center rounded-full",
-        "transition-all duration-200",
-        disabled && "opacity-50 cursor-not-allowed",
-        !disabled && "cursor-pointer",
-      )}
-      style={{
-        background: checked
-          ? `linear-gradient(135deg, ${color("primary")} 0%, ${color(
-              "secondary",
-            )} 100%)`
-          : colorAlpha("bgCard", 0.6),
-        border: `1px solid ${colorAlpha(
-          checked ? "primary" : "border",
-          checked ? 0.6 : 0.4,
-        )}`,
-        boxShadow: checked ? glow("primary", "sm", 0.3) : "none",
-      }}
-      title={checked ? "点击禁用" : "点击启用"}
-    >
-      <motion.span
-        initial={false}
-        animate={{ x: checked ? 12 : 2 }}
-        transition={{ type: "spring", stiffness: 500, damping: 30 }}
-        className="inline-block h-2.5 w-2.5 rounded-full"
-        style={{
-          background: checked
-            ? color("textPrimary")
-            : colorAlpha("textMuted", 0.7),
-          boxShadow: checked
-            ? `0 0 6px ${colorAlpha("primary", 0.6)}`
-            : `0 0 4px ${colorAlpha("border", 0.3)}`,
-        }}
-      />
-    </button>
-  );
 }
 
 // ===== 组件 =====
@@ -252,7 +192,10 @@ export function BlockItem({
           </span>
 
           {/* 启用/禁用滑块开关 */}
-          <MiniToggle checked={block.enabled} onChange={handleToggleEnabled} />
+          <MiniToggle
+            checked={block.enabled}
+            onCheckedChange={handleToggleEnabled}
+          />
         </div>
       </div>
 
