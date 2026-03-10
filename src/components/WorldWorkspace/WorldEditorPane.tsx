@@ -72,6 +72,12 @@ const EDITOR_CARD_HOVER_STYLE = {
   borderColor: colorAlpha("primary", 0.52),
 } as const;
 
+const MASTER_DETAIL_LIST_PANEL_CLASS =
+  "max-h-72 overflow-y-auto p-3 sm:max-h-80 xl:flex xl:h-full xl:min-h-0 xl:max-h-none xl:flex-col xl:overflow-hidden xl:[&>div]:flex xl:[&>div]:min-h-0 xl:[&>div]:flex-1 xl:[&>div]:flex-col";
+
+const MASTER_DETAIL_LIST_CONTENT_CLASS =
+  "space-y-2 xl:flex-1 xl:min-h-0 xl:overflow-y-auto";
+
 type WorkspaceEditorCardProps = {
   children: React.ReactNode;
   className?: string;
@@ -872,13 +878,13 @@ export function WorldEditorPane({
           }
         >
           {primaryAttributes.length > 0 ? (
-            <div className="grid gap-3 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+            <div className="grid gap-3 xl:h-168 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
               <Panel
                 variant="outlined"
-                className="max-h-72 overflow-y-auto p-3 sm:max-h-80 xl:max-h-144"
+                className={MASTER_DETAIL_LIST_PANEL_CLASS}
               >
                 <div
-                  className="space-y-2"
+                  className={MASTER_DETAIL_LIST_CONTENT_CLASS}
                   role="tablist"
                   aria-label="主要属性切换"
                 >
@@ -991,7 +997,7 @@ export function WorldEditorPane({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.14 }}
-                    className="space-y-3"
+                    className="space-y-3 xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-1"
                   >
                     <Panel variant="outlined" className="p-3 sm:p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1096,13 +1102,13 @@ export function WorldEditorPane({
           }
         >
           {derivedStats.length > 0 ? (
-            <div className="grid gap-3 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+            <div className="grid gap-3 xl:h-168 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
               <Panel
                 variant="outlined"
-                className="max-h-72 overflow-y-auto p-3 sm:max-h-80 xl:max-h-144"
+                className={MASTER_DETAIL_LIST_PANEL_CLASS}
               >
                 <div
-                  className="space-y-2"
+                  className={MASTER_DETAIL_LIST_CONTENT_CLASS}
                   role="tablist"
                   aria-label="衍生属性切换"
                 >
@@ -1218,7 +1224,7 @@ export function WorldEditorPane({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.14 }}
-                    className="space-y-3"
+                    className="space-y-3 xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-1"
                   >
                     <Panel variant="outlined" className="p-3 sm:p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1395,12 +1401,16 @@ export function WorldEditorPane({
           }
         >
           {conditions.length > 0 ? (
-            <div className="grid gap-3 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+            <div className="grid gap-3 xl:h-168 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
               <Panel
                 variant="outlined"
-                className="max-h-72 overflow-y-auto p-3 sm:max-h-80 xl:max-h-144"
+                className={MASTER_DETAIL_LIST_PANEL_CLASS}
               >
-                <div className="space-y-2" role="tablist" aria-label="状态切换">
+                <div
+                  className={MASTER_DETAIL_LIST_CONTENT_CLASS}
+                  role="tablist"
+                  aria-label="状态切换"
+                >
                   {conditions.map((condition, index) => {
                     const isActive = resolvedActiveConditionIndex === index;
                     const conditionTitle =
@@ -1523,7 +1533,7 @@ export function WorldEditorPane({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.14 }}
-                    className="space-y-3"
+                    className="space-y-3 xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-1"
                   >
                     <Panel variant="outlined" className="p-3 sm:p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1837,13 +1847,13 @@ export function WorldEditorPane({
             />
 
             {talents.length > 0 ? (
-              <div className="grid gap-3 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+              <div className="grid gap-3 xl:h-168 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
                 <Panel
                   variant="outlined"
-                  className="max-h-72 overflow-y-auto p-3 sm:max-h-80 xl:max-h-144"
+                  className={MASTER_DETAIL_LIST_PANEL_CLASS}
                 >
                   <div
-                    className="space-y-2"
+                    className={MASTER_DETAIL_LIST_CONTENT_CLASS}
                     role="tablist"
                     aria-label="天赋切换"
                   >
@@ -1966,7 +1976,7 @@ export function WorldEditorPane({
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -4 }}
                       transition={{ duration: 0.14 }}
-                      className="space-y-3"
+                      className="space-y-3 xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-1"
                     >
                       <Panel variant="outlined" className="p-3 sm:p-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -2487,8 +2497,16 @@ function ValidationPanel({ messages }: { messages: string[] }) {
             className="mt-2 list-disc space-y-1 pl-4 text-xs"
             style={{ color: colorAlpha("textMuted", 0.78) }}
           >
-            {messages.map((message) => (
-              <li key={message}>{message}</li>
+            {messages.map((message, index) => (
+              <li
+                key={
+                  message
+                    ? `${message}-${index}`
+                    : `validation-message-${index}`
+                }
+              >
+                {message}
+              </li>
             ))}
           </ul>
         </div>
@@ -3954,7 +3972,7 @@ function NumericFieldListEditor({
           {entries.map((entry, index) => (
             <div
               key={`${entry.field || "field"}-${index}`}
-              className="grid gap-3 md:grid-cols-[minmax(0,1fr)_9rem_auto]"
+              className="grid gap-3 md:grid-cols-[minmax(0,1fr)_9rem_auto] [&>label]:min-w-0"
             >
               <Field label={fieldLabel}>
                 <Select
@@ -4183,12 +4201,12 @@ function DimensionCard({
           </div>
 
           {dimension.options.length > 0 ? (
-            <div className="grid gap-3 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+            <div className="grid gap-3 xl:h-168 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
               <Panel
                 variant="outlined"
-                className="max-h-72 overflow-y-auto p-3 sm:max-h-80 xl:max-h-144"
+                className={MASTER_DETAIL_LIST_PANEL_CLASS}
               >
-                <div className="space-y-2">
+                <div className={MASTER_DETAIL_LIST_CONTENT_CLASS}>
                   {dimension.options.map((option, optionIndex) => {
                     const isActive = resolvedActiveOptionIndex === optionIndex;
                     const optionTitle =
@@ -4302,7 +4320,7 @@ function DimensionCard({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.14 }}
-                    className="space-y-3"
+                    className="space-y-3 xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-1"
                   >
                     <Panel variant="outlined" className="p-3 sm:p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -4371,7 +4389,7 @@ function DimensionCard({
             编辑创建流程中的标题、标识、排序与说明文案。
           </p>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(140px,0.7fr)_minmax(0,1fr)]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(120px,0.6fr)_minmax(0,1fr)] [&>label]:min-w-0 [&>div]:min-w-0">
             <Field label="维度名称">
               <Input
                 value={dimension.label}
@@ -4615,7 +4633,7 @@ function DimensionOptionCardEditor({
 
   return (
     <Panel variant="outlined" className="space-y-4 p-4">
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-3 [&>label]:min-w-0">
         <Field label="选项 ID">
           <Input
             value={option.id}
@@ -4678,7 +4696,7 @@ function DimensionOptionCardEditor({
           }
         />
 
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid gap-3 lg:grid-cols-2 [&>div]:min-w-0">
           <div
             className="rounded-xl border px-4 py-3"
             style={{
