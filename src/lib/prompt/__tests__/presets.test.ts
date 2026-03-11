@@ -9,6 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 import { defaultPreset } from "../presets/default";
+import { defaultDirectorPreset } from "../presets/default-director";
 import { defaultParserPreset } from "../presets/default-parser";
 
 describe("默认叙事预设（defaultPreset）", () => {
@@ -205,6 +206,85 @@ describe("默认解析预设（defaultParserPreset）", () => {
       "anti-repeat-output-rules",
       "memory-summary",
       "user-input",
+    ]);
+  });
+});
+
+describe("默认导演预设（defaultDirectorPreset）", () => {
+  it("版本号为 1.0.0", () => {
+    expect(defaultDirectorPreset.metadata.version).toBe("1.0.0");
+  });
+
+  it("purpose 为 director", () => {
+    expect(defaultDirectorPreset.purpose).toBe("director");
+  });
+
+  it("包含 9 个块", () => {
+    expect(defaultDirectorPreset.blocks).toHaveLength(9);
+  });
+
+  it("blockOrder 与 blocks 数量一致", () => {
+    expect(defaultDirectorPreset.blockOrder).toHaveLength(
+      defaultDirectorPreset.blocks.length,
+    );
+  });
+
+  it("所有 blockOrder 中的 id 都在 blocks 中存在", () => {
+    const blockIds = new Set(defaultDirectorPreset.blocks.map((b) => b.id));
+    for (const orderId of defaultDirectorPreset.blockOrder) {
+      expect(blockIds.has(orderId)).toBe(true);
+    }
+  });
+
+  it("包含角色描写块", () => {
+    const block = defaultDirectorPreset.blocks.find(
+      (b) => b.id === "director-character-description",
+    );
+    expect(block).toBeDefined();
+    expect(block!.role).toBe("system");
+    expect(block!.content).toContain("{{characterDescription}}");
+  });
+
+  it("包含世界知识块", () => {
+    const block = defaultDirectorPreset.blocks.find(
+      (b) => b.id === "director-world-info",
+    );
+    expect(block).toBeDefined();
+    expect(block!.role).toBe("system");
+    expect(block!.content).toContain("{{worldInfo}}");
+  });
+
+  it("包含世界剧本块", () => {
+    const block = defaultDirectorPreset.blocks.find(
+      (b) => b.id === "director-scenario",
+    );
+    expect(block).toBeDefined();
+    expect(block!.role).toBe("system");
+    expect(block!.content).toContain("{{scenario}}");
+  });
+
+  it("导演系统提示词包含档案一致性守门规则", () => {
+    const block = defaultDirectorPreset.blocks.find(
+      (b) => b.id === "director-system",
+    );
+    expect(block).toBeDefined();
+    expect(block!.content).toContain("避免为同一对象重复 create");
+    expect(block!.content).toContain(
+      "优先使用 update / essence / presence / relate",
+    );
+  });
+
+  it("导演预设块顺序符合设计", () => {
+    expect(defaultDirectorPreset.blockOrder).toEqual([
+      "director-system",
+      "director-character-description",
+      "director-world-info",
+      "director-scenario",
+      "director-archive",
+      "director-memory",
+      "director-history",
+      "director-context",
+      "director-input",
     ]);
   });
 });

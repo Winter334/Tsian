@@ -29,7 +29,8 @@ const DIRECTOR_SYSTEM_PROMPT = `你是一个 RPG 导演 AI / DM（Dungeon Master
 
 ## NPC 创建与管理
 
-- 固定 NPC：由世界书和预设 scenario 注入的已知角色，不需要你创建；你只需理解其存在并推演行为
+- 固定 NPC：由世界书、角色描写和预设 scenario 注入的已知角色，不需要你创建；你只需理解其存在并推演行为
+- 若剧情中出现的实体已在世界档案中存在（包括 active / nearby / dormant），应直接引用并更新该条目，避免为同一对象重复 create；只有确认是全新个体时才新建档案
 - 动态 NPC：当叙事需要新角色时，在 <archive_updates> 中以 create 操作创建 NarrativeEntity，并在 <plot_directives> 中指导 Parser AI spawn 该 NPC（名称、外貌、性格等）
 - NPC 不需要预注册，登场时自然创建即可
 - 创建 NPC 时必须给出明确动机与当前状态，不能只给名字
@@ -140,6 +141,7 @@ const DIRECTOR_SYSTEM_PROMPT = `你是一个 RPG 导演 AI / DM（Dungeon Master
 - <outline_updates> 是可选的，内容为 JSON 数组（无更新时可省略此标签或输出 []）
 - 你的最终输出必须且只包含以下四个 XML 标签段落：<plot_directives>、<narrative_hints>、<archive_updates>、<outline_updates>（无更新时可省略 <outline_updates>）
 - NPC 的 essence（本质描述）是不变的约束，currentState 不能否定 essence
+- 若某实体已能与世界档案中的既有条目对应，则应优先使用 update / essence / presence / relate 等操作维护现有条目，而不是重复 create
 - 新建动态 NPC 时，必须同时给出可执行的登场指导与实体状态更新
 - 伏笔推进必须遵循 planted → hinted → revealed 的渐进节奏，禁止跳阶段揭示`;
 
@@ -167,6 +169,39 @@ export const defaultDirectorPreset: Preset = {
       order: 0,
     },
     {
+      id: "director-character-description",
+      name: "角色描写",
+      role: "system",
+      marker: false,
+      content: `【主要角色设定】
+{{characterDescription}}`,
+      enabled: true,
+      injectionDepth: 0,
+      order: 1,
+    },
+    {
+      id: "director-world-info",
+      name: "世界知识",
+      role: "system",
+      marker: false,
+      content: `【世界知识】
+{{worldInfo}}`,
+      enabled: true,
+      injectionDepth: 0,
+      order: 2,
+    },
+    {
+      id: "director-scenario",
+      name: "世界剧本",
+      role: "system",
+      marker: false,
+      content: `【世界剧本】
+{{scenario}}`,
+      enabled: true,
+      injectionDepth: 0,
+      order: 3,
+    },
+    {
       id: "director-archive",
       name: "世界档案",
       role: "system",
@@ -174,7 +209,7 @@ export const defaultDirectorPreset: Preset = {
       content: "{{worldArchive}}",
       enabled: true,
       injectionDepth: 0,
-      order: 1,
+      order: 4,
     },
     {
       id: "director-memory",
@@ -185,7 +220,7 @@ export const defaultDirectorPreset: Preset = {
       content: "",
       enabled: true,
       injectionDepth: 0,
-      order: 2,
+      order: 5,
     },
     {
       id: "director-history",
@@ -196,7 +231,7 @@ export const defaultDirectorPreset: Preset = {
       content: "",
       enabled: true,
       injectionDepth: 0,
-      order: 3,
+      order: 6,
     },
     {
       id: "director-context",
@@ -206,7 +241,7 @@ export const defaultDirectorPreset: Preset = {
       content: `{{director_context}}`,
       enabled: true,
       injectionDepth: 0,
-      order: 4,
+      order: 7,
     },
     {
       id: "director-input",
@@ -219,11 +254,14 @@ export const defaultDirectorPreset: Preset = {
 请按照思维链模板进行推演，输出你的分析和指导。`,
       enabled: true,
       injectionDepth: 0,
-      order: 5,
+      order: 8,
     },
   ],
   blockOrder: [
     "director-system",
+    "director-character-description",
+    "director-world-info",
+    "director-scenario",
     "director-archive",
     "director-memory",
     "director-history",
