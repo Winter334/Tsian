@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { ItemTemplate } from "@/domain/entities/item";
+import type { ItemCategory, ItemTemplate } from "@/domain/entities/item";
 import type { SkillTemplate } from "@/domain/entities/skill";
 import { topologicalSortDerivedStats } from "@/lib/rules/derived-stats";
 import {
@@ -30,6 +30,8 @@ import type {
   ConditionConfig,
   DerivedStatConfig,
   DimensionOption,
+  EquipSlotDefinition,
+  InventoryRulesConfig,
   PointBuyRules,
   PrimaryAttributeConfig,
   TalentConfig,
@@ -49,6 +51,7 @@ export type WorldRulesEditorScope =
   | "conditions"
   | "dimensions"
   | "talents"
+  | "inventoryRules"
   | "itemTemplates"
   | "skillTemplates";
 export type WorldScopedRulesEditorScope = Exclude<
@@ -73,6 +76,7 @@ type EditableRulesTalentsSnapshot = Pick<
   WorldConfig,
   "talents" | "talentRules"
 >;
+type EditableRulesInventoryRulesSnapshot = Pick<WorldConfig, "inventoryRules">;
 type EditableRulesItemTemplatesSnapshot = Pick<WorldConfig, "itemTemplates">;
 type EditableRulesSkillTemplatesSnapshot = Pick<WorldConfig, "skillTemplates">;
 type EditableTalentRules = NonNullable<WorldConfig["talentRules"]>;
@@ -186,6 +190,13 @@ export interface WorldWorkspaceActions {
   updateTalent: (index: number, updates: Partial<TalentConfig>) => void;
   addTalent: () => void;
   removeTalent: (index: number) => void;
+  addEquipSlot: () => void;
+  updateEquipSlot: (
+    index: number,
+    updates: Partial<EquipSlotDefinition>,
+  ) => void;
+  removeEquipSlot: (index: number) => void;
+  updateDefaultCapacity: (value: number | undefined) => void;
   updateItemTemplate: (index: number, updates: Partial<ItemTemplate>) => void;
   addItemTemplate: () => void;
   removeItemTemplate: (index: number) => void;
@@ -727,6 +738,79 @@ function normalizeTalent(value: unknown, index: number): TalentConfig {
   };
 }
 
+function toItemCategory(value: unknown): ItemCategory | undefined {
+  return value === "weapon" ||
+    value === "armor" ||
+    value === "accessory" ||
+    value === "consumable" ||
+    value === "material" ||
+    value === "quest" ||
+    value === "misc"
+    ? value
+    : undefined;
+}
+
+function normalizeEquipSlotDefinition(
+  value: unknown,
+  index: number,
+): EquipSlotDefinition {
+  const record = isRecord(value) ? value : {};
+  const allowedCategories = Array.isArray(record.allowedCategories)
+    ? Array.from(
+        new Set(
+          record.allowedCategories
+            .map((item) => toItemCategory(item))
+            .filter((item): item is ItemCategory => item !== undefined),
+        ),
+      )
+    : [];
+  const maxCount = toOptionalPositiveInteger(record.maxCount);
+
+  return {
+    id: toRequiredString(record.id, `equip_slot_${index + 1}`),
+    label: toRequiredString(record.label, `槽位 ${index + 1}`),
+    ...(allowedCategories.length > 0 ? { allowedCategories } : {}),
+    ...(maxCount === undefined ? {} : { maxCount }),
+  };
+}
+
+function normalizeInventoryRules(
+  value: unknown,
+): InventoryRulesConfig | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const defaultCapacity = toOptionalPositiveInteger(value.defaultCapacity);
+  const equipSlotDefinitions = Array.isArray(value.equipSlotDefinitions)
+    ? value.equipSlotDefinitions.map((item, index) =>
+        normalizeEquipSlotDefinition(item, index),
+      )
+    : [];
+
+  if (defaultCapacity === undefined && equipSlotDefinitions.length === 0) {
+    return undefined;
+  }
+
+  return {
+    ...(defaultCapacity === undefined ? {} : { defaultCapacity }),
+    ...(equipSlotDefinitions.length > 0 ? { equipSlotDefinitions } : {}),
+  };
+}
+
+function getUniqueEquipSlotId(rules: WorldConfig): string {
+  const existingIds = new Set(
+    (rules.inventoryRules?.equipSlotDefinitions ?? []).map((item) => item.id),
+  );
+  let index = (rules.inventoryRules?.equipSlotDefinitions?.length ?? 0) + 1;
+
+  while (existingIds.has(`equip_slot_${index}`)) {
+    index += 1;
+  }
+
+  return `equip_slot_${index}`;
+}
+
 function normalizeItemTemplate(value: unknown, index: number): ItemTemplate {
   const record = isRecord(value) ? value : {};
   const category = toOptionalString(record.category);
@@ -836,7 +920,9 @@ function normalizeSkillTemplate(value: unknown, index: number): SkillTemplate {
           evolvesInto: {
             templateId: evolvesIntoTemplateId,
             name: evolvesIntoName,
-            ...(evolvesIntoCondition ? { condition: evolvesIntoCondition } : {}),
+            ...(evolvesIntoCondition
+              ? { condition: evolvesIntoCondition }
+              : {}),
           },
         }
       : {}),
@@ -907,11 +993,19 @@ function normalizeWorldRules(
       ? rules.talents.map((item, index) => normalizeTalent(item, index))
       : [],
     talentRules: normalizeTalentRules(rules.talentRules),
+    inventoryRules:
+      rules.inventoryRules === undefined
+        ? cloneValue(DEFAULT_WORLD_CONFIG.inventoryRules)
+        : normalizeInventoryRules(rules.inventoryRules),
     itemTemplates: Array.isArray(rules.itemTemplates)
-      ? rules.itemTemplates.map((item, index) => normalizeItemTemplate(item, index))
+      ? rules.itemTemplates.map((item, index) =>
+          normalizeItemTemplate(item, index),
+        )
       : [],
     skillTemplates: Array.isArray(rules.skillTemplates)
-      ? rules.skillTemplates.map((item, index) => normalizeSkillTemplate(item, index))
+      ? rules.skillTemplates.map((item, index) =>
+          normalizeSkillTemplate(item, index),
+        )
       : [],
   };
 }
@@ -947,6 +1041,7 @@ function getRawRulesEditorPayload(
   | EditableRulesConditionsSnapshot
   | EditableRulesDimensionsSnapshot
   | EditableRulesTalentsSnapshot
+  | EditableRulesInventoryRulesSnapshot
   | EditableRulesItemTemplatesSnapshot
   | EditableRulesSkillTemplatesSnapshot {
   switch (scope) {
@@ -979,6 +1074,10 @@ function getRawRulesEditorPayload(
         ...(rules.talentRules
           ? { talentRules: cloneValue(rules.talentRules) }
           : {}),
+      };
+    case "inventoryRules":
+      return {
+        inventoryRules: cloneValue(rules.inventoryRules ?? {}),
       };
     case "itemTemplates":
       return {
@@ -1079,6 +1178,14 @@ function applyRawRulesEditorPayload(
         normalizeTalent(item, index),
       );
       nextRules.talentRules = normalizeTalentRules(parsed.talentRules);
+      break;
+
+    case "inventoryRules":
+      if (!isRecord(parsed.inventoryRules)) {
+        throw new Error("装备系统分区必须包含 inventoryRules 对象");
+      }
+
+      nextRules.inventoryRules = normalizeInventoryRules(parsed.inventoryRules);
       break;
 
     case "itemTemplates":
@@ -2509,6 +2616,92 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     [updateDraft],
   );
 
+  const updateDefaultCapacity = useCallback(
+    (value: number | undefined) => {
+      updateDraft((current) => {
+        current.rules.inventoryRules = normalizeInventoryRules({
+          ...(current.rules.inventoryRules ?? {}),
+          defaultCapacity: value,
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const addEquipSlot = useCallback(() => {
+    updateDraft((current) => {
+      const equipSlotDefinitions =
+        current.rules.inventoryRules?.equipSlotDefinitions ?? [];
+      current.rules.inventoryRules = normalizeInventoryRules({
+        ...(current.rules.inventoryRules ?? {}),
+        equipSlotDefinitions: [
+          ...equipSlotDefinitions,
+          normalizeEquipSlotDefinition(
+            {
+              id: getUniqueEquipSlotId(current.rules),
+              label: `槽位 ${equipSlotDefinitions.length + 1}`,
+              maxCount: 1,
+            },
+            equipSlotDefinitions.length,
+          ),
+        ],
+      });
+      return current;
+    });
+  }, [updateDraft]);
+
+  const updateEquipSlot = useCallback(
+    (index: number, updates: Partial<EquipSlotDefinition>) => {
+      updateDraft((current) => {
+        const equipSlotDefinitions =
+          current.rules.inventoryRules?.equipSlotDefinitions ?? [];
+        const target = equipSlotDefinitions[index];
+        if (!target) {
+          return current;
+        }
+
+        current.rules.inventoryRules = normalizeInventoryRules({
+          ...(current.rules.inventoryRules ?? {}),
+          equipSlotDefinitions: equipSlotDefinitions.map((item, itemIndex) =>
+            itemIndex === index
+              ? normalizeEquipSlotDefinition(
+                  {
+                    ...item,
+                    ...updates,
+                  },
+                  index,
+                )
+              : item,
+          ),
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const removeEquipSlot = useCallback(
+    (index: number) => {
+      updateDraft((current) => {
+        const equipSlotDefinitions =
+          current.rules.inventoryRules?.equipSlotDefinitions ?? [];
+        if (!equipSlotDefinitions[index]) {
+          return current;
+        }
+
+        current.rules.inventoryRules = normalizeInventoryRules({
+          ...(current.rules.inventoryRules ?? {}),
+          equipSlotDefinitions: equipSlotDefinitions.filter(
+            (_, itemIndex) => itemIndex !== index,
+          ),
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
   const updateItemTemplate = useCallback(
     (index: number, updates: Partial<ItemTemplate>) => {
       updateDraft((current) => {
@@ -2687,6 +2880,10 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     updateTalent,
     addTalent,
     removeTalent,
+    addEquipSlot,
+    updateEquipSlot,
+    removeEquipSlot,
+    updateDefaultCapacity,
     updateItemTemplate,
     addItemTemplate,
     removeItemTemplate,

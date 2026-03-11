@@ -54,6 +54,8 @@ function getRawRulesApplySuccessMessage(scope: WorldRulesEditorScope): string {
       return "角色维度分区规则 JSON 已同步到当前草稿";
     case "talents":
       return "天赋分区规则 JSON 已同步到当前草稿";
+    case "inventoryRules":
+      return "装备系统分区规则 JSON 已同步到当前草稿";
     case "itemTemplates":
       return "物品模板分区规则 JSON 已同步到当前草稿";
     case "skillTemplates":
@@ -243,6 +245,10 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
         onUpdateTalent={workspace.updateTalent}
         onAddTalent={workspace.addTalent}
         onRemoveTalent={workspace.removeTalent}
+        onAddEquipSlot={workspace.addEquipSlot}
+        onUpdateEquipSlot={workspace.updateEquipSlot}
+        onRemoveEquipSlot={workspace.removeEquipSlot}
+        onUpdateDefaultCapacity={workspace.updateDefaultCapacity}
         onUpdateItemTemplate={workspace.updateItemTemplate}
         onAddItemTemplate={workspace.addItemTemplate}
         onRemoveItemTemplate={workspace.removeItemTemplate}

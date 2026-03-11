@@ -26,7 +26,7 @@ import {
   Textarea,
   Toggle,
 } from "@/components/ui";
-import type { ItemTemplate } from "@/domain/entities/item";
+import type { ItemCategory, ItemTemplate } from "@/domain/entities/item";
 import type { SkillTemplate } from "@/domain/entities/skill";
 import type { PassiveModifier } from "@/domain/types/rule-script";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,8 @@ import type {
   ConditionConfig,
   DerivedStatConfig,
   DimensionOption,
+  EquipSlotDefinition,
+  InventoryRulesConfig,
   PointBuyRules,
   PrimaryAttributeConfig,
   TalentConfig,
@@ -66,16 +68,6 @@ const ITEM_CATEGORY_OPTIONS = [
   { value: "misc", label: "杂项" },
 ] as const;
 
-const EQUIP_SLOT_OPTIONS = [
-  { value: "head", label: "头部" },
-  { value: "body", label: "身体" },
-  { value: "hands", label: "手部" },
-  { value: "feet", label: "脚部" },
-  { value: "accessory", label: "饰品" },
-  { value: "weapon", label: "武器" },
-  { value: "offhand", label: "副手" },
-] as const;
-
 const SKILL_CATEGORY_OPTIONS = [
   { value: "combat", label: "战斗" },
   { value: "magic", label: "魔法" },
@@ -100,6 +92,7 @@ const EMPTY_DIMENSIONS: CharacterDimension[] = [];
 const EMPTY_TALENTS: TalentConfig[] = [];
 const EMPTY_CONDITIONS: ConditionConfig[] = [];
 const EMPTY_ITEM_TEMPLATES: ItemTemplate[] = [];
+const EMPTY_EQUIP_SLOT_DEFINITIONS: EquipSlotDefinition[] = [];
 const EMPTY_SKILL_TEMPLATES: SkillTemplate[] = [];
 const EMPTY_PASSIVE_MODIFIERS: PassiveModifier[] = [];
 const EMPTY_NUMERIC_RECORD: Record<string, number> = {};
@@ -149,6 +142,7 @@ type WorldEditorSectionId =
   | "conditions"
   | "dimensions"
   | "talents"
+  | "inventoryRules"
   | "itemTemplates"
   | "skillTemplates";
 
@@ -156,7 +150,7 @@ type WorldEditorSectionDefinition = {
   id: WorldEditorSectionId;
   title: string;
   description: string;
-  icon?: LucideIcon;
+  icon?: LucideIcon | string;
 };
 
 const WORLD_EDITOR_SECTIONS: WorldEditorSectionDefinition[] = [
@@ -199,6 +193,12 @@ const WORLD_EDITOR_SECTIONS: WorldEditorSectionDefinition[] = [
     id: "talents",
     title: "天赋",
     description: "维护可选天赋与基础前置规则。",
+  },
+  {
+    id: "inventoryRules",
+    title: "装备系统",
+    description: "配置装备槽位与背包规则",
+    icon: "⚔️",
   },
   {
     id: "itemTemplates",
@@ -263,6 +263,13 @@ const SCOPED_RAW_RULES_EDITOR_META: Record<
     title: "高级模式 · 天赋规则编辑",
     description:
       "仅展示并回写 talents / talentRules 子树；前置属性条件与选择规则已结构化，复杂 modifiers 继续通过 JSON 兜底。",
+    footnote:
+      "只影响当前分区对应的规则子树，其余规则分支、基础信息与叙事启动保持不变。",
+  },
+  inventoryRules: {
+    title: "高级模式 · 装备系统规则编辑",
+    description:
+      "仅展示并回写 inventoryRules 子树；支持直接维护 defaultCapacity 与 equipSlotDefinitions。",
     footnote:
       "只影响当前分区对应的规则子树，其余规则分支、基础信息与叙事启动保持不变。",
   },
@@ -371,6 +378,13 @@ interface WorldEditorPaneProps {
   onUpdateTalent: (index: number, updates: Partial<TalentConfig>) => void;
   onAddTalent: () => void;
   onRemoveTalent: (index: number) => void;
+  onAddEquipSlot: () => void;
+  onUpdateEquipSlot: (
+    index: number,
+    updates: Partial<EquipSlotDefinition>,
+  ) => void;
+  onRemoveEquipSlot: (index: number) => void;
+  onUpdateDefaultCapacity: (value: number | undefined) => void;
   onUpdateItemTemplate: (index: number, updates: Partial<ItemTemplate>) => void;
   onAddItemTemplate: () => void;
   onRemoveItemTemplate: (index: number) => void;
@@ -425,6 +439,10 @@ export function WorldEditorPane({
   onUpdateTalent,
   onAddTalent,
   onRemoveTalent,
+  onAddEquipSlot,
+  onUpdateEquipSlot,
+  onRemoveEquipSlot,
+  onUpdateDefaultCapacity,
   onUpdateItemTemplate,
   onAddItemTemplate,
   onRemoveItemTemplate,
@@ -441,6 +459,7 @@ export function WorldEditorPane({
   const [activeConditionIndex, setActiveConditionIndex] = useState(0);
   const [activeTalentIndex, setActiveTalentIndex] = useState(0);
   const [activeDimensionIndex, setActiveDimensionIndex] = useState(0);
+  const [activeEquipSlotIndex, setActiveEquipSlotIndex] = useState(0);
   const [activeItemTemplateIndex, setActiveItemTemplateIndex] = useState(0);
   const [activeSkillTemplateIndex, setActiveSkillTemplateIndex] = useState(0);
   const attributeDetailRef = useRef<HTMLDivElement>(null);
@@ -451,6 +470,8 @@ export function WorldEditorPane({
   const conditionNameInputRef = useRef<HTMLInputElement>(null);
   const talentDetailRef = useRef<HTMLDivElement>(null);
   const talentNameInputRef = useRef<HTMLInputElement>(null);
+  const equipSlotDetailRef = useRef<HTMLDivElement>(null);
+  const equipSlotIdInputRef = useRef<HTMLInputElement>(null);
   const itemTemplateDetailRef = useRef<HTMLDivElement>(null);
   const itemTemplateNameInputRef = useRef<HTMLInputElement>(null);
   const skillTemplateDetailRef = useRef<HTMLDivElement>(null);
@@ -463,6 +484,11 @@ export function WorldEditorPane({
   const conditions = world?.rules.conditions ?? EMPTY_CONDITIONS;
   const dimensions = world?.rules.dimensions ?? EMPTY_DIMENSIONS;
   const talents = world?.rules.talents ?? EMPTY_TALENTS;
+  const inventoryRules: InventoryRulesConfig | undefined =
+    world?.rules.inventoryRules;
+  const defaultCapacity = inventoryRules?.defaultCapacity;
+  const equipSlotDefinitions =
+    inventoryRules?.equipSlotDefinitions ?? EMPTY_EQUIP_SLOT_DEFINITIONS;
   const itemTemplates = world?.rules.itemTemplates ?? EMPTY_ITEM_TEMPLATES;
   const skillTemplates = world?.rules.skillTemplates ?? EMPTY_SKILL_TEMPLATES;
   const talentRules = world?.rules.talentRules;
@@ -502,6 +528,10 @@ export function WorldEditorPane({
 
   useEffect(() => {
     setActiveDimensionIndex(0);
+  }, [world?.id]);
+
+  useEffect(() => {
+    setActiveEquipSlotIndex(0);
   }, [world?.id]);
 
   useEffect(() => {
@@ -566,6 +596,14 @@ export function WorldEditorPane({
   const activeDimension =
     resolvedActiveDimensionIndex >= 0
       ? dimensions[resolvedActiveDimensionIndex]
+      : null;
+  const resolvedActiveEquipSlotIndex =
+    equipSlotDefinitions.length === 0
+      ? -1
+      : Math.min(activeEquipSlotIndex, equipSlotDefinitions.length - 1);
+  const activeEquipSlot =
+    resolvedActiveEquipSlotIndex >= 0
+      ? equipSlotDefinitions[resolvedActiveEquipSlotIndex]
       : null;
   const resolvedActiveItemTemplateIndex =
     itemTemplates.length === 0
@@ -719,6 +757,44 @@ export function WorldEditorPane({
       setActiveDimensionIndex(dimensions.length - 1);
     }
   }, [activeDimensionIndex, dimensions.length]);
+
+  useEffect(() => {
+    if (equipSlotDefinitions.length === 0) {
+      if (activeEquipSlotIndex !== 0) {
+        setActiveEquipSlotIndex(0);
+      }
+      return;
+    }
+
+    if (activeEquipSlotIndex > equipSlotDefinitions.length - 1) {
+      setActiveEquipSlotIndex(equipSlotDefinitions.length - 1);
+    }
+  }, [activeEquipSlotIndex, equipSlotDefinitions.length]);
+
+  useEffect(() => {
+    if (
+      activeSection !== "inventoryRules" ||
+      resolvedActiveEquipSlotIndex < 0
+    ) {
+      return;
+    }
+
+    const animationFrameId = window.requestAnimationFrame(() => {
+      equipSlotDetailRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      });
+      equipSlotIdInputRef.current?.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrameId);
+  }, [
+    activeEquipSlotIndex,
+    activeSection,
+    equipSlotDefinitions.length,
+    resolvedActiveEquipSlotIndex,
+  ]);
 
   useEffect(() => {
     if (itemTemplates.length === 0) {
@@ -900,6 +976,30 @@ export function WorldEditorPane({
 
       if (currentIndex === dimensionIndex) {
         return Math.max(dimensionIndex - 1, 0);
+      }
+
+      return currentIndex;
+    });
+  };
+
+  const handleAddEquipSlot = () => {
+    onAddEquipSlot();
+    setActiveEquipSlotIndex(equipSlotDefinitions.length);
+  };
+
+  const handleRemoveEquipSlot = (equipSlotIndex: number) => {
+    onRemoveEquipSlot(equipSlotIndex);
+    setActiveEquipSlotIndex((currentIndex) => {
+      if (equipSlotDefinitions.length <= 1) {
+        return 0;
+      }
+
+      if (currentIndex > equipSlotIndex) {
+        return currentIndex - 1;
+      }
+
+      if (currentIndex === equipSlotIndex) {
+        return Math.min(equipSlotIndex, equipSlotDefinitions.length - 2);
       }
 
       return currentIndex;
@@ -2278,6 +2378,369 @@ export function WorldEditorPane({
       );
       break;
 
+    case "inventoryRules":
+      sectionContent = (
+        <FormSection
+          title="装备系统"
+          description="配置默认背包容量与装备槽位定义；物品模板的装备槽位下拉会实时读取这里的配置。"
+          action={
+            <div className="flex flex-wrap gap-2">
+              <SectionRulesEditorButton
+                scope="inventoryRules"
+                active={
+                  rawRulesEditorOpen && rawRulesEditorScope === "inventoryRules"
+                }
+                onOpen={onOpenRawRulesEditor}
+              />
+              <Button variant="outline" size="sm" onClick={handleAddEquipSlot}>
+                <Plus className="mr-1 h-4 w-4" />
+                添加槽位
+              </Button>
+            </div>
+          }
+        >
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
+            <Field label="默认背包容量">
+              <Input
+                type="number"
+                value={defaultCapacity ?? ""}
+                onChange={(event) =>
+                  onUpdateDefaultCapacity(
+                    event.target.value.trim() === ""
+                      ? undefined
+                      : Number(event.target.value),
+                  )
+                }
+                placeholder="20"
+              />
+            </Field>
+            <Card variant="outlined" className="p-4">
+              <p
+                className="text-sm font-medium"
+                style={{ color: color("textPrimary") }}
+              >
+                槽位 ID 与物品模板联动
+              </p>
+              <p
+                className="mt-1 text-xs leading-5"
+                style={{ color: colorAlpha("textMuted", 0.72) }}
+              >
+                物品模板中的 `equipSlot` 会直接引用这里的槽位 ID。修改既有槽位
+                ID 后，旧模板不会自动迁移，请谨慎操作。
+              </p>
+            </Card>
+          </div>
+
+          {equipSlotDefinitions.length > 0 ? (
+            <div className="grid gap-3 xl:h-168 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+              <Panel
+                variant="outlined"
+                className={MASTER_DETAIL_LIST_PANEL_CLASS}
+              >
+                <div
+                  className={MASTER_DETAIL_LIST_CONTENT_CLASS}
+                  role="tablist"
+                  aria-label="装备槽位切换"
+                >
+                  {equipSlotDefinitions.map((slotDefinition, index) => {
+                    const isActive = resolvedActiveEquipSlotIndex === index;
+                    const slotTitle =
+                      slotDefinition.label.trim() ||
+                      slotDefinition.id.trim() ||
+                      `未命名槽位 ${index + 1}`;
+
+                    return (
+                      <button
+                        key={`${slotDefinition.id || "equip-slot"}-${index}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => setActiveEquipSlotIndex(index)}
+                        className="w-full rounded-xl border px-3 py-3 text-left transition-all duration-150"
+                        style={{
+                          borderColor: colorAlpha(
+                            isActive ? "primary" : "border",
+                            isActive ? 0.42 : 0.28,
+                          ),
+                          background: colorAlpha(
+                            isActive ? "primary" : "bgCard",
+                            isActive ? 0.12 : 0.16,
+                          ),
+                          boxShadow: isActive
+                            ? `0 0 18px ${colorAlpha("primary", 0.12)}`
+                            : "none",
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className="wrap-break-word text-sm font-medium leading-5"
+                              style={{
+                                color: isActive
+                                  ? color("primary")
+                                  : color("textPrimary"),
+                              }}
+                              title={slotTitle}
+                            >
+                              {slotTitle}
+                            </p>
+                            <p
+                              className="mt-1 text-[11px]"
+                              style={{ color: colorAlpha("textMuted", 0.74) }}
+                            >
+                              ID：{slotDefinition.id || "未设置"}
+                            </p>
+                          </div>
+                          <span
+                            className="shrink-0 rounded-full border px-2 py-0.5 text-[11px]"
+                            style={{
+                              borderColor: colorAlpha(
+                                isActive ? "primary" : "border",
+                                isActive ? 0.36 : 0.28,
+                              ),
+                              color: isActive
+                                ? color("primary")
+                                : colorAlpha("textMuted", 0.76),
+                            }}
+                          >
+                            {isActive ? "当前" : `#${index + 1}`}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <DimensionMetaBadge
+                            label="允许类别"
+                            value={getItemCategoryListLabel(
+                              slotDefinition.allowedCategories,
+                            )}
+                            accent={
+                              (slotDefinition.allowedCategories?.length ?? 0) >
+                              0
+                            }
+                          />
+                          <DimensionMetaBadge
+                            label="同槽位上限"
+                            value={String(slotDefinition.maxCount ?? 1)}
+                            accent={(slotDefinition.maxCount ?? 1) > 1}
+                          />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Panel>
+
+              {activeEquipSlot ? (
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    ref={equipSlotDetailRef}
+                    key={`equip-slot-${resolvedActiveEquipSlotIndex}`}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.14 }}
+                    className="space-y-3 xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-1"
+                  >
+                    <Panel variant="outlined" className="p-3 sm:p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="text-xs font-medium uppercase tracking-[0.2em]"
+                            style={{ color: colorAlpha("primary", 0.82) }}
+                          >
+                            当前详情
+                          </p>
+                          <h5
+                            className="mt-2 wrap-break-word text-sm font-semibold leading-6"
+                            style={{ color: color("textPrimary") }}
+                            title={
+                              activeEquipSlot.label.trim() ||
+                              activeEquipSlot.id.trim() ||
+                              `未命名槽位 ${resolvedActiveEquipSlotIndex + 1}`
+                            }
+                          >
+                            {activeEquipSlot.label.trim() ||
+                              activeEquipSlot.id.trim() ||
+                              `未命名槽位 ${resolvedActiveEquipSlotIndex + 1}`}
+                          </h5>
+                          <p
+                            className="mt-2 text-xs leading-5"
+                            style={{ color: colorAlpha("textMuted", 0.74) }}
+                          >
+                            {activeEquipSlot.allowedCategories?.length
+                              ? `当前限制：${getItemCategoryListLabel(activeEquipSlot.allowedCategories)}`
+                              : "当前未限制装备类别，所有物品分类都可声明默认槽位。"}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <DimensionMetaBadge
+                            label="ID"
+                            value={activeEquipSlot.id || "未设置"}
+                            mono
+                          />
+                          <DimensionMetaBadge
+                            label="同槽位上限"
+                            value={String(activeEquipSlot.maxCount ?? 1)}
+                            accent={(activeEquipSlot.maxCount ?? 1) > 1}
+                          />
+                        </div>
+                      </div>
+                    </Panel>
+
+                    <Card variant="outlined" className="space-y-4 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p
+                            className="text-sm font-semibold"
+                            style={{ color: color("textPrimary") }}
+                          >
+                            {activeEquipSlot.label || "未命名槽位"}
+                          </p>
+                          <p
+                            className="mt-1 text-xs"
+                            style={{ color: colorAlpha("textMuted", 0.72) }}
+                          >
+                            建议使用 snake_case，例如 `main_hand` /
+                            `accessory_1`
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            handleRemoveEquipSlot(resolvedActiveEquipSlotIndex)
+                          }
+                        >
+                          <Trash2 className="mr-1 h-4 w-4" />
+                          删除槽位
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <Field label="槽位 ID（谨慎修改）">
+                          <Input
+                            ref={equipSlotIdInputRef}
+                            value={activeEquipSlot.id}
+                            onChange={(event) =>
+                              onUpdateEquipSlot(resolvedActiveEquipSlotIndex, {
+                                id: event.target.value,
+                              })
+                            }
+                            placeholder="main_hand"
+                          />
+                        </Field>
+                        <Field label="显示名称">
+                          <Input
+                            value={activeEquipSlot.label}
+                            onChange={(event) =>
+                              onUpdateEquipSlot(resolvedActiveEquipSlotIndex, {
+                                label: event.target.value,
+                              })
+                            }
+                            placeholder="主手"
+                          />
+                        </Field>
+                      </div>
+
+                      <Field label="允许物品类别">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap gap-2">
+                            {ITEM_CATEGORY_OPTIONS.map((option) => {
+                              const category = option.value as ItemCategory;
+                              const selected =
+                                activeEquipSlot.allowedCategories?.includes(
+                                  category,
+                                ) ?? false;
+
+                              return (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  aria-pressed={selected}
+                                  onClick={() => {
+                                    const currentCategories =
+                                      activeEquipSlot.allowedCategories ?? [];
+                                    const nextCategories = selected
+                                      ? currentCategories.filter(
+                                          (item) => item !== category,
+                                        )
+                                      : [...currentCategories, category];
+                                    onUpdateEquipSlot(
+                                      resolvedActiveEquipSlotIndex,
+                                      {
+                                        allowedCategories:
+                                          nextCategories.length > 0
+                                            ? nextCategories
+                                            : undefined,
+                                      },
+                                    );
+                                  }}
+                                  className="rounded-full border px-3 py-1.5 text-xs font-medium transition-all"
+                                  style={{
+                                    color: selected
+                                      ? color("primary")
+                                      : color("textSecondary"),
+                                    background: selected
+                                      ? colorAlpha("primary", 0.12)
+                                      : colorAlpha("bgCard", 0.24),
+                                    borderColor: colorAlpha(
+                                      selected ? "primary" : "border",
+                                      selected ? 0.42 : 0.28,
+                                    ),
+                                    boxShadow: selected
+                                      ? `0 0 16px ${colorAlpha("primary", 0.12)}`
+                                      : "none",
+                                  }}
+                                >
+                                  {option.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <p
+                            className="text-xs leading-5"
+                            style={{ color: colorAlpha("textMuted", 0.72) }}
+                          >
+                            不选择任何类别时，表示该槽位不限制可装备的物品分类。
+                          </p>
+                        </div>
+                      </Field>
+
+                      <Field label="同槽位最大数量">
+                        <div className="space-y-2">
+                          <Input
+                            type="number"
+                            value={activeEquipSlot.maxCount ?? ""}
+                            onChange={(event) =>
+                              onUpdateEquipSlot(resolvedActiveEquipSlotIndex, {
+                                maxCount:
+                                  event.target.value.trim() === ""
+                                    ? undefined
+                                    : Number(event.target.value),
+                              })
+                            }
+                            placeholder="1"
+                          />
+                          <p
+                            className="text-xs leading-5"
+                            style={{ color: colorAlpha("textMuted", 0.72) }}
+                          >
+                            留空时按默认值 1
+                            处理；适合双饰品、芯片槽等一格多件的世界设定。
+                          </p>
+                        </div>
+                      </Field>
+                    </Card>
+                  </motion.div>
+                </AnimatePresence>
+              ) : null}
+            </div>
+          ) : (
+            <EmptySectionHint message="当前还没有装备槽位；添加后，物品模板中的装备槽位下拉会立即同步。" />
+          )}
+        </FormSection>
+      );
+      break;
+
     case "itemTemplates":
       sectionContent = (
         <FormSection
@@ -2324,7 +2787,10 @@ export function WorldEditorPane({
                       ? `最多 ${itemTemplate.maxStack ?? "未设"}`
                       : "单件";
                     const usageLabel = itemTemplate.equipSlot
-                      ? getEquipSlotLabel(itemTemplate.equipSlot)
+                      ? getEquipSlotLabel(
+                          itemTemplate.equipSlot,
+                          equipSlotDefinitions,
+                        )
                       : itemTemplate.consumable
                         ? "消耗使用"
                         : "未设置";
@@ -2415,7 +2881,8 @@ export function WorldEditorPane({
                             overflow: "hidden",
                           }}
                           title={
-                            itemTemplate.description || "当前物品模板尚未填写描述"
+                            itemTemplate.description ||
+                            "当前物品模板尚未填写描述"
                           }
                         >
                           {itemTemplate.description ||
@@ -2476,7 +2943,9 @@ export function WorldEditorPane({
                           />
                           <DimensionMetaBadge
                             label="分类"
-                            value={getItemCategoryLabel(activeItemTemplate.category)}
+                            value={getItemCategoryLabel(
+                              activeItemTemplate.category,
+                            )}
                           />
                         </div>
                       </div>
@@ -2484,6 +2953,7 @@ export function WorldEditorPane({
 
                     <ItemTemplateCardEditor
                       itemTemplate={activeItemTemplate}
+                      equipSlotDefinitions={equipSlotDefinitions}
                       nameInputRef={itemTemplateNameInputRef}
                       onChange={(updates) =>
                         onUpdateItemTemplate(
@@ -2616,7 +3086,9 @@ export function WorldEditorPane({
                         <div className="mt-2 flex flex-wrap gap-2">
                           <DimensionMetaBadge
                             label="分类"
-                            value={getSkillCategoryLabel(skillTemplate.category)}
+                            value={getSkillCategoryLabel(
+                              skillTemplate.category,
+                            )}
                           />
                           <DimensionMetaBadge
                             label="最大等级"
@@ -2642,7 +3114,8 @@ export function WorldEditorPane({
                             overflow: "hidden",
                           }}
                           title={
-                            skillTemplate.description || "当前技能模板尚未填写描述"
+                            skillTemplate.description ||
+                            "当前技能模板尚未填写描述"
                           }
                         >
                           {skillTemplate.description ||
@@ -2703,7 +3176,9 @@ export function WorldEditorPane({
                           />
                           <DimensionMetaBadge
                             label="分类"
-                            value={getSkillCategoryLabel(activeSkillTemplate.category)}
+                            value={getSkillCategoryLabel(
+                              activeSkillTemplate.category,
+                            )}
                           />
                         </div>
                       </div>
@@ -2933,6 +3408,23 @@ function getSectionSummary(
         : "当前没有可选天赋";
     }
 
+    case "inventoryRules": {
+      const equipSlotCount =
+        world.rules.inventoryRules?.equipSlotDefinitions?.length ?? 0;
+      const currentDefaultCapacity =
+        world.rules.inventoryRules?.defaultCapacity;
+
+      if (equipSlotCount === 0) {
+        return currentDefaultCapacity === undefined
+          ? "当前未配置装备系统"
+          : `未配置槽位 · 默认容量 ${currentDefaultCapacity}`;
+      }
+
+      return currentDefaultCapacity === undefined
+        ? `${equipSlotCount} 个装备槽位`
+        : `${equipSlotCount} 个装备槽位 · 默认容量 ${currentDefaultCapacity}`;
+    }
+
     case "itemTemplates": {
       const itemTemplateCount = world.rules.itemTemplates?.length ?? 0;
       const equippableCount = (world.rules.itemTemplates ?? []).filter((item) =>
@@ -2975,6 +3467,8 @@ function EditorOverviewPanel({
 }) {
   const dimensionCount = world.rules.dimensions?.length ?? 0;
   const talentCount = world.rules.talents?.length ?? 0;
+  const equipSlotCount =
+    world.rules.inventoryRules?.equipSlotDefinitions?.length ?? 0;
   const itemTemplateCount = world.rules.itemTemplates?.length ?? 0;
   const skillTemplateCount = world.rules.skillTemplates?.length ?? 0;
   const attributeCount = world.rules.primaryAttributes.length;
@@ -3012,6 +3506,7 @@ function EditorOverviewPanel({
         <SummaryMetric label="状态" value={String(conditionCount)} />
         <SummaryMetric label="维度" value={String(dimensionCount)} />
         <SummaryMetric label="天赋" value={String(talentCount)} />
+        <SummaryMetric label="装备槽位" value={String(equipSlotCount)} />
         <SummaryMetric label="物品模板" value={String(itemTemplateCount)} />
         <SummaryMetric label="技能模板" value={String(skillTemplateCount)} />
       </div>
@@ -5721,7 +6216,8 @@ function buildManagedTemplateNameUpdate(
   const nextGeneratedId = buildManagedTemplateId(nextName);
   return {
     name: nextName,
-    ...(nextGeneratedId && shouldSyncManagedTemplateId(currentId, currentName, kind)
+    ...(nextGeneratedId &&
+    shouldSyncManagedTemplateId(currentId, currentName, kind)
       ? { id: nextGeneratedId }
       : {}),
   };
@@ -5742,6 +6238,14 @@ function getItemCategoryLabel(category: ItemTemplate["category"]): string {
   );
 }
 
+function getItemCategoryListLabel(
+  categories?: readonly ItemCategory[],
+): string {
+  return categories && categories.length > 0
+    ? categories.map((category) => getItemCategoryLabel(category)).join(" / ")
+    : "不限类别";
+}
+
 function getSkillCategoryLabel(category: SkillTemplate["category"]): string {
   return (
     SKILL_CATEGORY_OPTIONS.find((option) => option.value === category)?.label ??
@@ -5749,8 +6253,13 @@ function getSkillCategoryLabel(category: SkillTemplate["category"]): string {
   );
 }
 
-function getEquipSlotLabel(slot: string): string {
-  return EQUIP_SLOT_OPTIONS.find((option) => option.value === slot)?.label ?? slot;
+function getEquipSlotLabel(
+  slot: string,
+  equipSlotDefinitions: readonly EquipSlotDefinition[],
+): string {
+  return (
+    equipSlotDefinitions.find((option) => option.id === slot)?.label ?? slot
+  );
 }
 
 function isEquippableItemCategory(category: ItemTemplate["category"]): boolean {
@@ -5759,17 +6268,42 @@ function isEquippableItemCategory(category: ItemTemplate["category"]): boolean {
 
 function ItemTemplateCardEditor({
   itemTemplate,
+  equipSlotDefinitions,
   nameInputRef,
   onChange,
   onRemove,
 }: {
   itemTemplate: ItemTemplate;
+  equipSlotDefinitions: readonly EquipSlotDefinition[];
   nameInputRef?: React.RefObject<HTMLInputElement | null>;
   onChange: (updates: Partial<ItemTemplate>) => void;
   onRemove: () => void;
 }) {
   const isStackable = itemTemplate.stackable ?? false;
   const isEquippable = isEquippableItemCategory(itemTemplate.category);
+  const equipSlotOptions = useMemo(() => {
+    const options = [
+      { value: "", label: "无默认槽位" },
+      ...equipSlotDefinitions.map((slotDefinition) => ({
+        value: slotDefinition.id,
+        label: slotDefinition.label,
+      })),
+    ];
+
+    if (
+      itemTemplate.equipSlot &&
+      !equipSlotDefinitions.some(
+        (slotDefinition) => slotDefinition.id === itemTemplate.equipSlot,
+      )
+    ) {
+      options.push({
+        value: itemTemplate.equipSlot,
+        label: `${itemTemplate.equipSlot}（未在装备系统中定义）`,
+      });
+    }
+
+    return options;
+  }, [equipSlotDefinitions, itemTemplate.equipSlot]);
   const displayId = resolveDisplayManagedTemplateId(
     itemTemplate.id,
     itemTemplate.name,
@@ -5894,13 +6428,7 @@ function ItemTemplateCardEditor({
               onValueChange={(value) =>
                 onChange({ equipSlot: value === "" ? undefined : value })
               }
-              options={[
-                { value: "", label: "未设置" },
-                ...EQUIP_SLOT_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                })),
-              ]}
+              options={equipSlotOptions}
             />
           </Field>
         ) : null}

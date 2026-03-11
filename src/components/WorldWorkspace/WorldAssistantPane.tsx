@@ -19,6 +19,8 @@ export function WorldAssistantPane({
 }: WorldAssistantPaneProps) {
   const dimensionCount = world?.rules.dimensions?.length ?? 0;
   const talentCount = world?.rules.talents?.length ?? 0;
+  const equipSlotCount =
+    world?.rules.inventoryRules?.equipSlotDefinitions?.length ?? 0;
   const itemTemplateCount = world?.rules.itemTemplates?.length ?? 0;
   const skillTemplateCount = world?.rules.skillTemplates?.length ?? 0;
   const attributeCount = world?.rules.primaryAttributes.length ?? 0;
@@ -55,6 +57,7 @@ export function WorldAssistantPane({
             <SummaryRow label="主要属性" value={String(attributeCount)} />
             <SummaryRow label="角色创建维度" value={String(dimensionCount)} />
             <SummaryRow label="可选天赋" value={String(talentCount)} />
+            <SummaryRow label="装备槽位" value={String(equipSlotCount)} />
             <SummaryRow label="物品模板" value={String(itemTemplateCount)} />
             <SummaryRow label="技能模板" value={String(skillTemplateCount)} />
             <SummaryRow

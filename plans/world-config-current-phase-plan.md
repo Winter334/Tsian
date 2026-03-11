@@ -256,6 +256,33 @@
 6. 世界编辑工作台已经补齐物品模板与技能模板的结构化编辑分区，并同时提供列表、详情与分区级高级编辑能力
 7. 当前阶段四类核心模板的编辑覆盖已经齐备，可在同一工作台内完成完整维护
 
+### 装备系统配置编辑（已完成）
+
+- ✅ 新增 `inventoryRules` 编辑分区
+  - 默认背包容量编辑
+  - 装备槽位列表的增删改操作
+  - 每个槽位支持编辑 id / label / allowedCategories / maxCount
+  - 分区 JSON 高级编辑支持
+- ✅ 修复物品模板编辑器的硬编码槽位下拉 BUG
+  - 删除静态 `EQUIP_SLOT_OPTIONS` 常量
+  - 改为动态读取当前世界 `equipSlotDefinitions`
+  - 确保物品模板的 `equipSlot` 字段始终与世界配置一致
+- ✅ 当前世界编辑工作台的结构化编辑完整覆盖：
+
+  | 配置区域                  | 结构化编辑 |
+  | ------------------------- | ---------- |
+  | 基础信息 (meta)           | ✅          |
+  | 叙事启动 (narrative)      | ✅          |
+  | 属性 (attributes)         | ✅          |
+  | 衍生属性 (derivedStats)   | ✅          |
+  | 判定规则 (checkRules)     | ✅          |
+  | 状态效果 (conditions)     | ✅          |
+  | 维度 (dimensions)         | ✅          |
+  | 天赋 (talents)            | ✅          |
+  | 装备系统 (inventoryRules) | ✅ 新增     |
+  | 物品模板 (itemTemplates)  | ✅          |
+  | 技能模板 (skillTemplates) | ✅          |
+
 ---
 
 ## 7. 当前阶段暂不处理但要预留接口的内容
