@@ -19,6 +19,8 @@ export function WorldAssistantPane({
 }: WorldAssistantPaneProps) {
   const dimensionCount = world?.rules.dimensions?.length ?? 0;
   const talentCount = world?.rules.talents?.length ?? 0;
+  const itemTemplateCount = world?.rules.itemTemplates?.length ?? 0;
+  const skillTemplateCount = world?.rules.skillTemplates?.length ?? 0;
   const attributeCount = world?.rules.primaryAttributes.length ?? 0;
 
   return (
@@ -53,6 +55,8 @@ export function WorldAssistantPane({
             <SummaryRow label="主要属性" value={String(attributeCount)} />
             <SummaryRow label="角色创建维度" value={String(dimensionCount)} />
             <SummaryRow label="可选天赋" value={String(talentCount)} />
+            <SummaryRow label="物品模板" value={String(itemTemplateCount)} />
+            <SummaryRow label="技能模板" value={String(skillTemplateCount)} />
             <SummaryRow
               label="叙事启动"
               value={
@@ -86,7 +90,9 @@ export function WorldAssistantPane({
                   source`
                 </li>
                 <li>叙事启动：`narrative.script / narrative.opening`</li>
-                <li>规则最小闭环：主要属性、点数分配、维度、天赋</li>
+                <li>
+                  规则最小闭环：主要属性、点数分配、维度、天赋、物品模板、技能模板
+                </li>
                 <li>复杂规则块通过原始规则编辑 JSON 兜底</li>
               </ul>
             </div>

@@ -6,10 +6,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
   CheckCircle2,
+  type LucideIcon,
+  Package,
   Plus,
   Trash2,
   WandSparkles,
   X,
+  Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -23,6 +26,8 @@ import {
   Textarea,
   Toggle,
 } from "@/components/ui";
+import type { ItemTemplate } from "@/domain/entities/item";
+import type { SkillTemplate } from "@/domain/entities/skill";
 import type { PassiveModifier } from "@/domain/types/rule-script";
 import { cn } from "@/lib/utils";
 import type {
@@ -51,6 +56,35 @@ const TALENT_CATEGORY_OPTIONS = [
   { value: "misc", label: "其他" },
 ] as const;
 
+const ITEM_CATEGORY_OPTIONS = [
+  { value: "weapon", label: "武器" },
+  { value: "armor", label: "护甲" },
+  { value: "accessory", label: "饰品" },
+  { value: "consumable", label: "消耗品" },
+  { value: "material", label: "材料" },
+  { value: "quest", label: "任务物品" },
+  { value: "misc", label: "杂项" },
+] as const;
+
+const EQUIP_SLOT_OPTIONS = [
+  { value: "head", label: "头部" },
+  { value: "body", label: "身体" },
+  { value: "hands", label: "手部" },
+  { value: "feet", label: "脚部" },
+  { value: "accessory", label: "饰品" },
+  { value: "weapon", label: "武器" },
+  { value: "offhand", label: "副手" },
+] as const;
+
+const SKILL_CATEGORY_OPTIONS = [
+  { value: "combat", label: "战斗" },
+  { value: "magic", label: "魔法" },
+  { value: "survival", label: "生存" },
+  { value: "social", label: "社交" },
+  { value: "craft", label: "制造" },
+  { value: "misc", label: "其他" },
+] as const;
+
 const CONDITION_TRIGGER_MODE_OPTIONS = [
   { value: "ai", label: "AI 管理" },
   { value: "turn_start", label: "回合开始自动触发" },
@@ -58,11 +92,15 @@ const CONDITION_TRIGGER_MODE_OPTIONS = [
   { value: "passive", label: "被动触发" },
 ] as const;
 
+const EQUIPPABLE_ITEM_CATEGORIES = new Set(["weapon", "armor", "accessory"]);
+
 const EMPTY_PRIMARY_ATTRIBUTES: PrimaryAttributeConfig[] = [];
 const EMPTY_DERIVED_STATS: DerivedStatConfig[] = [];
 const EMPTY_DIMENSIONS: CharacterDimension[] = [];
 const EMPTY_TALENTS: TalentConfig[] = [];
 const EMPTY_CONDITIONS: ConditionConfig[] = [];
+const EMPTY_ITEM_TEMPLATES: ItemTemplate[] = [];
+const EMPTY_SKILL_TEMPLATES: SkillTemplate[] = [];
 const EMPTY_PASSIVE_MODIFIERS: PassiveModifier[] = [];
 const EMPTY_NUMERIC_RECORD: Record<string, number> = {};
 
@@ -110,12 +148,15 @@ type WorldEditorSectionId =
   | "checkRules"
   | "conditions"
   | "dimensions"
-  | "talents";
+  | "talents"
+  | "itemTemplates"
+  | "skillTemplates";
 
 type WorldEditorSectionDefinition = {
   id: WorldEditorSectionId;
   title: string;
   description: string;
+  icon?: LucideIcon;
 };
 
 const WORLD_EDITOR_SECTIONS: WorldEditorSectionDefinition[] = [
@@ -158,6 +199,18 @@ const WORLD_EDITOR_SECTIONS: WorldEditorSectionDefinition[] = [
     id: "talents",
     title: "天赋",
     description: "维护可选天赋与基础前置规则。",
+  },
+  {
+    id: "itemTemplates",
+    title: "物品模板",
+    description: "维护物品模板的基础属性与效果。",
+    icon: Package,
+  },
+  {
+    id: "skillTemplates",
+    title: "技能模板",
+    description: "维护技能模板的基础属性、消耗与前置条件。",
+    icon: Zap,
   },
 ];
 
@@ -210,6 +263,20 @@ const SCOPED_RAW_RULES_EDITOR_META: Record<
     title: "高级模式 · 天赋规则编辑",
     description:
       "仅展示并回写 talents / talentRules 子树；前置属性条件与选择规则已结构化，复杂 modifiers 继续通过 JSON 兜底。",
+    footnote:
+      "只影响当前分区对应的规则子树，其余规则分支、基础信息与叙事启动保持不变。",
+  },
+  itemTemplates: {
+    title: "高级模式 · 物品模板编辑",
+    description:
+      "仅展示并回写 itemTemplates 子树；基础属性、分类、堆叠与装备槽位已结构化，effects 等复杂内容继续通过 JSON 兜底。",
+    footnote:
+      "只影响当前分区对应的规则子树，其余规则分支、基础信息与叙事启动保持不变。",
+  },
+  skillTemplates: {
+    title: "高级模式 · 技能模板编辑",
+    description:
+      "仅展示并回写 skillTemplates 子树；基础属性、主动消耗已结构化，effects / prerequisites / evolvesInto 继续通过 JSON 兜底。",
     footnote:
       "只影响当前分区对应的规则子树，其余规则分支、基础信息与叙事启动保持不变。",
   },
@@ -304,6 +371,15 @@ interface WorldEditorPaneProps {
   onUpdateTalent: (index: number, updates: Partial<TalentConfig>) => void;
   onAddTalent: () => void;
   onRemoveTalent: (index: number) => void;
+  onUpdateItemTemplate: (index: number, updates: Partial<ItemTemplate>) => void;
+  onAddItemTemplate: () => void;
+  onRemoveItemTemplate: (index: number) => void;
+  onUpdateSkillTemplate: (
+    index: number,
+    updates: Partial<SkillTemplate>,
+  ) => void;
+  onAddSkillTemplate: () => void;
+  onRemoveSkillTemplate: (index: number) => void;
   onSetRawRulesText: (value: string) => void;
   onApplyRawRulesText: () => void;
 }
@@ -349,6 +425,12 @@ export function WorldEditorPane({
   onUpdateTalent,
   onAddTalent,
   onRemoveTalent,
+  onUpdateItemTemplate,
+  onAddItemTemplate,
+  onRemoveItemTemplate,
+  onUpdateSkillTemplate,
+  onAddSkillTemplate,
+  onRemoveSkillTemplate,
   onSetRawRulesText,
   onApplyRawRulesText,
 }: WorldEditorPaneProps) {
@@ -359,6 +441,8 @@ export function WorldEditorPane({
   const [activeConditionIndex, setActiveConditionIndex] = useState(0);
   const [activeTalentIndex, setActiveTalentIndex] = useState(0);
   const [activeDimensionIndex, setActiveDimensionIndex] = useState(0);
+  const [activeItemTemplateIndex, setActiveItemTemplateIndex] = useState(0);
+  const [activeSkillTemplateIndex, setActiveSkillTemplateIndex] = useState(0);
   const attributeDetailRef = useRef<HTMLDivElement>(null);
   const attributeLabelInputRef = useRef<HTMLInputElement>(null);
   const derivedStatDetailRef = useRef<HTMLDivElement>(null);
@@ -367,6 +451,10 @@ export function WorldEditorPane({
   const conditionNameInputRef = useRef<HTMLInputElement>(null);
   const talentDetailRef = useRef<HTMLDivElement>(null);
   const talentNameInputRef = useRef<HTMLInputElement>(null);
+  const itemTemplateDetailRef = useRef<HTMLDivElement>(null);
+  const itemTemplateNameInputRef = useRef<HTMLInputElement>(null);
+  const skillTemplateDetailRef = useRef<HTMLDivElement>(null);
+  const skillTemplateNameInputRef = useRef<HTMLInputElement>(null);
 
   const primaryAttributes =
     world?.rules.primaryAttributes ?? EMPTY_PRIMARY_ATTRIBUTES;
@@ -375,6 +463,8 @@ export function WorldEditorPane({
   const conditions = world?.rules.conditions ?? EMPTY_CONDITIONS;
   const dimensions = world?.rules.dimensions ?? EMPTY_DIMENSIONS;
   const talents = world?.rules.talents ?? EMPTY_TALENTS;
+  const itemTemplates = world?.rules.itemTemplates ?? EMPTY_ITEM_TEMPLATES;
+  const skillTemplates = world?.rules.skillTemplates ?? EMPTY_SKILL_TEMPLATES;
   const talentRules = world?.rules.talentRules;
   const statFieldOptions = useMemo(
     () => [
@@ -412,6 +502,14 @@ export function WorldEditorPane({
 
   useEffect(() => {
     setActiveDimensionIndex(0);
+  }, [world?.id]);
+
+  useEffect(() => {
+    setActiveItemTemplateIndex(0);
+  }, [world?.id]);
+
+  useEffect(() => {
+    setActiveSkillTemplateIndex(0);
   }, [world?.id]);
 
   const allocatableAttributeOptions = useMemo(
@@ -468,6 +566,22 @@ export function WorldEditorPane({
   const activeDimension =
     resolvedActiveDimensionIndex >= 0
       ? dimensions[resolvedActiveDimensionIndex]
+      : null;
+  const resolvedActiveItemTemplateIndex =
+    itemTemplates.length === 0
+      ? -1
+      : Math.min(activeItemTemplateIndex, itemTemplates.length - 1);
+  const activeItemTemplate =
+    resolvedActiveItemTemplateIndex >= 0
+      ? itemTemplates[resolvedActiveItemTemplateIndex]
+      : null;
+  const resolvedActiveSkillTemplateIndex =
+    skillTemplates.length === 0
+      ? -1
+      : Math.min(activeSkillTemplateIndex, skillTemplates.length - 1);
+  const activeSkillTemplate =
+    resolvedActiveSkillTemplateIndex >= 0
+      ? skillTemplates[resolvedActiveSkillTemplateIndex]
       : null;
 
   useEffect(() => {
@@ -606,6 +720,72 @@ export function WorldEditorPane({
     }
   }, [activeDimensionIndex, dimensions.length]);
 
+  useEffect(() => {
+    if (itemTemplates.length === 0) {
+      if (activeItemTemplateIndex !== 0) {
+        setActiveItemTemplateIndex(0);
+      }
+      return;
+    }
+
+    if (activeItemTemplateIndex > itemTemplates.length - 1) {
+      setActiveItemTemplateIndex(itemTemplates.length - 1);
+    }
+  }, [activeItemTemplateIndex, itemTemplates.length]);
+
+  useEffect(() => {
+    if (
+      activeSection !== "itemTemplates" ||
+      resolvedActiveItemTemplateIndex < 0
+    ) {
+      return;
+    }
+
+    const animationFrameId = window.requestAnimationFrame(() => {
+      itemTemplateDetailRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      });
+      itemTemplateNameInputRef.current?.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrameId);
+  }, [activeSection, itemTemplates.length, resolvedActiveItemTemplateIndex]);
+
+  useEffect(() => {
+    if (skillTemplates.length === 0) {
+      if (activeSkillTemplateIndex !== 0) {
+        setActiveSkillTemplateIndex(0);
+      }
+      return;
+    }
+
+    if (activeSkillTemplateIndex > skillTemplates.length - 1) {
+      setActiveSkillTemplateIndex(skillTemplates.length - 1);
+    }
+  }, [activeSkillTemplateIndex, skillTemplates.length]);
+
+  useEffect(() => {
+    if (
+      activeSection !== "skillTemplates" ||
+      resolvedActiveSkillTemplateIndex < 0
+    ) {
+      return;
+    }
+
+    const animationFrameId = window.requestAnimationFrame(() => {
+      skillTemplateDetailRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      });
+      skillTemplateNameInputRef.current?.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrameId);
+  }, [activeSection, resolvedActiveSkillTemplateIndex, skillTemplates.length]);
+
   const handleAddPrimaryAttribute = () => {
     onAddPrimaryAttribute();
     setActiveAttributeIndex(primaryAttributes.length);
@@ -726,6 +906,54 @@ export function WorldEditorPane({
     });
   };
 
+  const handleAddItemTemplate = () => {
+    onAddItemTemplate();
+    setActiveItemTemplateIndex(itemTemplates.length);
+  };
+
+  const handleRemoveItemTemplate = (itemTemplateIndex: number) => {
+    onRemoveItemTemplate(itemTemplateIndex);
+    setActiveItemTemplateIndex((currentIndex) => {
+      if (itemTemplates.length <= 1) {
+        return 0;
+      }
+
+      if (currentIndex > itemTemplateIndex) {
+        return currentIndex - 1;
+      }
+
+      if (currentIndex === itemTemplateIndex) {
+        return Math.min(itemTemplateIndex, itemTemplates.length - 2);
+      }
+
+      return currentIndex;
+    });
+  };
+
+  const handleAddSkillTemplate = () => {
+    onAddSkillTemplate();
+    setActiveSkillTemplateIndex(skillTemplates.length);
+  };
+
+  const handleRemoveSkillTemplate = (skillTemplateIndex: number) => {
+    onRemoveSkillTemplate(skillTemplateIndex);
+    setActiveSkillTemplateIndex((currentIndex) => {
+      if (skillTemplates.length <= 1) {
+        return 0;
+      }
+
+      if (currentIndex > skillTemplateIndex) {
+        return currentIndex - 1;
+      }
+
+      if (currentIndex === skillTemplateIndex) {
+        return Math.min(skillTemplateIndex, skillTemplates.length - 2);
+      }
+
+      return currentIndex;
+    });
+  };
+
   if (!world) {
     return (
       <div className="flex h-full items-center justify-center px-6 text-center">
@@ -748,7 +976,7 @@ export function WorldEditorPane({
     );
   }
 
-  let sectionContent: React.ReactNode;
+  let sectionContent: React.ReactNode = null;
 
   switch (activeSection) {
     case "meta":
@@ -1821,7 +2049,6 @@ export function WorldEditorPane({
       break;
 
     case "talents":
-    default:
       sectionContent = (
         <FormSection
           title="天赋"
@@ -2050,6 +2277,466 @@ export function WorldEditorPane({
         </FormSection>
       );
       break;
+
+    case "itemTemplates":
+      sectionContent = (
+        <FormSection
+          title="物品模板"
+          description="维护物品模板的基础属性、分类、堆叠规则与装备槽位；effects 等复杂效果继续通过高级规则 JSON 兜底。"
+          action={
+            <div className="flex flex-wrap gap-2">
+              <SectionRulesEditorButton
+                scope="itemTemplates"
+                active={
+                  rawRulesEditorOpen && rawRulesEditorScope === "itemTemplates"
+                }
+                onOpen={onOpenRawRulesEditor}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAddItemTemplate}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                添加物品模板
+              </Button>
+            </div>
+          }
+        >
+          {itemTemplates.length > 0 ? (
+            <div className="grid gap-3 xl:h-168 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+              <Panel
+                variant="outlined"
+                className={MASTER_DETAIL_LIST_PANEL_CLASS}
+              >
+                <div
+                  className={MASTER_DETAIL_LIST_CONTENT_CLASS}
+                  role="tablist"
+                  aria-label="物品模板切换"
+                >
+                  {itemTemplates.map((itemTemplate, index) => {
+                    const isActive = resolvedActiveItemTemplateIndex === index;
+                    const itemTitle =
+                      itemTemplate.name.trim() ||
+                      itemTemplate.id.trim() ||
+                      `未命名物品 ${index + 1}`;
+                    const stackLabel = itemTemplate.stackable
+                      ? `最多 ${itemTemplate.maxStack ?? "未设"}`
+                      : "单件";
+                    const usageLabel = itemTemplate.equipSlot
+                      ? getEquipSlotLabel(itemTemplate.equipSlot)
+                      : itemTemplate.consumable
+                        ? "消耗使用"
+                        : "未设置";
+
+                    return (
+                      <button
+                        key={`${itemTemplate.id || "item-template"}-${index}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => setActiveItemTemplateIndex(index)}
+                        className="w-full rounded-xl border px-3 py-3 text-left transition-all duration-150"
+                        style={{
+                          borderColor: colorAlpha(
+                            isActive ? "primary" : "border",
+                            isActive ? 0.42 : 0.28,
+                          ),
+                          background: colorAlpha(
+                            isActive ? "primary" : "bgCard",
+                            isActive ? 0.12 : 0.16,
+                          ),
+                          boxShadow: isActive
+                            ? `0 0 18px ${colorAlpha("primary", 0.12)}`
+                            : "none",
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className="wrap-break-word text-sm font-medium leading-5"
+                              style={{
+                                color: isActive
+                                  ? color("primary")
+                                  : color("textPrimary"),
+                              }}
+                              title={itemTitle}
+                            >
+                              {itemTitle}
+                            </p>
+                            <p
+                              className="mt-1 text-[11px]"
+                              style={{ color: colorAlpha("textMuted", 0.74) }}
+                            >
+                              ID：{itemTemplate.id || "未设置"}
+                            </p>
+                          </div>
+                          <span
+                            className="shrink-0 rounded-full border px-2 py-0.5 text-[11px]"
+                            style={{
+                              borderColor: colorAlpha(
+                                isActive ? "primary" : "border",
+                                isActive ? 0.36 : 0.28,
+                              ),
+                              color: isActive
+                                ? color("primary")
+                                : colorAlpha("textMuted", 0.76),
+                            }}
+                          >
+                            {isActive ? "当前" : `#${index + 1}`}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <DimensionMetaBadge
+                            label="分类"
+                            value={getItemCategoryLabel(itemTemplate.category)}
+                          />
+                          <DimensionMetaBadge
+                            label="堆叠"
+                            value={stackLabel}
+                            accent={itemTemplate.stackable ?? false}
+                          />
+                          <DimensionMetaBadge
+                            label="用途"
+                            value={usageLabel}
+                            accent={Boolean(itemTemplate.equipSlot)}
+                          />
+                        </div>
+                        <p
+                          className="mt-2 text-[11px] leading-5"
+                          style={{
+                            color: colorAlpha(
+                              "textMuted",
+                              isActive ? 0.82 : 0.72,
+                            ),
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                          title={
+                            itemTemplate.description || "当前物品模板尚未填写描述"
+                          }
+                        >
+                          {itemTemplate.description ||
+                            "当前物品模板尚未填写描述"}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Panel>
+
+              {activeItemTemplate ? (
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    ref={itemTemplateDetailRef}
+                    key={`item-template-${resolvedActiveItemTemplateIndex}`}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.14 }}
+                    className="space-y-3 xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-1"
+                  >
+                    <Panel variant="outlined" className="p-3 sm:p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="text-xs font-medium uppercase tracking-[0.2em]"
+                            style={{ color: colorAlpha("primary", 0.82) }}
+                          >
+                            当前详情
+                          </p>
+                          <h5
+                            className="mt-2 wrap-break-word text-sm font-semibold leading-6"
+                            style={{ color: color("textPrimary") }}
+                            title={
+                              activeItemTemplate.name.trim() ||
+                              activeItemTemplate.id.trim() ||
+                              `未命名物品 ${resolvedActiveItemTemplateIndex + 1}`
+                            }
+                          >
+                            {activeItemTemplate.name.trim() ||
+                              activeItemTemplate.id.trim() ||
+                              `未命名物品 ${resolvedActiveItemTemplateIndex + 1}`}
+                          </h5>
+                          <p
+                            className="mt-2 text-xs leading-5"
+                            style={{ color: colorAlpha("textMuted", 0.74) }}
+                          >
+                            {activeItemTemplate.description ||
+                              "当前物品模板尚未填写描述，可直接在下方详情中补充。"}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <DimensionMetaBadge
+                            label="ID"
+                            value={activeItemTemplate.id || "未设置"}
+                            mono
+                          />
+                          <DimensionMetaBadge
+                            label="分类"
+                            value={getItemCategoryLabel(activeItemTemplate.category)}
+                          />
+                        </div>
+                      </div>
+                    </Panel>
+
+                    <ItemTemplateCardEditor
+                      itemTemplate={activeItemTemplate}
+                      nameInputRef={itemTemplateNameInputRef}
+                      onChange={(updates) =>
+                        onUpdateItemTemplate(
+                          resolvedActiveItemTemplateIndex,
+                          updates,
+                        )
+                      }
+                      onRemove={() =>
+                        handleRemoveItemTemplate(
+                          resolvedActiveItemTemplateIndex,
+                        )
+                      }
+                    />
+                  </motion.div>
+                </AnimatePresence>
+              ) : null}
+            </div>
+          ) : (
+            <EmptySectionHint message="当前还没有物品模板；若继续为空，创作者只能通过全量 JSON 维护物品预设。" />
+          )}
+        </FormSection>
+      );
+      break;
+
+    case "skillTemplates":
+      sectionContent = (
+        <FormSection
+          title="技能模板"
+          description="维护技能模板的基础属性、等级与主动消耗；effects / prerequisites / evolvesInto 等复杂内容继续通过高级规则 JSON 兜底。"
+          action={
+            <div className="flex flex-wrap gap-2">
+              <SectionRulesEditorButton
+                scope="skillTemplates"
+                active={
+                  rawRulesEditorOpen && rawRulesEditorScope === "skillTemplates"
+                }
+                onOpen={onOpenRawRulesEditor}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAddSkillTemplate}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                添加技能模板
+              </Button>
+            </div>
+          }
+        >
+          {skillTemplates.length > 0 ? (
+            <div className="grid gap-3 xl:h-168 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+              <Panel
+                variant="outlined"
+                className={MASTER_DETAIL_LIST_PANEL_CLASS}
+              >
+                <div
+                  className={MASTER_DETAIL_LIST_CONTENT_CLASS}
+                  role="tablist"
+                  aria-label="技能模板切换"
+                >
+                  {skillTemplates.map((skillTemplate, index) => {
+                    const isActive = resolvedActiveSkillTemplateIndex === index;
+                    const skillTitle =
+                      skillTemplate.name.trim() ||
+                      skillTemplate.id.trim() ||
+                      `未命名技能 ${index + 1}`;
+                    const costLabel = skillTemplate.activeUsable
+                      ? skillTemplate.cost
+                        ? `${skillTemplate.cost.field} · ${skillTemplate.cost.amount}`
+                        : "待设置"
+                      : "无";
+
+                    return (
+                      <button
+                        key={`${skillTemplate.id || "skill-template"}-${index}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => setActiveSkillTemplateIndex(index)}
+                        className="w-full rounded-xl border px-3 py-3 text-left transition-all duration-150"
+                        style={{
+                          borderColor: colorAlpha(
+                            isActive ? "primary" : "border",
+                            isActive ? 0.42 : 0.28,
+                          ),
+                          background: colorAlpha(
+                            isActive ? "primary" : "bgCard",
+                            isActive ? 0.12 : 0.16,
+                          ),
+                          boxShadow: isActive
+                            ? `0 0 18px ${colorAlpha("primary", 0.12)}`
+                            : "none",
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className="wrap-break-word text-sm font-medium leading-5"
+                              style={{
+                                color: isActive
+                                  ? color("primary")
+                                  : color("textPrimary"),
+                              }}
+                              title={skillTitle}
+                            >
+                              {skillTitle}
+                            </p>
+                            <p
+                              className="mt-1 text-[11px]"
+                              style={{ color: colorAlpha("textMuted", 0.74) }}
+                            >
+                              ID：{skillTemplate.id || "未设置"}
+                            </p>
+                          </div>
+                          <span
+                            className="shrink-0 rounded-full border px-2 py-0.5 text-[11px]"
+                            style={{
+                              borderColor: colorAlpha(
+                                isActive ? "primary" : "border",
+                                isActive ? 0.36 : 0.28,
+                              ),
+                              color: isActive
+                                ? color("primary")
+                                : colorAlpha("textMuted", 0.76),
+                            }}
+                          >
+                            {isActive ? "当前" : `#${index + 1}`}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <DimensionMetaBadge
+                            label="分类"
+                            value={getSkillCategoryLabel(skillTemplate.category)}
+                          />
+                          <DimensionMetaBadge
+                            label="最大等级"
+                            value={String(skillTemplate.maxLevel ?? 1)}
+                            accent={(skillTemplate.maxLevel ?? 1) > 1}
+                          />
+                          <DimensionMetaBadge
+                            label="消耗"
+                            value={costLabel}
+                            accent={skillTemplate.activeUsable ?? false}
+                          />
+                        </div>
+                        <p
+                          className="mt-2 text-[11px] leading-5"
+                          style={{
+                            color: colorAlpha(
+                              "textMuted",
+                              isActive ? 0.82 : 0.72,
+                            ),
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                          title={
+                            skillTemplate.description || "当前技能模板尚未填写描述"
+                          }
+                        >
+                          {skillTemplate.description ||
+                            "当前技能模板尚未填写描述"}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Panel>
+
+              {activeSkillTemplate ? (
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    ref={skillTemplateDetailRef}
+                    key={`skill-template-${resolvedActiveSkillTemplateIndex}`}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.14 }}
+                    className="space-y-3 xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-1"
+                  >
+                    <Panel variant="outlined" className="p-3 sm:p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="text-xs font-medium uppercase tracking-[0.2em]"
+                            style={{ color: colorAlpha("primary", 0.82) }}
+                          >
+                            当前详情
+                          </p>
+                          <h5
+                            className="mt-2 wrap-break-word text-sm font-semibold leading-6"
+                            style={{ color: color("textPrimary") }}
+                            title={
+                              activeSkillTemplate.name.trim() ||
+                              activeSkillTemplate.id.trim() ||
+                              `未命名技能 ${resolvedActiveSkillTemplateIndex + 1}`
+                            }
+                          >
+                            {activeSkillTemplate.name.trim() ||
+                              activeSkillTemplate.id.trim() ||
+                              `未命名技能 ${resolvedActiveSkillTemplateIndex + 1}`}
+                          </h5>
+                          <p
+                            className="mt-2 text-xs leading-5"
+                            style={{ color: colorAlpha("textMuted", 0.74) }}
+                          >
+                            {activeSkillTemplate.description ||
+                              "当前技能模板尚未填写描述，可直接在下方详情中补充。"}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <DimensionMetaBadge
+                            label="ID"
+                            value={activeSkillTemplate.id || "未设置"}
+                            mono
+                          />
+                          <DimensionMetaBadge
+                            label="分类"
+                            value={getSkillCategoryLabel(activeSkillTemplate.category)}
+                          />
+                        </div>
+                      </div>
+                    </Panel>
+
+                    <SkillTemplateCardEditor
+                      skillTemplate={activeSkillTemplate}
+                      nameInputRef={skillTemplateNameInputRef}
+                      onChange={(updates) =>
+                        onUpdateSkillTemplate(
+                          resolvedActiveSkillTemplateIndex,
+                          updates,
+                        )
+                      }
+                      onRemove={() =>
+                        handleRemoveSkillTemplate(
+                          resolvedActiveSkillTemplateIndex,
+                        )
+                      }
+                    />
+                  </motion.div>
+                </AnimatePresence>
+              ) : null}
+            </div>
+          ) : (
+            <EmptySectionHint message="当前还没有技能模板；若继续为空，创作者只能通过全量 JSON 维护技能预设。" />
+          )}
+        </FormSection>
+      );
+      break;
+
+    default:
+      sectionContent = null;
   }
 
   return (
@@ -2090,25 +2777,41 @@ export function WorldEditorPane({
 
           <Panel variant="outlined" className="hidden p-4 sm:p-5 lg:block">
             <div>
-              <div>
-                <p
-                  className="text-xs font-medium uppercase tracking-[0.24em]"
-                  style={{ color: colorAlpha("primary", 0.82) }}
-                >
-                  当前分区
-                </p>
-                <h2
-                  className="mt-2 text-base font-semibold"
-                  style={{ color: color("textPrimary") }}
-                >
-                  {activeSectionMeta.title}
-                </h2>
-                <p
-                  className="mt-1 text-xs"
-                  style={{ color: colorAlpha("textMuted", 0.76) }}
-                >
-                  {activeSectionMeta.description}
-                </p>
+              <div className="flex items-start gap-3">
+                {activeSectionMeta.icon ? (
+                  <span
+                    className="rounded-xl border p-2"
+                    style={{
+                      borderColor: colorAlpha("primary", 0.2),
+                      background: colorAlpha("primary", 0.08),
+                    }}
+                  >
+                    <activeSectionMeta.icon
+                      className="h-4 w-4"
+                      style={{ color: color("primary") }}
+                    />
+                  </span>
+                ) : null}
+                <div>
+                  <p
+                    className="text-xs font-medium uppercase tracking-[0.24em]"
+                    style={{ color: colorAlpha("primary", 0.82) }}
+                  >
+                    当前分区
+                  </p>
+                  <h2
+                    className="mt-2 text-base font-semibold"
+                    style={{ color: color("textPrimary") }}
+                  >
+                    {activeSectionMeta.title}
+                  </h2>
+                  <p
+                    className="mt-1 text-xs"
+                    style={{ color: colorAlpha("textMuted", 0.76) }}
+                  >
+                    {activeSectionMeta.description}
+                  </p>
+                </div>
               </div>
             </div>
           </Panel>
@@ -2223,13 +2926,35 @@ function getSectionSummary(
         : `${dimensionCount} 个维度 · 选项已配置`;
     }
 
-    case "talents":
-    default: {
+    case "talents": {
       const talentCount = world.rules.talents?.length ?? 0;
       return talentCount > 0
         ? `${talentCount} 个天赋可供角色创建选择`
         : "当前没有可选天赋";
     }
+
+    case "itemTemplates": {
+      const itemTemplateCount = world.rules.itemTemplates?.length ?? 0;
+      const equippableCount = (world.rules.itemTemplates ?? []).filter((item) =>
+        isEquippableItemCategory(item.category),
+      ).length;
+      return itemTemplateCount > 0
+        ? `${itemTemplateCount} 个物品模板 · ${equippableCount} 个装备类`
+        : "当前没有物品模板";
+    }
+
+    case "skillTemplates": {
+      const skillTemplateCount = world.rules.skillTemplates?.length ?? 0;
+      const activeSkillCount = (world.rules.skillTemplates ?? []).filter(
+        (item) => item.activeUsable,
+      ).length;
+      return skillTemplateCount > 0
+        ? `${skillTemplateCount} 个技能模板 · ${activeSkillCount} 个主动技能`
+        : "当前没有技能模板";
+    }
+
+    default:
+      return "";
   }
 }
 
@@ -2250,6 +2975,8 @@ function EditorOverviewPanel({
 }) {
   const dimensionCount = world.rules.dimensions?.length ?? 0;
   const talentCount = world.rules.talents?.length ?? 0;
+  const itemTemplateCount = world.rules.itemTemplates?.length ?? 0;
+  const skillTemplateCount = world.rules.skillTemplates?.length ?? 0;
   const attributeCount = world.rules.primaryAttributes.length;
   const derivedCount = world.rules.derivedStats.length;
   const conditionCount = world.rules.conditions?.length ?? 0;
@@ -2278,13 +3005,15 @@ function EditorOverviewPanel({
         当前分区：{activeSection.title}
       </p>
 
-      <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-3">
+      <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
         <SummaryMetric label="属性" value={String(attributeCount)} />
         <SummaryMetric label="衍生" value={String(derivedCount)} />
         <SummaryMetric label="检定预设" value={String(dcPresetCount)} />
         <SummaryMetric label="状态" value={String(conditionCount)} />
         <SummaryMetric label="维度" value={String(dimensionCount)} />
         <SummaryMetric label="天赋" value={String(talentCount)} />
+        <SummaryMetric label="物品模板" value={String(itemTemplateCount)} />
+        <SummaryMetric label="技能模板" value={String(skillTemplateCount)} />
       </div>
     </Panel>
   );
@@ -4947,6 +5676,446 @@ function TalentCardEditor({
           删除天赋
         </Button>
       </div>
+    </Card>
+  );
+}
+
+function normalizeManagedTemplateId(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^\p{L}\p{N}_-]+/gu, "")
+    .replace(/_+/g, "_")
+    .replace(/^[_-]+|[_-]+$/g, "");
+}
+
+function buildManagedTemplateId(name: string): string | null {
+  const normalized = normalizeManagedTemplateId(name);
+  return normalized.length > 0 ? normalized : null;
+}
+
+function shouldSyncManagedTemplateId(
+  currentId: string,
+  currentName: string,
+  kind: "item" | "skill",
+): boolean {
+  const trimmedCurrentId = currentId.trim();
+  const currentGeneratedId = buildManagedTemplateId(currentName);
+
+  return (
+    trimmedCurrentId.length === 0 ||
+    trimmedCurrentId === currentGeneratedId ||
+    trimmedCurrentId.startsWith(`${kind}-`) ||
+    trimmedCurrentId === `${kind}_template` ||
+    trimmedCurrentId.startsWith(`${kind}_template_`)
+  );
+}
+
+function buildManagedTemplateNameUpdate(
+  currentId: string,
+  currentName: string,
+  nextName: string,
+  kind: "item" | "skill",
+): { name: string; id?: string } {
+  const nextGeneratedId = buildManagedTemplateId(nextName);
+  return {
+    name: nextName,
+    ...(nextGeneratedId && shouldSyncManagedTemplateId(currentId, currentName, kind)
+      ? { id: nextGeneratedId }
+      : {}),
+  };
+}
+
+function resolveDisplayManagedTemplateId(
+  id: string,
+  name: string,
+  kind: "item" | "skill",
+): string {
+  return id.trim() || buildManagedTemplateId(name) || `${kind}_template`;
+}
+
+function getItemCategoryLabel(category: ItemTemplate["category"]): string {
+  return (
+    ITEM_CATEGORY_OPTIONS.find((option) => option.value === category)?.label ??
+    "杂项"
+  );
+}
+
+function getSkillCategoryLabel(category: SkillTemplate["category"]): string {
+  return (
+    SKILL_CATEGORY_OPTIONS.find((option) => option.value === category)?.label ??
+    "其他"
+  );
+}
+
+function getEquipSlotLabel(slot: string): string {
+  return EQUIP_SLOT_OPTIONS.find((option) => option.value === slot)?.label ?? slot;
+}
+
+function isEquippableItemCategory(category: ItemTemplate["category"]): boolean {
+  return EQUIPPABLE_ITEM_CATEGORIES.has(category);
+}
+
+function ItemTemplateCardEditor({
+  itemTemplate,
+  nameInputRef,
+  onChange,
+  onRemove,
+}: {
+  itemTemplate: ItemTemplate;
+  nameInputRef?: React.RefObject<HTMLInputElement | null>;
+  onChange: (updates: Partial<ItemTemplate>) => void;
+  onRemove: () => void;
+}) {
+  const isStackable = itemTemplate.stackable ?? false;
+  const isEquippable = isEquippableItemCategory(itemTemplate.category);
+  const displayId = resolveDisplayManagedTemplateId(
+    itemTemplate.id,
+    itemTemplate.name,
+    "item",
+  );
+
+  return (
+    <Card variant="outlined" className="space-y-4 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p
+            className="text-sm font-semibold"
+            style={{ color: color("textPrimary") }}
+          >
+            {itemTemplate.name || "未命名物品模板"}
+          </p>
+          <p
+            className="mt-1 text-xs"
+            style={{ color: colorAlpha("textMuted", 0.72) }}
+          >
+            物品模板 ID：{displayId}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={onRemove}>
+          <Trash2 className="mr-1 h-4 w-4" />
+          删除物品模板
+        </Button>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <Field label="物品 ID（只读）">
+          <Input value={displayId} readOnly placeholder="healing_potion" />
+        </Field>
+        <Field label="物品名称">
+          <Input
+            ref={nameInputRef}
+            value={itemTemplate.name}
+            onChange={(event) =>
+              onChange(
+                buildManagedTemplateNameUpdate(
+                  itemTemplate.id,
+                  itemTemplate.name,
+                  event.target.value,
+                  "item",
+                ),
+              )
+            }
+            placeholder="治疗药水"
+          />
+        </Field>
+        <Field label="分类">
+          <Select
+            value={itemTemplate.category}
+            onValueChange={(value) =>
+              onChange({
+                category: value as ItemTemplate["category"],
+                ...(isEquippableItemCategory(value as ItemTemplate["category"])
+                  ? {}
+                  : { equipSlot: undefined }),
+              })
+            }
+            options={ITEM_CATEGORY_OPTIONS.map((option) => ({
+              value: option.value,
+              label: option.label,
+            }))}
+          />
+        </Field>
+      </div>
+
+      <Field label="描述">
+        <Textarea
+          value={itemTemplate.description}
+          onChange={(event) => onChange({ description: event.target.value })}
+          className="min-h-24"
+          placeholder="描述物品的用途、外观或来源"
+        />
+      </Field>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <ToggleSetting
+          title="允许堆叠"
+          description="启用后同类物品可按数量堆叠，并可配置最大堆叠数。"
+          checked={isStackable}
+          onCheckedChange={(checked) =>
+            onChange({
+              stackable: checked,
+              ...(checked ? {} : { maxStack: undefined }),
+            })
+          }
+        />
+        <ToggleSetting
+          title="可作为消耗品使用"
+          description="用于标记该模板是否以主动消耗的方式生效。"
+          checked={itemTemplate.consumable ?? false}
+          onCheckedChange={(checked) => onChange({ consumable: checked })}
+        />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        {isStackable ? (
+          <Field label="最大堆叠数">
+            <Input
+              type="number"
+              value={itemTemplate.maxStack ?? ""}
+              onChange={(event) =>
+                onChange({
+                  maxStack:
+                    event.target.value.trim() === ""
+                      ? undefined
+                      : Number(event.target.value),
+                })
+              }
+              placeholder="99"
+            />
+          </Field>
+        ) : null}
+
+        {isEquippable ? (
+          <Field label="装备槽位">
+            <Select
+              value={itemTemplate.equipSlot ?? ""}
+              onValueChange={(value) =>
+                onChange({ equipSlot: value === "" ? undefined : value })
+              }
+              options={[
+                { value: "", label: "未设置" },
+                ...EQUIP_SLOT_OPTIONS.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                })),
+              ]}
+            />
+          </Field>
+        ) : null}
+      </div>
+
+      <p className="text-xs" style={{ color: colorAlpha("textMuted", 0.72) }}>
+        内部 ID 默认会随名称自动生成；如需手工覆盖，可通过当前分区高级 JSON
+        直接调整。
+      </p>
+
+      <details
+        className="rounded-xl border px-4 py-3"
+        style={{
+          borderColor: colorAlpha("border", 0.3),
+          background: colorAlpha("bgCard", 0.22),
+        }}
+      >
+        <summary
+          className="cursor-pointer text-sm font-medium"
+          style={{ color: color("textPrimary") }}
+        >
+          高级 JSON 仍可继续补充的内容
+        </summary>
+        <div
+          className="mt-3 space-y-2 text-xs"
+          style={{ color: colorAlpha("textMuted", 0.72) }}
+        >
+          <p>• effects 数组中的 modifier / trigger / onUse 结构</p>
+          <p>• 更复杂的装备语义与特殊消耗逻辑</p>
+          <p>• 需要保留的作者态扩展字段</p>
+        </div>
+      </details>
+    </Card>
+  );
+}
+
+function SkillTemplateCardEditor({
+  skillTemplate,
+  nameInputRef,
+  onChange,
+  onRemove,
+}: {
+  skillTemplate: SkillTemplate;
+  nameInputRef?: React.RefObject<HTMLInputElement | null>;
+  onChange: (updates: Partial<SkillTemplate>) => void;
+  onRemove: () => void;
+}) {
+  const displayId = resolveDisplayManagedTemplateId(
+    skillTemplate.id,
+    skillTemplate.name,
+    "skill",
+  );
+  const isActiveUsable = skillTemplate.activeUsable ?? false;
+
+  return (
+    <Card variant="outlined" className="space-y-4 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p
+            className="text-sm font-semibold"
+            style={{ color: color("textPrimary") }}
+          >
+            {skillTemplate.name || "未命名技能模板"}
+          </p>
+          <p
+            className="mt-1 text-xs"
+            style={{ color: colorAlpha("textMuted", 0.72) }}
+          >
+            技能模板 ID：{displayId}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={onRemove}>
+          <Trash2 className="mr-1 h-4 w-4" />
+          删除技能模板
+        </Button>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <Field label="技能 ID（只读）">
+          <Input value={displayId} readOnly placeholder="fireball" />
+        </Field>
+        <Field label="技能名称">
+          <Input
+            ref={nameInputRef}
+            value={skillTemplate.name}
+            onChange={(event) =>
+              onChange(
+                buildManagedTemplateNameUpdate(
+                  skillTemplate.id,
+                  skillTemplate.name,
+                  event.target.value,
+                  "skill",
+                ),
+              )
+            }
+            placeholder="火球术"
+          />
+        </Field>
+        <Field label="分类">
+          <Select
+            value={skillTemplate.category}
+            onValueChange={(value) =>
+              onChange({ category: value as SkillTemplate["category"] })
+            }
+            options={SKILL_CATEGORY_OPTIONS.map((option) => ({
+              value: option.value,
+              label: option.label,
+            }))}
+          />
+        </Field>
+        <Field label="最大等级">
+          <Input
+            type="number"
+            value={skillTemplate.maxLevel ?? ""}
+            onChange={(event) =>
+              onChange({
+                maxLevel:
+                  event.target.value.trim() === ""
+                    ? undefined
+                    : Number(event.target.value),
+              })
+            }
+            placeholder="1"
+          />
+        </Field>
+      </div>
+
+      <Field label="描述">
+        <Textarea
+          value={skillTemplate.description}
+          onChange={(event) => onChange({ description: event.target.value })}
+          className="min-h-24"
+          placeholder="描述技能的效果、叙事语义与使用场景"
+        />
+      </Field>
+
+      <ToggleSetting
+        title="可主动释放"
+        description="启用后该技能会显示消耗配置；关闭则视为被动或常驻能力。"
+        checked={isActiveUsable}
+        onCheckedChange={(checked) =>
+          onChange({
+            activeUsable: checked,
+            ...(checked ? {} : { cost: undefined }),
+          })
+        }
+      />
+
+      {isActiveUsable ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="消耗字段">
+            <Input
+              value={skillTemplate.cost?.field ?? ""}
+              onChange={(event) =>
+                onChange({
+                  cost:
+                    event.target.value.trim() === ""
+                      ? undefined
+                      : {
+                          field: event.target.value,
+                          amount: skillTemplate.cost?.amount ?? 1,
+                        },
+                })
+              }
+              placeholder="mp"
+            />
+          </Field>
+          <Field label="消耗量">
+            <Input
+              type="number"
+              value={skillTemplate.cost?.amount ?? ""}
+              onChange={(event) =>
+                onChange({
+                  cost:
+                    event.target.value.trim() === ""
+                      ? undefined
+                      : {
+                          field: skillTemplate.cost?.field ?? "",
+                          amount: Number(event.target.value),
+                        },
+                })
+              }
+              placeholder="10"
+            />
+          </Field>
+        </div>
+      ) : null}
+
+      <p className="text-xs" style={{ color: colorAlpha("textMuted", 0.72) }}>
+        内部 ID 默认会随名称自动生成；如需手工覆盖，可通过当前分区高级 JSON
+        直接调整。
+      </p>
+
+      <details
+        className="rounded-xl border px-4 py-3"
+        style={{
+          borderColor: colorAlpha("border", 0.3),
+          background: colorAlpha("bgCard", 0.22),
+        }}
+      >
+        <summary
+          className="cursor-pointer text-sm font-medium"
+          style={{ color: color("textPrimary") }}
+        >
+          高级 JSON 仍可继续补充的内容
+        </summary>
+        <div
+          className="mt-3 space-y-2 text-xs"
+          style={{ color: colorAlpha("textMuted", 0.72) }}
+        >
+          <p>• effects 各等级层的 modifier / costOverride</p>
+          <p>• prerequisites 中的技能前置、等级门槛与复杂组合</p>
+          <p>• evolvesInto 等进阶路线配置</p>
+        </div>
+      </details>
     </Card>
   );
 }

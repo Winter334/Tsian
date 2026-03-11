@@ -11,6 +11,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import type { ItemTemplate } from "@/domain/entities/item";
+import type { SkillTemplate } from "@/domain/entities/skill";
 import { topologicalSortDerivedStats } from "@/lib/rules/derived-stats";
 import {
   evaluateExpression,
@@ -46,7 +48,9 @@ export type WorldRulesEditorScope =
   | "checkRules"
   | "conditions"
   | "dimensions"
-  | "talents";
+  | "talents"
+  | "itemTemplates"
+  | "skillTemplates";
 export type WorldScopedRulesEditorScope = Exclude<
   WorldRulesEditorScope,
   "full"
@@ -69,6 +73,8 @@ type EditableRulesTalentsSnapshot = Pick<
   WorldConfig,
   "talents" | "talentRules"
 >;
+type EditableRulesItemTemplatesSnapshot = Pick<WorldConfig, "itemTemplates">;
+type EditableRulesSkillTemplatesSnapshot = Pick<WorldConfig, "skillTemplates">;
 type EditableTalentRules = NonNullable<WorldConfig["talentRules"]>;
 
 type EditableDCPresets = NonNullable<CheckRuleConfig["dcPresets"]>;
@@ -180,6 +186,12 @@ export interface WorldWorkspaceActions {
   updateTalent: (index: number, updates: Partial<TalentConfig>) => void;
   addTalent: () => void;
   removeTalent: (index: number) => void;
+  updateItemTemplate: (index: number, updates: Partial<ItemTemplate>) => void;
+  addItemTemplate: () => void;
+  removeItemTemplate: (index: number) => void;
+  updateSkillTemplate: (index: number, updates: Partial<SkillTemplate>) => void;
+  addSkillTemplate: () => void;
+  removeSkillTemplate: (index: number) => void;
   pendingDeleteWorld: { id: WorldId; name: string } | null;
   discardConfirm: {
     open: boolean;
@@ -715,6 +727,122 @@ function normalizeTalent(value: unknown, index: number): TalentConfig {
   };
 }
 
+function normalizeItemTemplate(value: unknown, index: number): ItemTemplate {
+  const record = isRecord(value) ? value : {};
+  const category = toOptionalString(record.category);
+  const stackable =
+    typeof record.stackable === "boolean" ? record.stackable : undefined;
+  const maxStack = toOptionalPositiveInteger(record.maxStack);
+  const equipSlot = toOptionalString(record.equipSlot);
+  const consumable =
+    typeof record.consumable === "boolean" ? record.consumable : undefined;
+
+  return {
+    id: toRequiredString(record.id, `item_template_${index + 1}`),
+    name: toRequiredString(record.name, `物品 ${index + 1}`),
+    description: toRequiredString(record.description, ""),
+    category:
+      category === "weapon" ||
+      category === "armor" ||
+      category === "accessory" ||
+      category === "consumable" ||
+      category === "material" ||
+      category === "quest" ||
+      category === "misc"
+        ? category
+        : "misc",
+    ...(stackable === undefined ? {} : { stackable }),
+    ...(stackable ? { maxStack: maxStack ?? 99 } : {}),
+    ...(equipSlot ? { equipSlot } : {}),
+    ...(consumable === undefined ? {} : { consumable }),
+    ...(Array.isArray(record.effects)
+      ? { effects: cloneValue(record.effects) }
+      : {}),
+  };
+}
+
+function normalizeSkillCost(value: unknown): SkillTemplate["cost"] | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const field = toOptionalString(value.field);
+  const amount = toOptionalNumber(value.amount);
+  if (!field || amount === undefined) {
+    return undefined;
+  }
+
+  return { field, amount };
+}
+
+function normalizeSkillTemplate(value: unknown, index: number): SkillTemplate {
+  const record = isRecord(value) ? value : {};
+  const category = toOptionalString(record.category);
+  const maxLevel = toOptionalPositiveInteger(record.maxLevel);
+  const activeUsable =
+    typeof record.activeUsable === "boolean" ? record.activeUsable : undefined;
+  const cost = normalizeSkillCost(record.cost);
+  const rawPrerequisites = isRecord(record.prerequisites)
+    ? record.prerequisites
+    : undefined;
+  const prerequisiteAttributes = toNumberRecord(rawPrerequisites?.attributes);
+  const prerequisiteSkillIds = toUniqueStringArray(rawPrerequisites?.skillIds);
+  const prerequisiteLevel = toOptionalPositiveInteger(rawPrerequisites?.level);
+  const evolvesIntoRecord = isRecord(record.evolvesInto)
+    ? record.evolvesInto
+    : undefined;
+  const evolvesIntoTemplateId = toOptionalString(evolvesIntoRecord?.templateId);
+  const evolvesIntoName = toOptionalString(evolvesIntoRecord?.name);
+  const evolvesIntoCondition = toOptionalString(evolvesIntoRecord?.condition);
+
+  return {
+    id: toRequiredString(record.id, `skill_template_${index + 1}`),
+    name: toRequiredString(record.name, `技能 ${index + 1}`),
+    description: toRequiredString(record.description, ""),
+    category:
+      category === "combat" ||
+      category === "magic" ||
+      category === "survival" ||
+      category === "social" ||
+      category === "craft" ||
+      category === "misc"
+        ? category
+        : "misc",
+    ...(maxLevel === undefined ? {} : { maxLevel }),
+    ...(activeUsable === undefined ? {} : { activeUsable }),
+    ...(cost ? { cost } : {}),
+    ...(Array.isArray(record.effects)
+      ? { effects: cloneValue(record.effects) }
+      : {}),
+    ...(prerequisiteAttributes ||
+    prerequisiteSkillIds.length > 0 ||
+    prerequisiteLevel !== undefined
+      ? {
+          prerequisites: {
+            ...(prerequisiteAttributes
+              ? { attributes: prerequisiteAttributes }
+              : {}),
+            ...(prerequisiteSkillIds.length > 0
+              ? { skillIds: prerequisiteSkillIds }
+              : {}),
+            ...(prerequisiteLevel === undefined
+              ? {}
+              : { level: prerequisiteLevel }),
+          },
+        }
+      : {}),
+    ...(evolvesIntoTemplateId && evolvesIntoName
+      ? {
+          evolvesInto: {
+            templateId: evolvesIntoTemplateId,
+            name: evolvesIntoName,
+            ...(evolvesIntoCondition ? { condition: evolvesIntoCondition } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
 function normalizeNarrative(value: unknown): WorldNarrativeSeed {
   const record = isRecord(value) ? value : {};
 
@@ -779,6 +907,12 @@ function normalizeWorldRules(
       ? rules.talents.map((item, index) => normalizeTalent(item, index))
       : [],
     talentRules: normalizeTalentRules(rules.talentRules),
+    itemTemplates: Array.isArray(rules.itemTemplates)
+      ? rules.itemTemplates.map((item, index) => normalizeItemTemplate(item, index))
+      : [],
+    skillTemplates: Array.isArray(rules.skillTemplates)
+      ? rules.skillTemplates.map((item, index) => normalizeSkillTemplate(item, index))
+      : [],
   };
 }
 
@@ -812,7 +946,9 @@ function getRawRulesEditorPayload(
   | EditableRulesCheckRulesSnapshot
   | EditableRulesConditionsSnapshot
   | EditableRulesDimensionsSnapshot
-  | EditableRulesTalentsSnapshot {
+  | EditableRulesTalentsSnapshot
+  | EditableRulesItemTemplatesSnapshot
+  | EditableRulesSkillTemplatesSnapshot {
   switch (scope) {
     case "attributes":
       return {
@@ -843,6 +979,14 @@ function getRawRulesEditorPayload(
         ...(rules.talentRules
           ? { talentRules: cloneValue(rules.talentRules) }
           : {}),
+      };
+    case "itemTemplates":
+      return {
+        itemTemplates: cloneValue(rules.itemTemplates ?? []),
+      };
+    case "skillTemplates":
+      return {
+        skillTemplates: cloneValue(rules.skillTemplates ?? []),
       };
     case "full":
     default:
@@ -935,6 +1079,26 @@ function applyRawRulesEditorPayload(
         normalizeTalent(item, index),
       );
       nextRules.talentRules = normalizeTalentRules(parsed.talentRules);
+      break;
+
+    case "itemTemplates":
+      if (!Array.isArray(parsed.itemTemplates)) {
+        throw new Error("物品模板分区必须包含 itemTemplates 数组");
+      }
+
+      nextRules.itemTemplates = parsed.itemTemplates.map((item, index) =>
+        normalizeItemTemplate(item, index),
+      );
+      break;
+
+    case "skillTemplates":
+      if (!Array.isArray(parsed.skillTemplates)) {
+        throw new Error("技能模板分区必须包含 skillTemplates 数组");
+      }
+
+      nextRules.skillTemplates = parsed.skillTemplates.map((item, index) =>
+        normalizeSkillTemplate(item, index),
+      );
       break;
   }
 
@@ -2345,6 +2509,122 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     [updateDraft],
   );
 
+  const updateItemTemplate = useCallback(
+    (index: number, updates: Partial<ItemTemplate>) => {
+      updateDraft((current) => {
+        current.rules.itemTemplates = current.rules.itemTemplates ?? [];
+        const target = current.rules.itemTemplates[index];
+        if (!target) {
+          return current;
+        }
+
+        current.rules.itemTemplates[index] = normalizeItemTemplate(
+          {
+            ...target,
+            ...updates,
+          },
+          index,
+        );
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const addItemTemplate = useCallback(() => {
+    updateDraft((current) => {
+      current.rules.itemTemplates = current.rules.itemTemplates ?? [];
+      current.rules.itemTemplates.push(
+        normalizeItemTemplate(
+          {
+            id: generateId("item"),
+            name: `物品 ${current.rules.itemTemplates.length + 1}`,
+            description: "",
+            category: "misc",
+          },
+          current.rules.itemTemplates.length,
+        ),
+      );
+      return current;
+    });
+  }, [updateDraft]);
+
+  const removeItemTemplate = useCallback(
+    (index: number) => {
+      updateDraft((current) => {
+        if (!current.rules.itemTemplates?.[index]) {
+          return current;
+        }
+
+        current.rules.itemTemplates.splice(index, 1);
+        current.rules.itemTemplates = current.rules.itemTemplates.map(
+          (item, itemIndex) => normalizeItemTemplate(item, itemIndex),
+        );
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const updateSkillTemplate = useCallback(
+    (index: number, updates: Partial<SkillTemplate>) => {
+      updateDraft((current) => {
+        current.rules.skillTemplates = current.rules.skillTemplates ?? [];
+        const target = current.rules.skillTemplates[index];
+        if (!target) {
+          return current;
+        }
+
+        current.rules.skillTemplates[index] = normalizeSkillTemplate(
+          {
+            ...target,
+            ...updates,
+          },
+          index,
+        );
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const addSkillTemplate = useCallback(() => {
+    updateDraft((current) => {
+      current.rules.skillTemplates = current.rules.skillTemplates ?? [];
+      current.rules.skillTemplates.push(
+        normalizeSkillTemplate(
+          {
+            id: generateId("skill"),
+            name: `技能 ${current.rules.skillTemplates.length + 1}`,
+            description: "",
+            category: "misc",
+            maxLevel: 1,
+            activeUsable: false,
+          },
+          current.rules.skillTemplates.length,
+        ),
+      );
+      return current;
+    });
+  }, [updateDraft]);
+
+  const removeSkillTemplate = useCallback(
+    (index: number) => {
+      updateDraft((current) => {
+        if (!current.rules.skillTemplates?.[index]) {
+          return current;
+        }
+
+        current.rules.skillTemplates.splice(index, 1);
+        current.rules.skillTemplates = current.rules.skillTemplates.map(
+          (item, itemIndex) => normalizeSkillTemplate(item, itemIndex),
+        );
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
   return {
     worlds,
     activeWorldId,
@@ -2407,6 +2687,12 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     updateTalent,
     addTalent,
     removeTalent,
+    updateItemTemplate,
+    addItemTemplate,
+    removeItemTemplate,
+    updateSkillTemplate,
+    addSkillTemplate,
+    removeSkillTemplate,
     pendingDeleteWorld,
     discardConfirm: {
       open: discardConfirm.open,
