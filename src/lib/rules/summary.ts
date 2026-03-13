@@ -173,6 +173,14 @@ export function generateMechanicSummary(
         case "skill_removed":
           lines.push(`遗忘技能: ${name}`);
           break;
+        case "level_up": {
+          const levels =
+            typeof change.details?.levels === "number"
+              ? change.details.levels
+              : 1;
+          lines.push(`角色升级: ${change.targetId} +${levels}级`);
+          break;
+        }
       }
     }
   }

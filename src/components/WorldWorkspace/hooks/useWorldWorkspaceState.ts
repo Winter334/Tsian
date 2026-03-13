@@ -80,6 +80,11 @@ type EditableRulesInventoryRulesSnapshot = Pick<WorldConfig, "inventoryRules">;
 type EditableRulesItemTemplatesSnapshot = Pick<WorldConfig, "itemTemplates">;
 type EditableRulesSkillTemplatesSnapshot = Pick<WorldConfig, "skillTemplates">;
 type EditableTalentRules = NonNullable<WorldConfig["talentRules"]>;
+type EditableTalentRarity = NonNullable<
+  EditableTalentRules["rarities"]
+>[number];
+type EditableTalentPool = NonNullable<EditableTalentRules["pools"]>[number];
+type EditableTalentPityRule = NonNullable<EditableTalentRules["pity"]>[number];
 
 type EditableDCPresets = NonNullable<CheckRuleConfig["dcPresets"]>;
 type EditableDCPreset = EditableDCPresets[string];
@@ -112,6 +117,7 @@ export interface WorldWorkspaceState {
   rawRulesError: string | null;
   mobilePage: WorldWorkspaceMobilePage;
   validationMessages: string[];
+  resetToBuiltinDefault: () => void;
 }
 
 export interface WorldWorkspaceActions {
@@ -684,6 +690,83 @@ function normalizeCondition(value: unknown, index: number): ConditionConfig {
   };
 }
 
+function normalizeTalentRarity(
+  value: unknown,
+  index: number,
+): EditableTalentRarity {
+  const record = isRecord(value) ? value : {};
+  const colorToken = toOptionalString(record.colorToken);
+  const glowToken = toOptionalString(record.glowToken);
+  const minLevel = toOptionalPositiveInteger(record.minLevel);
+
+  return {
+    id: toRequiredString(record.id, `rarity_${index + 1}`),
+    label: toRequiredString(record.label, `品质 ${index + 1}`),
+    weight: toNumber(record.weight, 1),
+    ...(colorToken ? { colorToken } : {}),
+    ...(glowToken ? { glowToken } : {}),
+    ...(minLevel === undefined ? {} : { minLevel }),
+  };
+}
+
+function normalizeTalentPool(
+  value: unknown,
+  index: number,
+): EditableTalentPool {
+  const record = isRecord(value) ? value : {};
+  const label = toOptionalString(record.label);
+  const allowedCategories = toUniqueStringArray(record.allowedCategories);
+  const allowedRarities = toUniqueStringArray(record.allowedRarities);
+  const includeTalentIds = toUniqueStringArray(record.includeTalentIds);
+  const excludeTalentIds = toUniqueStringArray(record.excludeTalentIds);
+  const minLevel = toOptionalPositiveInteger(record.minLevel);
+
+  return {
+    id: toRequiredString(record.id, `pool_${index + 1}`),
+    ...(label ? { label } : {}),
+    ...(allowedCategories.length > 0 ? { allowedCategories } : {}),
+    ...(allowedRarities.length > 0 ? { allowedRarities } : {}),
+    ...(includeTalentIds.length > 0 ? { includeTalentIds } : {}),
+    ...(excludeTalentIds.length > 0 ? { excludeTalentIds } : {}),
+    ...(minLevel === undefined ? {} : { minLevel }),
+  };
+}
+
+function normalizeTalentPityRule(
+  value: unknown,
+  index: number,
+): EditableTalentPityRule {
+  const record = isRecord(value) ? value : {};
+
+  return {
+    afterMisses: toOptionalNonNegativeInteger(record.afterMisses) ?? 1,
+    guaranteeRarity: toRequiredString(
+      record.guaranteeRarity,
+      `rarity_${index + 1}`,
+    ),
+  };
+}
+
+function normalizeTalentDraw(value: unknown): TalentConfig["draw"] | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const weight = toOptionalNumber(value.weight);
+  const poolIds = toUniqueStringArray(value.poolIds);
+  const minLevel = toOptionalPositiveInteger(value.minLevel);
+
+  if (weight === undefined && poolIds.length === 0 && minLevel === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(weight === undefined ? {} : { weight }),
+    ...(poolIds.length > 0 ? { poolIds } : {}),
+    ...(minLevel === undefined ? {} : { minLevel }),
+  };
+}
+
 function normalizeTalentRules(
   value: unknown,
 ): WorldConfig["talentRules"] | undefined {
@@ -691,25 +774,66 @@ function normalizeTalentRules(
     return undefined;
   }
 
-  const initialCount = toOptionalNonNegativeInteger(value.initialCount);
+  const initialDrawCount = toOptionalNonNegativeInteger(value.initialDrawCount);
+  const initialOffersPerDraw = toOptionalPositiveInteger(
+    value.initialOffersPerDraw,
+  );
   const allowAcquireDuringGame =
     typeof value.allowAcquireDuringGame === "boolean"
       ? value.allowAcquireDuringGame
       : undefined;
+  const freeDrawAttributeKey = toOptionalString(value.freeDrawAttributeKey);
+  const drawPointAttributeKey = toOptionalString(value.drawPointAttributeKey);
+  const drawPointCost = toOptionalNonNegativeInteger(value.drawPointCost);
+  const duplicatePolicy =
+    value.duplicatePolicy === "exclude_owned" ||
+    value.duplicatePolicy === "allow_repeat"
+      ? value.duplicatePolicy
+      : undefined;
+  const rarities = Array.isArray(value.rarities)
+    ? value.rarities.map((item, index) => normalizeTalentRarity(item, index))
+    : [];
+  const pools = Array.isArray(value.pools)
+    ? value.pools.map((item, index) => normalizeTalentPool(item, index))
+    : [];
+  const pity = Array.isArray(value.pity)
+    ? value.pity.map((item, index) => normalizeTalentPityRule(item, index))
+    : [];
 
-  if (initialCount === undefined && allowAcquireDuringGame === undefined) {
+  if (
+    initialDrawCount === undefined &&
+    initialOffersPerDraw === undefined &&
+    allowAcquireDuringGame === undefined &&
+    freeDrawAttributeKey === undefined &&
+    drawPointAttributeKey === undefined &&
+    drawPointCost === undefined &&
+    duplicatePolicy === undefined &&
+    rarities.length === 0 &&
+    pools.length === 0 &&
+    pity.length === 0
+  ) {
     return undefined;
   }
 
   return {
-    ...(initialCount === undefined ? {} : { initialCount }),
+    ...(initialDrawCount === undefined ? {} : { initialDrawCount }),
+    ...(initialOffersPerDraw === undefined ? {} : { initialOffersPerDraw }),
     ...(allowAcquireDuringGame === undefined ? {} : { allowAcquireDuringGame }),
+    ...(freeDrawAttributeKey ? { freeDrawAttributeKey } : {}),
+    ...(drawPointAttributeKey ? { drawPointAttributeKey } : {}),
+    ...(drawPointCost === undefined ? {} : { drawPointCost }),
+    ...(duplicatePolicy === undefined ? {} : { duplicatePolicy }),
+    ...(rarities.length > 0 ? { rarities } : {}),
+    ...(pools.length > 0 ? { pools } : {}),
+    ...(pity.length > 0 ? { pity } : {}),
   };
 }
 
 function normalizeTalent(value: unknown, index: number): TalentConfig {
   const record = isRecord(value) ? value : {};
   const category = toOptionalString(record.category);
+  const rarity = toOptionalString(record.rarity);
+  const draw = normalizeTalentDraw(record.draw);
 
   return {
     id: toRequiredString(record.id, `talent_${index + 1}`),
@@ -724,6 +848,8 @@ function normalizeTalent(value: unknown, index: number): TalentConfig {
         ? category
         : undefined,
     icon: toOptionalString(record.icon),
+    ...(rarity ? { rarity } : {}),
+    ...(draw ? { draw } : {}),
     modifiers: Array.isArray(record.modifiers)
       ? cloneValue(record.modifiers)
       : undefined,
@@ -1597,12 +1723,12 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
       }
     }
 
-    const talentInitialCount = draft.rules.talentRules?.initialCount;
+    const talentInitialDrawCount = draft.rules.talentRules?.initialDrawCount;
     if (
-      talentInitialCount !== undefined &&
-      (!Number.isInteger(talentInitialCount) || talentInitialCount < 0)
+      talentInitialDrawCount !== undefined &&
+      (!Number.isInteger(talentInitialDrawCount) || talentInitialDrawCount < 0)
     ) {
-      messages.push("天赋规则的初始可选数量必须是大于等于 0 的整数。");
+      messages.push("天赋规则的初始抽取次数必须是大于等于 0 的整数。");
     }
 
     if ((draft.rules.talents ?? []).length === 0) {
@@ -1836,6 +1962,25 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     setRawRulesEditorScope("full");
     syncRawRulesFromDraft(nextWorld, "full");
   }, [selectedWorld, syncRawRulesFromDraft]);
+
+  const resetToBuiltinDefault = useCallback(() => {
+    if (!draft) return;
+
+    updateDraft((current) => {
+      current.rules = {
+        ...defaultWorld.rules,
+        worldId: current.id,
+        worldName: current.meta.name,
+      };
+      current.narrative = { ...defaultWorld.narrative };
+      current.rules = normalizeWorldRules(
+        current.id,
+        current.meta.name,
+        current.rules,
+      );
+      return current;
+    });
+  }, [draft, updateDraft]);
 
   const openRawRulesEditor = useCallback(
     (scope: WorldRulesEditorScope) => {
@@ -2798,6 +2943,7 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     cancelDeleteWorld,
     saveSelectedWorld,
     resetDraft,
+    resetToBuiltinDefault,
     setMobilePage,
     openRawRulesEditor,
     closeRawRulesEditor,

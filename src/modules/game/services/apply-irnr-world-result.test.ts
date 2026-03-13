@@ -1,3 +1,4 @@
+import type { Character } from "@/domain/entities/character";
 import type {
   CreatedNpcData,
   EntityFinalState,
@@ -114,6 +115,10 @@ describe("applyIrnrWorldResult", () => {
     expect(applyStructuralChangesMock).toHaveBeenCalledWith(
       structuralChanges,
       commandBus,
+      {
+        roomId: undefined,
+        resolveLevelUpOperator: undefined,
+      },
     );
     expect(dispatch).toHaveBeenCalledWith(
       {
@@ -156,6 +161,14 @@ describe("applyIrnrWorldResult", () => {
     });
 
     expect(calls).toEqual(["structural", "archive"]);
+    expect(applyStructuralChangesMock).toHaveBeenCalledWith(
+      structuralChanges,
+      commandBus,
+      {
+        roomId: undefined,
+        resolveLevelUpOperator: undefined,
+      },
+    );
   });
 
   it("没有档案变更时不分发 world archive 聚合命令", async () => {
@@ -176,7 +189,10 @@ describe("applyIrnrWorldResult", () => {
     });
 
     expect(repository.upsertFromEntityStates).toHaveBeenCalledTimes(1);
-    expect(applyStructuralChangesMock).toHaveBeenCalledWith([], commandBus);
+    expect(applyStructuralChangesMock).toHaveBeenCalledWith([], commandBus, {
+      roomId: undefined,
+      resolveLevelUpOperator: undefined,
+    });
     expect(dispatch).not.toHaveBeenCalled();
   });
 
@@ -207,5 +223,59 @@ describe("applyIrnrWorldResult", () => {
     );
 
     warnSpy.mockRestore();
+  });
+
+  it("为 level_up 透传房间上下文与操作者解析器", async () => {
+    const repository = {
+      upsertFromEntityStates: vi.fn(),
+    };
+    const { commandBus } = createCommandBus();
+    const resolveLevelUpOperator = vi.fn(
+      (
+        _characterId: string,
+      ): Pick<Character, "operatorUserId" | "operatorUniqueTag"> => ({
+        operatorUserId: "user-1",
+        operatorUniqueTag: "tag-1",
+      }),
+    );
+    const structuralChanges: StructuralChange[] = [
+      {
+        type: "level_up",
+        entityId: "player-1",
+        targetId: "player-1",
+        details: { levels: 2 },
+        reason: "trial",
+      },
+    ];
+
+    await applyIrnrWorldResult({
+      currentTurn: 5,
+      repository,
+      result: {
+        finalEntityStates: [createFinalEntityState("player-1")],
+        structuralChanges,
+      },
+      commandBus,
+      roomId: "room-1",
+      resolveLevelUpOperator,
+    });
+
+    expect(applyStructuralChangesMock).toHaveBeenCalledTimes(1);
+    const options = applyStructuralChangesMock.mock.calls[0]?.[2] as
+      | {
+          roomId?: string;
+          resolveLevelUpOperator?: (characterId: string) => {
+            userId: string;
+            uniqueTag: string;
+          } | null;
+        }
+      | undefined;
+
+    expect(options?.roomId).toBe("room-1");
+    expect(options?.resolveLevelUpOperator?.("player-1")).toEqual({
+      userId: "user-1",
+      uniqueTag: "tag-1",
+    });
+    expect(resolveLevelUpOperator).toHaveBeenCalledWith("player-1");
   });
 });

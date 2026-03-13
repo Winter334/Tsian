@@ -554,6 +554,15 @@ function renderStructuralChangeLines(
         keyword = "遗忘技能";
         line = `${targetName} 遗忘技能: ${name}`;
         break;
+      case "level_up": {
+        const levels =
+          typeof change.details?.levels === "number"
+            ? change.details.levels
+            : 1;
+        keyword = "角色升级";
+        line = `${targetName} 角色升级: +${levels}级`;
+        break;
+      }
     }
 
     if (!line) continue;

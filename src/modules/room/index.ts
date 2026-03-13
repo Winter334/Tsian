@@ -41,6 +41,7 @@ import {
 } from "./commands/ai-handlers";
 import {
   advancePhaseHandler,
+  allocateLevelPointsHandler,
   completePhaseHandler,
   completeTurnHandler,
   createCharacterHandler,
@@ -518,6 +519,7 @@ function createRoomCommandHandlers(): Record<
     [RoomCommands.CREATE_CHARACTER]: wrap(createCharacterHandler),
     [RoomCommands.UPDATE_CHARACTER]: wrap(updateCharacterHandler),
     [RoomCommands.LEVEL_UP]: wrap(levelUpHandler),
+    [RoomCommands.ALLOCATE_LEVEL_POINTS]: wrap(allocateLevelPointsHandler),
     [RoomCommands.KICK_MEMBER]: wrap(kickMemberHandler),
     [RoomCommands.DELETE_ROOM]: wrap(deleteRoomHandler),
     [RoomCommands.UPDATE_ROOM_SETTINGS]: wrap(updateRoomSettingsHandler),

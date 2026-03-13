@@ -32,6 +32,7 @@ import { CharacterPortraitPanel } from "./CharacterPortraitPanel";
 import { CharacterRadarChart } from "./CharacterRadarChart";
 import { EquipmentSection } from "./EquipmentSection";
 import { InventorySection } from "./InventorySection";
+import { LevelAllocationPanel } from "./LevelAllocationPanel";
 import { SkillSection } from "./SkillSection";
 import { StatusSection } from "./StatusSection";
 
@@ -405,10 +406,19 @@ function OverviewTabContent({
         </div>
       </motion.div>
 
+      <motion.div
+        custom={1}
+        variants={sectionVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        <LevelAllocationPanel character={character} worldConfig={worldConfig} />
+      </motion.div>
+
       {/* ── 属性雷达图（居中，完整宽度） ── */}
       {allocatableKeys.length > 0 && (
         <motion.div
-          custom={1}
+          custom={2}
           variants={sectionVariants}
           initial="hidden"
           animate="visible"

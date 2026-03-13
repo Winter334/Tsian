@@ -1,9 +1,11 @@
+import { motion } from "framer-motion";
 import { Eye, Heart, ScrollText, User } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { usePlayerCharacter } from "@/components/CharacterPanel/usePlayerCharacter";
 import { useCharacterFullStats } from "@/hooks/useCharacterFullStats";
 import { usePortrait } from "@/lib/portrait";
+import { getPendingLevelAllocationState } from "@/lib/world/level-allocation";
 import { getRuntimeWorldConfig } from "@/lib/world/resolve-config";
 import type { WorldConfig } from "@/lib/world/types";
 import { useCurrentSaveId } from "@/modules";
@@ -83,16 +85,37 @@ function ResourceBar({
   );
 }
 
+function PendingGrowthBadge({ count }: { count: number }) {
+  return (
+    <motion.div
+      className="pointer-events-none absolute right-3 top-3 z-10 flex min-h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold"
+      animate={{ scale: [1, 1.08, 1], opacity: [0.9, 1, 0.9] }}
+      transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+      style={{
+        background: color("error"),
+        color: color("textPrimary"),
+        boxShadow: glow("error", "sm", 0.28),
+        border: `1px solid ${colorAlpha("error", 0.28)}`,
+      }}
+      aria-hidden="true"
+    >
+      {count > 9 ? "9+" : count}
+    </motion.div>
+  );
+}
+
 function SidebarPortrait({
   saveId,
   characterId,
   characterName,
   onClick,
+  pendingGrowthCount,
 }: {
   saveId: string | null;
   characterId: string;
   characterName: string;
   onClick: () => void;
+  pendingGrowthCount: number;
 }) {
   const { portraitUrl, isLoading } = usePortrait(saveId, characterId);
   const fallbackText = characterName?.slice(0, 1).toUpperCase() || "?";
@@ -109,6 +132,9 @@ function SidebarPortrait({
       }}
     >
       <div className="relative w-full" style={{ aspectRatio: "3 / 4" }}>
+        {pendingGrowthCount > 0 && (
+          <PendingGrowthBadge count={pendingGrowthCount} />
+        )}
         {isLoading ? (
           <div
             className="w-full h-full animate-pulse"
@@ -313,6 +339,13 @@ export function LeftSidebar({ onOpenCharacterPanel }: LeftSidebarProps) {
   const worldConfig = useRuntimeWorldConfig();
   const currentSaveId = useCurrentSaveId();
   const fullStats = useCharacterFullStats(character, worldConfig);
+  const pendingGrowthCount = useMemo(() => {
+    const allocationState = getPendingLevelAllocationState(
+      character,
+      worldConfig,
+    );
+    return allocationState?.unspentPoints ?? 0;
+  }, [character, worldConfig]);
 
   if (!character) {
     return (
@@ -344,6 +377,7 @@ export function LeftSidebar({ onOpenCharacterPanel }: LeftSidebarProps) {
         characterId={character.id}
         characterName={character.name}
         onClick={onOpenCharacterPanel}
+        pendingGrowthCount={pendingGrowthCount}
       />
 
       <button

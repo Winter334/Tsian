@@ -13,6 +13,8 @@ import type {
   ResultFrame,
 } from "@/domain/types";
 
+import type { Character } from "@/domain/entities/character";
+
 import type { GameStateRepository } from "../repository";
 import { applyStructuralChanges } from "./structural-change-consumer";
 
@@ -37,6 +39,13 @@ interface ApplyIrnrWorldResultOptions {
   result: IrnrWorldResult;
   commandBus: WorldResultCommandBus;
   correlationId?: string;
+  roomId?: string;
+  resolveLevelUpOperator?: (
+    characterId: string,
+  ) =>
+    | Pick<Character, "operatorUserId" | "operatorUniqueTag">
+    | null
+    | undefined;
 }
 
 /**
@@ -51,6 +60,8 @@ export async function applyIrnrWorldResult({
   result,
   commandBus,
   correlationId,
+  roomId,
+  resolveLevelUpOperator,
 }: ApplyIrnrWorldResultOptions): Promise<void> {
   const { finalEntityStates, createdNpcs, archiveUpdates, structuralChanges } =
     result;
@@ -59,7 +70,22 @@ export async function applyIrnrWorldResult({
     repository.upsertFromEntityStates(finalEntityStates, createdNpcs);
   }
 
-  await applyStructuralChanges(structuralChanges, commandBus);
+  await applyStructuralChanges(structuralChanges, commandBus, {
+    roomId,
+    resolveLevelUpOperator: resolveLevelUpOperator
+      ? (characterId) => {
+          const operator = resolveLevelUpOperator(characterId);
+          if (!operator) {
+            return null;
+          }
+
+          return {
+            userId: operator.operatorUserId,
+            uniqueTag: operator.operatorUniqueTag,
+          };
+        }
+      : undefined,
+  });
 
   const archiveCommandPayload: SyncPipelineArchiveChangesPayload = {
     currentTurn,

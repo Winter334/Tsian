@@ -21,8 +21,8 @@ describe("默认叙事预设（defaultPreset）", () => {
     expect(defaultPreset.purpose).toBe("narrative");
   });
 
-  it("包含 9 个块", () => {
-    expect(defaultPreset.blocks).toHaveLength(9);
+  it("包含 10 个块", () => {
+    expect(defaultPreset.blocks).toHaveLength(10);
   });
 
   it("blockOrder 与 blocks 数量一致", () => {
@@ -103,6 +103,7 @@ describe("默认叙事预设（defaultPreset）", () => {
       "world-info",
       "scenario",
       "memory-summary",
+      "narrative-hints",
       "narrative-thinking",
       "narrative-state",
       "resultFrame",
@@ -112,16 +113,16 @@ describe("默认叙事预设（defaultPreset）", () => {
 });
 
 describe("默认解析预设（defaultParserPreset）", () => {
-  it("版本号为 1.4.0", () => {
-    expect(defaultParserPreset.metadata.version).toBe("1.4.0");
+  it("版本号为 2.0.0", () => {
+    expect(defaultParserPreset.metadata.version).toBe("2.0.0");
   });
 
   it("purpose 为 parser", () => {
     expect(defaultParserPreset.purpose).toBe("parser");
   });
 
-  it("包含 7 个块", () => {
-    expect(defaultParserPreset.blocks).toHaveLength(7);
+  it("包含 8 个块", () => {
+    expect(defaultParserPreset.blocks).toHaveLength(8);
   });
 
   it("blockOrder 与 blocks 数量一致", () => {
@@ -202,6 +203,7 @@ describe("默认解析预设（defaultParserPreset）", () => {
       "parser-system-role",
       "operation-defs",
       "dm-thinking",
+      "plot-directives",
       "character-sheet",
       "anti-repeat-output-rules",
       "memory-summary",

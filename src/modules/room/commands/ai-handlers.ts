@@ -543,6 +543,29 @@ export async function processAiTurnHandler(
           },
           commandBus,
           correlationId: context.commandId,
+          roomId,
+          resolveLevelUpOperator: (characterId) => {
+            const charMap = charactersMap.get(characterId);
+            if (!charMap) {
+              return null;
+            }
+
+            const operatorUserId = charMap.get("operatorUserId");
+            const operatorUniqueTag = charMap.get("operatorUniqueTag");
+            if (
+              typeof operatorUserId !== "string" ||
+              operatorUserId.trim().length === 0 ||
+              typeof operatorUniqueTag !== "string" ||
+              operatorUniqueTag.trim().length === 0
+            ) {
+              return null;
+            }
+
+            return {
+              operatorUserId,
+              operatorUniqueTag,
+            };
+          },
         });
 
         // === NPC 自动归档检查 ===

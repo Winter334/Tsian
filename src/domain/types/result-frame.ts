@@ -95,7 +95,8 @@ export interface ResultFrame {
 /**
  * 结构化变更记录
  *
- * 记录物品/技能等结构性实体的增减，与 ValueChange（数值变更）互补。
+ * 记录需要在引擎执行后由上层统一消费的结构化/命令化结果，
+ * 与 ValueChange（数值变更）互补。
  */
 export interface StructuralChange {
   readonly type:
@@ -105,7 +106,8 @@ export interface StructuralChange {
     | "item_unequipped"
     | "item_used"
     | "skill_learned"
-    | "skill_removed";
+    | "skill_removed"
+    | "level_up";
   /** 物品/技能实例 ID */
   readonly entityId: string;
   /** 角色 ID */

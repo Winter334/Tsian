@@ -406,7 +406,7 @@ const setSchema: ActionSchema = {
   category: "attribute",
   displayName: "设置属性值",
   description:
-    "直接覆写目标的属性字段值。无上下限保护，慎用。大多数情况应优先使用 damage/heal/cost。",
+    "直接覆写目标的属性字段值。无上下限保护，慎用。大多数情况应优先使用 damage/heal/cost；角色升级必须使用 level_up，而不是 set level。",
   params: [
     {
       name: "target",
@@ -435,13 +435,14 @@ const setSchema: ActionSchema = {
   ],
   constraints: [
     "set 直接覆盖字段值，不做上下限保护",
-    "适用场景：等级提升、重置属性、特殊剧情效果",
+    "适用场景：重置属性、特殊剧情效果、调试修正",
     "不要用 set 来造成伤害或恢复资源，应使用 damage/heal/cost",
+    "不要用 set 直接修改 level；角色升级必须使用 level_up",
   ],
   examples: [
     {
-      scenario: "角色升级，将等级设为 2",
-      json: `{ "type": "set", "target": "player", "field": "level", "value": 2, "reason": "完成主线任务，等级提升" }`,
+      scenario: "特殊剧情中直接重置理智值",
+      json: `{ "type": "set", "target": "player", "field": "sanity", "value": 0, "reason": "目睹禁忌真相后理智崩溃" }`,
     },
   ],
 };
@@ -477,6 +478,7 @@ export const levelUpSchema: ActionSchema = {
     "仅在叙事中角色达成成长、突破、觉醒、晋升等条件时使用",
     "不要用 level_up 替代普通属性修改；非成长场景请使用其他 action",
     "升级结算会自动处理等级、成长和资源恢复，不要再用 set 手动补写 level",
+    "当意图是角色升级时，必须输出 level_up，不要输出 set + field=level",
   ],
   examples: [
     {

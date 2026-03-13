@@ -75,6 +75,8 @@ export const RoomCommands = {
   UPDATE_CHARACTER: "room/character/update",
   /** 角色升级 */
   LEVEL_UP: "room/character/level-up" as const,
+  /** 分配升级属性点 */
+  ALLOCATE_LEVEL_POINTS: "room/character/allocate-level-points" as const,
 
   // ===== NPC 管理 =====
   /** 创建 NPC（由规则引擎在处理 Parser AI 输出时调用） */
@@ -497,4 +499,18 @@ export interface LevelUpPayload {
   levels?: number;
   /** 升级原因（叙事描述） */
   reason?: string;
+}
+
+/** 分配升级属性点命令负载 */
+export interface AllocateLevelPointsPayload {
+  /** 房间 ID */
+  roomId: string;
+  /** 角色 ID */
+  characterId: string;
+  /** 操作者用户 ID */
+  userId: string;
+  /** 操作者唯一标签 */
+  uniqueTag: string;
+  /** 本次属性点分配 */
+  allocation: Record<string, number>;
 }

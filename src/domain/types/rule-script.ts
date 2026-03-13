@@ -24,6 +24,7 @@ export type RuleAction =
   | HealAction
   | CostAction
   | SetAction
+  | LevelUpAction
   | AddTagAction
   | RemoveTagAction
   | ModifyTagAction
@@ -157,6 +158,13 @@ export interface SetAction extends RuleActionBase {
   target: string;
   field: string;
   value: ValueExpression;
+  reason?: string;
+}
+
+export interface LevelUpAction extends RuleActionBase {
+  type: "level_up";
+  target: string;
+  levels?: number;
   reason?: string;
 }
 

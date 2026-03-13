@@ -10,7 +10,12 @@
  * 4. 如需新模式，在 types.ts 的 GAME_MODES 中添加
  */
 
-import type { CharacterDimension, WorldConfig } from "@/lib/world/types";
+import { generateTalentCandidates } from "@/lib/rules/talent-draw";
+import {
+  aggregateDimensionEffects,
+  type CharacterDimension,
+  type WorldConfig,
+} from "@/lib/world/types";
 
 import type { GameMode, WizardContext, WizardStepConfig } from "./types";
 import { GAME_MODES } from "./types";
@@ -61,6 +66,52 @@ const FIXED_STEP_REGISTRY: Record<
   },
   "solo-char-talents": {
     component: SoloCharTalentsStep,
+    validate: (ctx) => {
+      const worldConfig = ctx.worldConfig;
+      if (!worldConfig) {
+        return false;
+      }
+
+      const dimensionEffects = aggregateDimensionEffects(
+        worldConfig,
+        ctx.dimensionSelections ?? {},
+      );
+      const autoTalentIdSet = new Set(dimensionEffects.grantedTalents);
+      const selectedTalentIds = (ctx.talentIds ?? []).filter(
+        (talentId) => !autoTalentIdSet.has(talentId),
+      );
+      const initialDrawCount = worldConfig.talentRules?.initialDrawCount ?? 2;
+
+      if (selectedTalentIds.length >= initialDrawCount) {
+        return true;
+      }
+
+      const levelAttributeKey =
+        worldConfig.levelSystem?.levelAttributeKey ?? "level";
+      const defaultCharacterLevel =
+        worldConfig.primaryAttributes.find(
+          (attr) => attr.key === levelAttributeKey,
+        )?.defaultValue ?? 1;
+      const rawLevel = ctx.attributes?.[levelAttributeKey];
+      const characterLevel =
+        typeof rawLevel === "number"
+          ? rawLevel
+          : typeof rawLevel === "string"
+            ? Number(rawLevel)
+            : defaultCharacterLevel;
+
+      const nextDrawPreview = generateTalentCandidates({
+        allTalents: worldConfig.talents ?? [],
+        ownedTalentIds: Array.from(new Set(ctx.talentIds ?? [])),
+        characterLevel: Number.isFinite(characterLevel)
+          ? characterLevel
+          : defaultCharacterLevel,
+        talentRules: worldConfig.talentRules,
+        excludeTalentIds: dimensionEffects.excludedTalents,
+      });
+
+      return nextDrawPreview.candidates.length === 0;
+    },
   },
   "solo-char-confirm": {
     component: SoloCharConfirmStep,

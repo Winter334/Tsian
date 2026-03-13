@@ -43,6 +43,7 @@ import type { ItemInstance } from "@/domain/entities/item";
 import type { SkillInstance } from "@/domain/entities/skill";
 import type {
   EquipItemAction,
+  LevelUpAction,
   UnequipItemAction,
   UseItemAction,
 } from "@/domain/types/rule-script";
@@ -656,6 +657,9 @@ function executeAction(
       break;
     case "set":
       executeSet(normalizedAction as SetAction, context, state);
+      break;
+    case "level_up":
+      executeLevelUp(normalizedAction as LevelUpAction, context, state);
       break;
     case "branch":
       executeBranch(
@@ -1679,6 +1683,27 @@ function executeModifyTag(
     newValue,
     reason: action.reason ?? `修改标签 ${action.tag} (${action.operation})`,
   });
+}
+
+function executeLevelUp(
+  action: LevelUpAction,
+  context: ExecutionContext,
+  state: InternalExecutionState,
+): void {
+  const targetId = resolveEntityId(action.target, context, state);
+  const levels = Math.max(1, Math.trunc(action.levels ?? 1));
+  const targetName = getEntityDisplayName(targetId, context, state);
+  const reasonPart = action.reason ? `（${action.reason}）` : "";
+
+  state.structuralChanges.push({
+    type: "level_up",
+    entityId: targetId,
+    targetId,
+    details: { levels },
+    reason: action.reason,
+  });
+
+  pushSummaryLine(state, `${targetName} 提升 ${levels} 级${reasonPart}`);
 }
 
 // A0: shadow-aware set（原 setValue）

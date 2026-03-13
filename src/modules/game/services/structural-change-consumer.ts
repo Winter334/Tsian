@@ -14,6 +14,7 @@ import {
   type UnequipItemPayload,
   type UseItemPayload,
 } from "@/domain/commands/inventory";
+import { RoomCommands, type LevelUpPayload } from "@/domain/commands/room";
 import {
   isItemEffectArray,
   type ItemCategory,
@@ -26,6 +27,18 @@ import type { StructuralChange } from "@/domain/types/result-frame";
 interface CommandDispatcher {
   dispatch<C, R>(command: Command<C>): Promise<CommandResult<R>>;
   createCommand<C>(type: string, payload: C): Command<C>;
+}
+
+interface LevelUpOperatorIdentity {
+  userId: string;
+  uniqueTag: string;
+}
+
+interface StructuralChangeApplyOptions {
+  roomId?: string;
+  resolveLevelUpOperator?: (
+    characterId: string,
+  ) => LevelUpOperatorIdentity | null | undefined;
 }
 
 // ─── 类型守卫 ──────────────────────────────────────────────
@@ -72,6 +85,7 @@ function isFailedChange(change: StructuralChange): boolean {
 export async function applyStructuralChanges(
   structuralChanges: readonly StructuralChange[] | undefined,
   commandBus: CommandDispatcher,
+  options?: StructuralChangeApplyOptions,
 ): Promise<void> {
   if (!structuralChanges || structuralChanges.length === 0) return;
 
@@ -106,6 +120,9 @@ export async function applyStructuralChanges(
           break;
         case "skill_removed":
           await dispatchRemoveSkill(change, commandBus);
+          break;
+        case "level_up":
+          await dispatchLevelUp(change, commandBus, options);
           break;
         default:
           console.warn(
@@ -332,6 +349,58 @@ async function dispatchRemoveSkill(
       reason: change.reason,
     },
   });
+
+  if (!result.success) {
+    console.error(
+      `[StructuralChangeConsumer] ${change.type} dispatch failed:`,
+      result.error,
+      change,
+    );
+  }
+}
+
+async function dispatchLevelUp(
+  change: StructuralChange,
+  commandBus: CommandDispatcher,
+  options?: StructuralChangeApplyOptions,
+): Promise<void> {
+  const roomId =
+    typeof options?.roomId === "string" && options.roomId.trim().length > 0
+      ? options.roomId
+      : undefined;
+  if (!roomId) {
+    console.warn(
+      `[StructuralChangeConsumer] level_up 缺少 roomId，已跳过`,
+      change,
+    );
+    return;
+  }
+
+  const operator = options?.resolveLevelUpOperator?.(change.targetId);
+  if (!operator) {
+    console.warn(
+      `[StructuralChangeConsumer] level_up 缺少角色操作者身份，已跳过: ${change.targetId}`,
+      change,
+    );
+    return;
+  }
+
+  const levelsRaw = change.details?.levels;
+  const levels =
+    typeof levelsRaw === "number" && Number.isFinite(levelsRaw)
+      ? Math.max(1, Math.trunc(levelsRaw))
+      : 1;
+
+  const result = await commandBus.dispatch(
+    commandBus.createCommand(RoomCommands.LEVEL_UP, {
+      roomId,
+      characterId: change.targetId,
+      userId: operator.userId,
+      uniqueTag: operator.uniqueTag,
+      levels,
+      reason: change.reason,
+    } satisfies LevelUpPayload),
+  );
 
   if (!result.success) {
     console.error(

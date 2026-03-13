@@ -108,6 +108,15 @@ export interface TalentConfig {
   icon?: string;
   /** 品质 ID，引用 talentRules.rarities */
   rarity?: string;
+  /** 抽取元数据 */
+  draw?: {
+    /** 抽取权重，默认 1 */
+    weight?: number;
+    /** 归属的抽取池 ID 列表 */
+    poolIds?: string[];
+    /** 最低等级门槛 */
+    minLevel?: number;
+  };
 
   /**
    * 结构化被动修正（引擎自动执行）
@@ -325,6 +334,25 @@ export interface LevelSystemConfig {
   /** 触发模式 */
   triggerModes?: Array<"narrative" | "manual">;
 
+  /** 进度配置 */
+  progress?: {
+    /** 进度值存储属性键名，默认 "level_progress" */
+    progressAttributeKey?: string;
+    /** 阈值模式，P1 仅支持 "table" */
+    thresholdMode?: "table" | "formula";
+    /** 固定阈值表 */
+    thresholdTable?: Array<{
+      level: number;
+      requiredProgress: number;
+    }>;
+    /** 公式表达式（P1 仅声明类型，不提供实现） */
+    thresholdFormula?: string;
+    /** 升级后是否保留溢出进度，默认 true */
+    carryOverflow?: boolean;
+    /** 进度可见性 */
+    visibility?: "hidden" | "summary" | "detailed";
+  };
+
   /** 成长模式，默认 "auto" */
   growthMode?: GrowthMode;
 
@@ -337,6 +365,22 @@ export interface LevelSystemConfig {
       level: number;
       attributes: Record<string, number | string>;
     }>;
+  };
+
+  /** 属性点分配配置 */
+  allocation?: {
+    /** 未分配属性点的属性键名，默认 "unspent_attribute_points" */
+    pointAttributeKey?: string;
+    /** 可分配的属性键列表 */
+    allocatableAttributes?: string[];
+    /** 每级给予的属性点数 */
+    pointsPerLevel?: number | string;
+    /** 单次单属性最少分配 */
+    minPerAttribute?: number;
+    /** 单次单属性最多分配 */
+    maxPerAttribute?: number;
+    /** 是否允许延后分配，默认 true */
+    allowDeferredAllocation?: boolean;
   };
 
   /** 升级奖励 */
@@ -387,10 +431,44 @@ export interface WorldConfig {
 
   /** 天赋选择规则 */
   talentRules?: {
-    /** 角色创建时可选天赋数量（默认 2） */
-    initialCount?: number;
+    /** 角色创建时初始抽取次数（默认 2） */
+    initialDrawCount?: number;
+    /** 每次抽取提供的候选数量（默认 3） */
+    initialOffersPerDraw?: number;
     /** 是否允许游戏中获得新天赋（默认 true） */
     allowAcquireDuringGame?: boolean;
+    /** 免费抽取次数存储属性键 */
+    freeDrawAttributeKey?: string;
+    /** 抽取点数存储属性键 */
+    drawPointAttributeKey?: string;
+    /** 每次抽取消耗的点数 */
+    drawPointCost?: number;
+    /** 重复抽取策略，默认 "exclude_owned" */
+    duplicatePolicy?: "exclude_owned" | "allow_repeat";
+    /** 品质定义 */
+    rarities?: Array<{
+      id: string;
+      label: string;
+      weight: number;
+      colorToken?: string;
+      glowToken?: string;
+      minLevel?: number;
+    }>;
+    /** 抽取池定义 */
+    pools?: Array<{
+      id: string;
+      label?: string;
+      allowedCategories?: string[];
+      allowedRarities?: string[];
+      includeTalentIds?: string[];
+      excludeTalentIds?: string[];
+      minLevel?: number;
+    }>;
+    /** 保底规则 */
+    pity?: Array<{
+      afterMisses: number;
+      guaranteeRarity: string;
+    }>;
   };
 
   /** 等级系统配置 */
@@ -658,8 +736,10 @@ export const DEFAULT_WORLD_CONFIG: WorldConfig = {
     },
   ],
   talentRules: {
-    initialCount: 2,
+    initialDrawCount: 2,
+    initialOffersPerDraw: 3,
     allowAcquireDuringGame: true,
+    duplicatePolicy: "exclude_owned",
   },
   levelSystem: {
     enabled: true,

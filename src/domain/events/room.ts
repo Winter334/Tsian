@@ -67,6 +67,8 @@ export const RoomEvents = {
   CHARACTER_UPDATED: "room.character.updated",
   /** 角色已升级 */
   CHARACTER_LEVELED_UP: "room.character.leveled_up" as const,
+  /** 升级属性点已分配 */
+  LEVEL_POINTS_ALLOCATED: "room.character.level_points_allocated" as const,
 
   // ===== NPC 事件 =====
   /** NPC 已创建 */
@@ -505,8 +507,37 @@ export interface CharacterLeveledUpEvent {
   appliedGrowth: Record<string, number>;
   /** 资源恢复摘要 */
   resourceRecovery: Record<string, number>;
+  /** 升级后的溢出进度值 */
+  progressOverflow?: number;
+  /** 进度不足时的参考标记（不会阻止升级） */
+  progressInsufficient?: boolean;
+  /** 本次发放的奖励摘要 */
+  appliedRewards?: Array<{
+    type: string;
+    detail: Record<string, unknown>;
+  }>;
+  /** 本次发放的未分配属性点总数 */
+  pointsAwarded?: number;
   /** 升级原因 */
   reason?: string;
+  /** 时间戳 */
+  updatedAt: number;
+}
+
+/** 等级属性点分配事件负载 */
+export interface LevelPointsAllocatedEvent {
+  /** 房间 ID */
+  roomId: string;
+  /** 角色 ID */
+  characterId: string;
+  /** 操作者用户 ID */
+  userId: string;
+  /** 本次分配详情 */
+  allocation: Record<string, number>;
+  /** 本次消耗总点数 */
+  pointsSpent: number;
+  /** 剩余未分配点数 */
+  pointsRemaining: number;
   /** 时间戳 */
   updatedAt: number;
 }

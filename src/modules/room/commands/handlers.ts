@@ -38,6 +38,7 @@ import {
   type AddMiniSummaryPayload,
 } from "@/domain/commands/memory";
 import type {
+  AllocateLevelPointsPayload,
   CompleteTurnPayload,
   CreateCharacterPayload,
   CreateNpcPayload,
@@ -71,6 +72,7 @@ import {
   type CharacterCreatedEvent,
   type CharacterLeveledUpEvent,
   type CharacterUpdatedEvent,
+  type LevelPointsAllocatedEvent,
   type NpcCreatedEvent,
   type NpcInfoUpdatedEvent,
   type NpcStatusChangedEvent,
@@ -93,6 +95,7 @@ import {
   worldNarrativeToYMap,
 } from "@/lib/world/resolve-config";
 import type {
+  RewardPackage,
   WorldConfig,
   WorldNarrativeRuntimeSnapshot,
 } from "@/lib/world/types";
@@ -167,6 +170,20 @@ function clampResourceValue(value: number, maxValue: number): number {
   }
 
   return Math.min(Math.max(value, 0), normalizedMax);
+}
+
+function getPatchedNumericAttributeValue(
+  currentAttributes: Record<string, unknown>,
+  attributeUpdates: Record<string, unknown>,
+  key: string,
+): number {
+  const pendingValue = attributeUpdates[key];
+  if (isFiniteNumber(pendingValue)) {
+    return pendingValue;
+  }
+
+  const currentValue = currentAttributes[key];
+  return isFiniteNumber(currentValue) ? currentValue : 0;
 }
 
 function getRoomConversationMetadata(
@@ -3297,9 +3314,28 @@ export async function levelUpHandler(
     }
 
     const levelKey = levelSystem.levelAttributeKey?.trim() || "level";
+    const allocationConfig = levelSystem.allocation;
+    const pointAttributeKey =
+      allocationConfig?.pointAttributeKey?.trim() || "unspent_attribute_points";
+    const progressConfig = levelSystem.progress;
+    const progressAttributeKey =
+      progressConfig?.progressAttributeKey?.trim() || "level_progress";
+    const freeTalentDrawAttributeKey =
+      worldConfig.talentRules?.freeDrawAttributeKey?.trim() ||
+      "free_talent_draws";
     const currentAttributes = isRecord(character.attributes)
       ? character.attributes
       : {};
+    const currentTalentIds =
+      character.talentIds?.filter(
+        (talentId): talentId is string =>
+          typeof talentId === "string" && talentId.trim().length > 0,
+      ) ?? [];
+    const nextTalentIds = [...currentTalentIds];
+    const ownedTalentIds = new Set(
+      currentTalentIds.map((talentId) => talentId.trim()),
+    );
+    let shouldUpdateTalentIds = false;
     const currentLevelRaw = currentAttributes[levelKey];
     const previousLevel =
       typeof currentLevelRaw === "number" && Number.isFinite(currentLevelRaw)
@@ -3327,6 +3363,47 @@ export async function levelUpHandler(
       [levelKey]: newLevel,
     };
     const appliedGrowth: Record<string, number> = {};
+    const appliedRewards: Array<{
+      type: string;
+      detail: Record<string, unknown>;
+    }> = [];
+    let progressOverflow: number | undefined;
+    let progressInsufficient = false;
+    let pointsAwarded = 0;
+
+    if (progressConfig) {
+      const currentProgressValue = currentAttributes[progressAttributeKey];
+      const currentProgress = isFiniteNumber(currentProgressValue)
+        ? currentProgressValue
+        : 0;
+
+      if (
+        progressConfig.thresholdMode === "table" &&
+        Array.isArray(progressConfig.thresholdTable)
+      ) {
+        const thresholdEntry = progressConfig.thresholdTable.find(
+          (entry) =>
+            entry.level === previousLevel &&
+            Number.isFinite(entry.requiredProgress),
+        );
+        const requiredProgress = thresholdEntry
+          ? Math.max(0, thresholdEntry.requiredProgress)
+          : undefined;
+
+        if (requiredProgress !== undefined) {
+          if (currentProgress < requiredProgress) {
+            progressInsufficient = true;
+          }
+
+          const nextProgress =
+            progressConfig.carryOverflow === false
+              ? 0
+              : Math.max(0, currentProgress - requiredProgress);
+          attributeUpdates[progressAttributeKey] = nextProgress;
+          progressOverflow = nextProgress;
+        }
+      }
+    }
 
     if (
       levelSystem.autoGrowth &&
@@ -3384,6 +3461,218 @@ export async function levelUpHandler(
                   : 0;
             attributeUpdates[field] = baseValue + delta;
             growthContextAttributes[field] = baseValue + delta;
+          }
+        }
+      }
+    }
+
+    growthContextAttributes[levelKey] = newLevel;
+    if (progressOverflow !== undefined) {
+      growthContextAttributes[progressAttributeKey] = progressOverflow;
+    }
+
+    if (
+      levelSystem.growthMode === "allocation" ||
+      levelSystem.growthMode === "hybrid"
+    ) {
+      const resolvedPointsPerLevel = resolveGrowthValue(
+        allocationConfig?.pointsPerLevel ?? 0,
+        growthContextAttributes,
+      );
+      const allocationPointsPerLevel = Number.isFinite(resolvedPointsPerLevel)
+        ? Math.max(0, Math.trunc(resolvedPointsPerLevel))
+        : 0;
+      const awardedAllocationPoints = allocationPointsPerLevel * levelDelta;
+
+      if (awardedAllocationPoints > 0) {
+        const nextPointBalance =
+          getPatchedNumericAttributeValue(
+            currentAttributes,
+            attributeUpdates,
+            pointAttributeKey,
+          ) + awardedAllocationPoints;
+        attributeUpdates[pointAttributeKey] = nextPointBalance;
+        growthContextAttributes[pointAttributeKey] = nextPointBalance;
+        pointsAwarded += awardedAllocationPoints;
+      }
+    }
+
+    const rewardsConfig = levelSystem.rewards;
+    if (rewardsConfig && rewardsConfig.autoApply !== false) {
+      const rewardPackages: RewardPackage[] = [];
+
+      for (let level = previousLevel + 1; level <= newLevel; level += 1) {
+        rewardPackages.push(...(rewardsConfig.perLevel ?? []));
+
+        for (const milestone of rewardsConfig.milestones ?? []) {
+          if (milestone.level === level) {
+            rewardPackages.push(...milestone.rewards);
+          }
+        }
+      }
+
+      for (const reward of rewardPackages) {
+        switch (reward.type) {
+          case "attribute_points": {
+            const rewardPoints = isFiniteNumber(reward.points)
+              ? Math.max(0, Math.trunc(reward.points))
+              : 0;
+            if (rewardPoints <= 0) {
+              continue;
+            }
+
+            const nextPointBalance =
+              getPatchedNumericAttributeValue(
+                currentAttributes,
+                attributeUpdates,
+                pointAttributeKey,
+              ) + rewardPoints;
+            attributeUpdates[pointAttributeKey] = nextPointBalance;
+            growthContextAttributes[pointAttributeKey] = nextPointBalance;
+            pointsAwarded += rewardPoints;
+            appliedRewards.push({
+              type: reward.type,
+              detail: {
+                points: rewardPoints,
+                attributeKey: pointAttributeKey,
+              },
+            });
+            break;
+          }
+          case "attribute_bonus": {
+            const bonusAttributes: Record<string, number> = {};
+
+            for (const [field, bonusValue] of Object.entries(
+              reward.attributes ?? {},
+            )) {
+              const delta = resolveGrowthValue(
+                bonusValue,
+                growthContextAttributes,
+              );
+              if (!Number.isFinite(delta) || delta === 0) {
+                continue;
+              }
+
+              const nextValue =
+                getPatchedNumericAttributeValue(
+                  currentAttributes,
+                  attributeUpdates,
+                  field,
+                ) + delta;
+              attributeUpdates[field] = nextValue;
+              growthContextAttributes[field] = nextValue;
+              bonusAttributes[field] = (bonusAttributes[field] ?? 0) + delta;
+            }
+
+            if (Object.keys(bonusAttributes).length > 0) {
+              appliedRewards.push({
+                type: reward.type,
+                detail: {
+                  attributes: bonusAttributes,
+                },
+              });
+            }
+            break;
+          }
+          case "free_talent_draw": {
+            const drawCount = isFiniteNumber(reward.drawCount)
+              ? Math.max(0, Math.trunc(reward.drawCount))
+              : 1;
+            if (drawCount <= 0) {
+              continue;
+            }
+
+            const nextFreeDraws =
+              getPatchedNumericAttributeValue(
+                currentAttributes,
+                attributeUpdates,
+                freeTalentDrawAttributeKey,
+              ) + drawCount;
+            attributeUpdates[freeTalentDrawAttributeKey] = nextFreeDraws;
+            growthContextAttributes[freeTalentDrawAttributeKey] = nextFreeDraws;
+            appliedRewards.push({
+              type: reward.type,
+              detail: {
+                drawCount,
+                attributeKey: freeTalentDrawAttributeKey,
+                ...(typeof reward.poolId === "string" && reward.poolId.trim()
+                  ? { poolId: reward.poolId.trim() }
+                  : {}),
+                ...(isFiniteNumber(reward.offersPerDraw)
+                  ? {
+                      offersPerDraw: Math.max(
+                        1,
+                        Math.trunc(reward.offersPerDraw),
+                      ),
+                    }
+                  : {}),
+                ...(typeof reward.guaranteedRarity === "string" &&
+                reward.guaranteedRarity.trim()
+                  ? { guaranteedRarity: reward.guaranteedRarity.trim() }
+                  : {}),
+              },
+            });
+            break;
+          }
+          case "grant_talent": {
+            const talentId =
+              typeof reward.talentId === "string" ? reward.talentId.trim() : "";
+            if (!talentId || ownedTalentIds.has(talentId)) {
+              continue;
+            }
+
+            ownedTalentIds.add(talentId);
+            nextTalentIds.push(talentId);
+            shouldUpdateTalentIds = true;
+            appliedRewards.push({
+              type: reward.type,
+              detail: {
+                talentId,
+              },
+            });
+            break;
+          }
+          case "skill_pick": {
+            appliedRewards.push({
+              type: reward.type,
+              detail: {
+                pending: true,
+                ...(typeof reward.skillId === "string" && reward.skillId.trim()
+                  ? { skillId: reward.skillId.trim() }
+                  : {}),
+              },
+            });
+            break;
+          }
+          case "grant_skill": {
+            appliedRewards.push({
+              type: reward.type,
+              detail: {
+                pending: true,
+                ...(typeof reward.skillId === "string" && reward.skillId.trim()
+                  ? { skillId: reward.skillId.trim() }
+                  : {}),
+              },
+            });
+            break;
+          }
+          case "grant_item": {
+            appliedRewards.push({
+              type: reward.type,
+              detail: {
+                pending: true,
+                ...(typeof reward.itemId === "string" && reward.itemId.trim()
+                  ? { itemId: reward.itemId.trim() }
+                  : {}),
+                ...(isFiniteNumber(reward.quantity)
+                  ? { quantity: Math.max(0, Math.trunc(reward.quantity)) }
+                  : {}),
+              },
+            });
+            break;
+          }
+          default: {
+            break;
           }
         }
       }
@@ -3474,6 +3763,7 @@ export async function levelUpHandler(
     mainDoc.transact(() => {
       applyCharacterUpdates(charMap, {
         attributes: attributeUpdates,
+        ...(shouldUpdateTalentIds ? { talentIds: nextTalentIds } : {}),
       });
       const nextUpdatedAt = charMap.get("updatedAt");
       if (typeof nextUpdatedAt === "number") {
@@ -3490,10 +3780,187 @@ export async function levelUpHandler(
       newLevel,
       appliedGrowth,
       resourceRecovery,
+      ...(progressOverflow === undefined ? {} : { progressOverflow }),
+      ...(progressInsufficient ? { progressInsufficient: true } : {}),
+      ...(appliedRewards.length > 0 ? { appliedRewards } : {}),
+      ...(pointsAwarded > 0 ? { pointsAwarded } : {}),
       reason,
       updatedAt,
     };
     eventBus.emit(eventBus.createEvent(RoomEvents.CHARACTER_LEVELED_UP, event));
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * 分配升级属性点命令处理器
+ *
+ * 流程：
+ * 1. 验证房间和角色存在
+ * 2. 验证操作权限（userId 或 uniqueTag 匹配）
+ * 3. 读取等级系统配置并校验分配规则
+ * 4. 原子写入 attributes 变更
+ * 5. 发布 LEVEL_POINTS_ALLOCATED 事件
+ */
+export async function allocateLevelPointsHandler(
+  payload: AllocateLevelPointsPayload,
+  _context: CommandContext,
+): Promise<CommandResult<void>> {
+  try {
+    const { roomId, characterId, userId, uniqueTag, allocation } = payload;
+    let updatedAt = Date.now();
+
+    const mainDoc = subdocManager.getMainDoc(roomId);
+    if (!mainDoc) {
+      return { success: false, error: `MainDoc not found: ${roomId}` };
+    }
+
+    const charactersMap = mainDoc.getMap("characters") as Y.Map<Y.Map<unknown>>;
+    const charMap = charactersMap.get(characterId);
+    if (!charMap) {
+      return { success: false, error: `角色不存在: ${characterId}` };
+    }
+
+    const character = yMapToCharacter(charMap);
+    if (!canOperateCharacter(character, userId, uniqueTag)) {
+      return { success: false, error: "无权操作此角色" };
+    }
+
+    const worldConfig = readWorldConfigFromMainDoc(mainDoc);
+    const levelSystem = worldConfig.levelSystem;
+    if (!levelSystem?.enabled) {
+      return { success: false, error: "当前世界未启用等级系统" };
+    }
+
+    if (
+      levelSystem.growthMode !== "allocation" &&
+      levelSystem.growthMode !== "hybrid"
+    ) {
+      return { success: false, error: "当前世界未启用属性点分配成长" };
+    }
+
+    if (!isRecord(allocation)) {
+      return { success: false, error: "属性点分配格式无效" };
+    }
+
+    const levelKey = levelSystem.levelAttributeKey?.trim() || "level";
+    const allocationConfig = levelSystem.allocation;
+    const pointAttributeKey =
+      allocationConfig?.pointAttributeKey?.trim() || "unspent_attribute_points";
+    const configuredAllocatableAttributes =
+      allocationConfig?.allocatableAttributes;
+    const allocatableAttributes = new Set(
+      (configuredAllocatableAttributes &&
+      configuredAllocatableAttributes.length > 0
+        ? configuredAllocatableAttributes
+        : worldConfig.primaryAttributes
+            .map((attribute) => attribute.key)
+            .filter(
+              (attributeKey) =>
+                attributeKey !== levelKey && attributeKey !== pointAttributeKey,
+            )
+      )
+        .map((attributeKey) => attributeKey.trim())
+        .filter((attributeKey) => attributeKey.length > 0),
+    );
+    if (allocatableAttributes.size === 0) {
+      return { success: false, error: "当前世界未配置可分配属性" };
+    }
+
+    const configuredMinPerAttribute = allocationConfig?.minPerAttribute;
+    const minPerAttribute =
+      typeof configuredMinPerAttribute === "number" &&
+      Number.isFinite(configuredMinPerAttribute)
+        ? Math.max(1, Math.trunc(configuredMinPerAttribute))
+        : 1;
+    const configuredMaxPerAttribute = allocationConfig?.maxPerAttribute;
+    const maxPerAttribute =
+      typeof configuredMaxPerAttribute === "number" &&
+      Number.isFinite(configuredMaxPerAttribute)
+        ? Math.max(minPerAttribute, Math.trunc(configuredMaxPerAttribute))
+        : undefined;
+
+    const currentAttributes = isRecord(character.attributes)
+      ? character.attributes
+      : {};
+    const allocationEntries = Object.entries(allocation);
+    if (allocationEntries.length === 0) {
+      return { success: false, error: "至少分配 1 个属性点" };
+    }
+
+    const normalizedAllocation: Record<string, number> = {};
+    const attributeUpdates: Record<string, number> = {};
+    let pointsSpent = 0;
+
+    for (const [attributeKey, rawAmount] of allocationEntries) {
+      if (!allocatableAttributes.has(attributeKey)) {
+        return { success: false, error: `属性不可分配: ${attributeKey}` };
+      }
+      if (attributeKey === pointAttributeKey) {
+        return { success: false, error: "属性点余额字段不能作为分配目标" };
+      }
+      if (!Number.isInteger(rawAmount) || rawAmount < minPerAttribute) {
+        return {
+          success: false,
+          error: `属性 ${attributeKey} 的分配点数必须为不小于 ${minPerAttribute} 的整数`,
+        };
+      }
+      if (maxPerAttribute !== undefined && rawAmount > maxPerAttribute) {
+        return {
+          success: false,
+          error: `属性 ${attributeKey} 的分配点数不能超过 ${maxPerAttribute}`,
+        };
+      }
+
+      const currentValue = currentAttributes[attributeKey];
+      const baseValue = isFiniteNumber(currentValue) ? currentValue : 0;
+      normalizedAllocation[attributeKey] = rawAmount;
+      attributeUpdates[attributeKey] = baseValue + rawAmount;
+      pointsSpent += rawAmount;
+    }
+
+    const currentPointsRaw = currentAttributes[pointAttributeKey];
+    const availablePoints = isFiniteNumber(currentPointsRaw)
+      ? Math.max(0, Math.trunc(currentPointsRaw))
+      : 0;
+    if (pointsSpent > availablePoints) {
+      return {
+        success: false,
+        error: `属性点不足，当前仅剩 ${availablePoints} 点`,
+      };
+    }
+
+    const pointsRemaining = availablePoints - pointsSpent;
+    attributeUpdates[pointAttributeKey] = pointsRemaining;
+
+    mainDoc.transact(() => {
+      applyCharacterUpdates(charMap, {
+        attributes: attributeUpdates,
+      });
+      const nextUpdatedAt = charMap.get("updatedAt");
+      if (typeof nextUpdatedAt === "number") {
+        updatedAt = nextUpdatedAt;
+      }
+    });
+
+    const event: LevelPointsAllocatedEvent = {
+      roomId,
+      characterId,
+      userId,
+      allocation: normalizedAllocation,
+      pointsSpent,
+      pointsRemaining,
+      updatedAt,
+    };
+    eventBus.emit(
+      eventBus.createEvent(RoomEvents.LEVEL_POINTS_ALLOCATED, event),
+    );
 
     return { success: true };
   } catch (error) {

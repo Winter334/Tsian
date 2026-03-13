@@ -1111,18 +1111,6 @@ export function WorldEditorPane({
                 placeholder="作者名"
               />
             </Field>
-            <Field label="来源类型">
-              <Select
-                value={world.meta.source}
-                onValueChange={(value) =>
-                  onUpdateMeta({ source: value === "lyra" ? "lyra" : "custom" })
-                }
-                options={[
-                  { value: "custom", label: "自定义" },
-                  { value: "lyra", label: "内置" },
-                ]}
-              />
-            </Field>
           </div>
 
           <Field label="世界描述">
@@ -5997,13 +5985,13 @@ function TalentRulesCardEditor({
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
-        <Field label="角色创建可选数量（留空=默认 2）">
+        <Field label="角色创建初始抽取次数（留空=默认 2）">
           <Input
             type="number"
-            value={talentRules?.initialCount ?? ""}
+            value={talentRules?.initialDrawCount ?? ""}
             onChange={(event) =>
               onChange({
-                initialCount:
+                initialDrawCount:
                   event.target.value.trim() === ""
                     ? undefined
                     : Number(event.target.value),
