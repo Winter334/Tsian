@@ -709,10 +709,6 @@ function normalizeTalentRules(
 
 function normalizeTalent(value: unknown, index: number): TalentConfig {
   const record = isRecord(value) ? value : {};
-  const rawPrerequisites = isRecord(record.prerequisites)
-    ? record.prerequisites
-    : undefined;
-  const prerequisiteAttributes = toNumberRecord(rawPrerequisites?.attributes);
   const category = toOptionalString(record.category);
 
   return {
@@ -731,10 +727,6 @@ function normalizeTalent(value: unknown, index: number): TalentConfig {
     modifiers: Array.isArray(record.modifiers)
       ? cloneValue(record.modifiers)
       : undefined,
-    prerequisites: prerequisiteAttributes
-      ? { attributes: prerequisiteAttributes }
-      : undefined,
-    exclusiveWith: toUniqueStringArray(record.exclusiveWith),
   };
 }
 
@@ -1611,41 +1603,6 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
       (!Number.isInteger(talentInitialCount) || talentInitialCount < 0)
     ) {
       messages.push("天赋规则的初始可选数量必须是大于等于 0 的整数。");
-    }
-
-    for (const talent of talents) {
-      const talentLabel = `${talent.name}（${talent.id}）`;
-      const invalidPrerequisiteKeys = Object.keys(
-        talent.prerequisites?.attributes ?? {},
-      ).filter((key) => !primaryAttributeKeys.has(key));
-      const duplicateExclusiveIds = getDuplicateValues(
-        talent.exclusiveWith ?? [],
-      );
-      const invalidExclusiveIds = (talent.exclusiveWith ?? []).filter(
-        (id) => !talentIdSet.has(id),
-      );
-
-      if (invalidPrerequisiteKeys.length > 0) {
-        messages.push(
-          `天赋 ${talentLabel} 的前置属性引用了不存在的主要属性：${invalidPrerequisiteKeys.join("、")}。`,
-        );
-      }
-
-      if (duplicateExclusiveIds.length > 0) {
-        messages.push(
-          `天赋 ${talentLabel} 的互斥列表存在重复项：${duplicateExclusiveIds.join("、")}。`,
-        );
-      }
-
-      if (invalidExclusiveIds.length > 0) {
-        messages.push(
-          `天赋 ${talentLabel} 的互斥列表引用了不存在的天赋：${invalidExclusiveIds.join("、")}。`,
-        );
-      }
-
-      if ((talent.exclusiveWith ?? []).includes(talent.id)) {
-        messages.push(`天赋 ${talentLabel} 不能将自己配置为互斥对象。`);
-      }
     }
 
     if ((draft.rules.talents ?? []).length === 0) {

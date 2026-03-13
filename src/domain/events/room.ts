@@ -65,6 +65,8 @@ export const RoomEvents = {
   CHARACTER_CREATED: "room.character.created",
   /** 角色已更新 */
   CHARACTER_UPDATED: "room.character.updated",
+  /** 角色已升级 */
+  CHARACTER_LEVELED_UP: "room.character.leveled_up" as const,
 
   // ===== NPC 事件 =====
   /** NPC 已创建 */
@@ -482,5 +484,29 @@ export interface CharacterUpdatedEvent {
   /** 更新的字段 */
   updates: UpdateCharacterParams;
   /** 更新时间 */
+  updatedAt: number;
+}
+
+/** 角色等级提升事件负载 */
+export interface CharacterLeveledUpEvent {
+  /** 房间 ID */
+  roomId: string;
+  /** 角色 ID */
+  characterId: string;
+  /** 操作者用户 ID */
+  operatorUserId: string;
+  /** 操作者唯一标签 */
+  operatorUniqueTag: string;
+  /** 升级前等级 */
+  previousLevel: number;
+  /** 升级后等级 */
+  newLevel: number;
+  /** 自动成长应用的属性变更摘要 */
+  appliedGrowth: Record<string, number>;
+  /** 资源恢复摘要 */
+  resourceRecovery: Record<string, number>;
+  /** 升级原因 */
+  reason?: string;
+  /** 时间戳 */
   updatedAt: number;
 }

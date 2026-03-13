@@ -10,7 +10,7 @@ import {
   INVENTORY_QUERY_SERVICE_TOKEN,
   type GameStateServiceContract,
 } from "@/core/services/tokens";
-import { yjsManager } from "@/core/yjs";
+import { subdocManager, yjsManager } from "@/core/yjs";
 import type { EntityAccessor } from "@/domain/types";
 import { getRuntimeWorldConfig } from "@/lib/world";
 import {
@@ -18,6 +18,7 @@ import {
   createGameStateRepository,
   type GameStateRepository,
 } from "@/modules/game/repository";
+import { useSessionStore } from "@/stores";
 import * as Y from "yjs";
 import {
   applyEquipmentEffectsToEntity,
@@ -26,6 +27,21 @@ import {
 } from "./entity-accessor";
 
 function getActiveGameStateRepository(): GameStateRepository | null {
+  const roomId = useSessionStore.getState().roomId;
+
+  if (roomId) {
+    const mainDoc = subdocManager.getMainDoc(roomId);
+    if (!mainDoc) {
+      console.warn(
+        `[GameStateService] 联机房间 ${roomId} 的 MainDoc 未加载，无法访问权威角色树`,
+      );
+      return null;
+    }
+
+    const characters = mainDoc.getMap("characters") as Y.Map<Y.Map<unknown>>;
+    return createGameStateRepository(characters, mainDoc);
+  }
+
   const currentSave = yjsManager.getCurrentSave();
   if (!currentSave) {
     console.warn("[GameStateService] 当前没有已加载存档");

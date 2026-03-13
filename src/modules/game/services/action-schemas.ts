@@ -1,12 +1,12 @@
 /**
  * Game 模块 Action Schema 声明（RuleScript v2）
  *
- * 为 Game 模块负责的 12 个 AI 可见 RuleAction 提供结构化元数据，
+ * 为 Game 模块负责的 13 个 AI 可见 RuleAction 提供结构化元数据，
  * 供 Prompt 生成和 AI 输出校验使用。
  *
- * Game 模块负责的 AI 可见指令（12 个）：
+ * Game 模块负责的 AI 可见指令（13 个）：
  * - 判定: check, roll
- * - 数值: damage, heal, cost, set
+ * - 数值: damage, heal, cost, set, level_up
  * - 状态: addTag, removeTag, modifyTag
  * - NPC: spawn, despawn
  * - 流程: branch
@@ -442,6 +442,50 @@ const setSchema: ActionSchema = {
     {
       scenario: "角色升级，将等级设为 2",
       json: `{ "type": "set", "target": "player", "field": "level", "value": 2, "reason": "完成主线任务，等级提升" }`,
+    },
+  ],
+};
+
+export const levelUpSchema: ActionSchema = {
+  type: "level_up",
+  category: "attribute",
+  displayName: "Level Up",
+  description:
+    "提升目标角色的等级。系统会根据世界规则自动结算属性成长、资源恢复与奖励。AI 应在叙事中判定角色达成成长条件后使用此动作，而不是直接用 set 修改等级。",
+  params: [
+    {
+      name: "target",
+      type: "entityRef",
+      required: true,
+      description: "目标角色的标识符",
+    },
+    {
+      name: "levels",
+      type: "number",
+      required: false,
+      description: "提升级数，默认 1",
+      defaultValue: 1,
+    },
+    {
+      name: "reason",
+      type: "string",
+      required: false,
+      description: "升级的叙事原因",
+    },
+  ],
+  constraints: [
+    "仅在叙事中角色达成成长、突破、觉醒、晋升等条件时使用",
+    "不要用 level_up 替代普通属性修改；非成长场景请使用其他 action",
+    "升级结算会自动处理等级、成长和资源恢复，不要再用 set 手动补写 level",
+  ],
+  examples: [
+    {
+      scenario: "角色完成了一次艰难的试炼",
+      json: `{ "type": "level_up", "target": "player", "reason": "完成了试炼之塔的考验" }`,
+    },
+    {
+      scenario: "角色连续突破两级",
+      json: `{ "type": "level_up", "target": "player", "levels": 2, "reason": "吸收了远古精魄的力量" }`,
     },
   ],
 };
@@ -1024,7 +1068,7 @@ export const modifyDamageSchema: ActionSchema = {
 // ─── 导出 ───────────────────────────────────────────────────
 
 /**
- * Game 模块的全部 AI 可见 Action Schema（12 个）
+ * Game 模块的全部 AI 可见 Action Schema（13 个）
  *
  * 不包含 modifyDamage（引擎内部）和 inventory 模块的 4 个指令。
  * modifyDamageSchema 单独导出供引擎注册使用。
@@ -1038,6 +1082,7 @@ export const gameActionSchemas: ActionSchema[] = [
   healSchema,
   costSchema,
   setSchema,
+  levelUpSchema,
   // 状态
   addTagSchema,
   removeTagSchema,

@@ -2,8 +2,7 @@
  * 角色创建 - 天赋选择步骤
  *
  * 从 worldConfig.talents 获取所有可选天赋
- * 处理维度天赋（自动获得）、排除天赋、互斥天赋
- * 处理前置条件（属性要求）
+ * 处理维度天赋（自动获得）与排除天赋
  *
  * 改造说明：
  * - 分类 Tab 筛选栏（如果天赋有 category 分类信息）
@@ -21,7 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui";
 import { useMotionTokens } from "@/hooks";
 import { getCategoryIcon } from "@/lib/ui/category-icons";
-import type { TalentConfig, WorldConfig } from "@/lib/world/types";
+import type { TalentConfig } from "@/lib/world/types";
 import {
   aggregateDimensionEffects,
   DEFAULT_WORLD_CONFIG,
@@ -53,12 +52,6 @@ function getCategoryLabel(category?: TalentConfig["category"]): string {
   }
 }
 
-/** 从 primaryAttributes 查找属性显示名 */
-function getAttributeLabel(key: string, worldConfig: WorldConfig): string {
-  const attr = worldConfig.primaryAttributes.find((a) => a.key === key);
-  return attr?.label ?? key;
-}
-
 // ============================================================
 // 类型定义
 // ============================================================
@@ -68,8 +61,6 @@ type TalentStatus =
   | "selected"
   | "auto_dimension"
   | "excluded"
-  | "exclusive"
-  | "prereq_fail"
   | "max_reached";
 
 interface TalentWithStatus {
@@ -92,11 +83,7 @@ function TalentCard({
   const { talent, status, reason } = talentWithStatus;
   const isAuto = status === "auto_dimension";
   const isSelected = status === "selected";
-  const isDisabled =
-    status === "excluded" ||
-    status === "exclusive" ||
-    status === "prereq_fail" ||
-    status === "max_reached";
+  const isDisabled = status === "excluded" || status === "max_reached";
 
   const isHighlighted = isSelected || isAuto;
 
@@ -223,10 +210,8 @@ function TalentCard({
               >
                 {status === "excluded" ? (
                   <Ban className="w-3 h-3" />
-                ) : status === "prereq_fail" ? (
-                  <Lock className="w-3 h-3" />
                 ) : (
-                  <Ban className="w-3 h-3" />
+                  <Lock className="w-3 h-3" />
                 )}
                 {reason}
               </div>
@@ -263,10 +248,8 @@ function TalentCard({
 /**
  * 角色创建：天赋选择
  *
- * 6 种天赋状态：available | selected | auto_dimension | excluded | exclusive | prereq_fail | max_reached
+ * 5 种天赋状态：available | selected | auto_dimension | excluded | max_reached
  * 自动获得天赋来源追踪（dimensionTalentSources: Map<talentId, dimensionId>）
- * 前置条件检查（属性值要求）
- * 互斥检查（exclusiveWith）
  * 最终天赋 = autoTalents ∪ selected（去重）
  */
 export function SoloCharTalentsStep({ context, onUpdateContext }: StepProps) {
@@ -331,12 +314,6 @@ export function SoloCharTalentsStep({ context, onUpdateContext }: StepProps) {
     onUpdateContext({ talentIds: [...finalTalents] });
   }, [finalTalents, onUpdateContext]);
 
-  // 获取当前属性值
-  const attributes = useMemo<Record<string, number>>(
-    () => context.attributes ?? {},
-    [context.attributes],
-  );
-
   // 计算每个天赋的状态
   const talentsWithStatus: TalentWithStatus[] = useMemo(() => {
     return allTalents.map((talent) => {
@@ -380,41 +357,6 @@ export function SoloCharTalentsStep({ context, onUpdateContext }: StepProps) {
         return { talent, status: "selected" as TalentStatus };
       }
 
-      // 前置条件检查
-      if (talent.prerequisites?.attributes) {
-        const prereqAttrs = talent.prerequisites.attributes;
-        const failedAttrs: string[] = [];
-        for (const [attrKey, requiredValue] of Object.entries(prereqAttrs)) {
-          if ((attributes[attrKey] ?? 0) < requiredValue) {
-            failedAttrs.push(
-              `${getAttributeLabel(attrKey, worldConfig)} ≥ ${requiredValue}`,
-            );
-          }
-        }
-        if (failedAttrs.length > 0) {
-          return {
-            talent,
-            status: "prereq_fail" as TalentStatus,
-            reason: `需要：${failedAttrs.join("、")}`,
-          };
-        }
-      }
-
-      // 互斥检查
-      if (talent.exclusiveWith) {
-        const conflicting = talent.exclusiveWith.find(
-          (excId) => selected.includes(excId) || autoTalents.includes(excId),
-        );
-        if (conflicting) {
-          const conflictTalent = allTalents.find((t) => t.id === conflicting);
-          return {
-            talent,
-            status: "exclusive" as TalentStatus,
-            reason: `与「${conflictTalent?.name ?? conflicting}」互斥`,
-          };
-        }
-      }
-
       // 名额已满
       if (selected.length >= initialCount) {
         return {
@@ -431,8 +373,6 @@ export function SoloCharTalentsStep({ context, onUpdateContext }: StepProps) {
     dimensionTalentSources,
     excludedTalents,
     selected,
-    attributes,
-    autoTalents,
     initialCount,
     context.dimensionSelections,
     worldConfig,
@@ -445,9 +385,7 @@ export function SoloCharTalentsStep({ context, onUpdateContext }: StepProps) {
       selected: 1,
       available: 2,
       max_reached: 3,
-      exclusive: 4,
-      prereq_fail: 5,
-      excluded: 6,
+      excluded: 4,
     };
     return [...talentsWithStatus].sort(
       (a, b) => order[a.status] - order[b.status],

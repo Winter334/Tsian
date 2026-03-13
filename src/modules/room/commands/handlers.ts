@@ -46,6 +46,7 @@ import type {
   JoinRoomPayload,
   KickMemberPayload,
   LeaveRoomPayload,
+  LevelUpPayload,
   QueryRoomPayload,
   QueryRoomResult,
   StartTurnPayload,
@@ -68,6 +69,7 @@ import {
   type ActionSubmittedEvent,
   type ActionWithdrawnEvent,
   type CharacterCreatedEvent,
+  type CharacterLeveledUpEvent,
   type CharacterUpdatedEvent,
   type NpcCreatedEvent,
   type NpcInfoUpdatedEvent,
@@ -78,6 +80,7 @@ import {
 import { SaveEvents } from "@/domain/events/save";
 import { postProcessNarrativeForPersist } from "@/lib/post-process";
 import { usePresetStore } from "@/lib/prompt";
+import { resolveValueExpression } from "@/lib/rules/formula-evaluator";
 import { computeFullStats } from "@/lib/rules/stats-pipeline";
 import { getUniqueTag } from "@/lib/user-identity";
 import { DEFAULT_WORLD_CONFIG } from "@/lib/world";
@@ -124,6 +127,46 @@ function readWorldNarrativeFromSaveSlot(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readWorldConfigFromMainDoc(mainDoc: Y.Doc): WorldConfig {
+  const mainDocWorldConfigMap = mainDoc.getMap("worldConfig");
+  const authoritativeWorldConfig = worldConfigFromYMap(
+    mainDocWorldConfigMap as Y.Map<unknown>,
+  );
+
+  return authoritativeWorldConfig ?? getRuntimeWorldConfig();
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function resolveGrowthValue(
+  value: number | string,
+  attributes: Record<string, number>,
+): number {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  try {
+    const resolved = resolveValueExpression(value, {
+      actorAttributes: attributes,
+    });
+    return Number.isFinite(resolved) ? resolved : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function clampResourceValue(value: number, maxValue: number): number {
+  const normalizedMax = Number.isFinite(maxValue) ? Math.max(0, maxValue) : 0;
+  if (!Number.isFinite(value)) {
+    return normalizedMax;
+  }
+
+  return Math.min(Math.max(value, 0), normalizedMax);
 }
 
 function getRoomConversationMetadata(
@@ -3205,6 +3248,254 @@ export async function createCharacterHandler(
     eventBus.emit(eventBus.createEvent(RoomEvents.CHARACTER_CREATED, event));
 
     return { success: true, data: { characterId: character.id } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * 角色升级命令处理器
+ *
+ * 流程：
+ * 1. 验证房间和角色存在
+ * 2. 验证操作权限（userId 或 uniqueTag 匹配）
+ * 3. 读取等级系统配置并结算升级结果
+ * 4. 原子写入 attributes 变更
+ * 5. 发布 CHARACTER_LEVELED_UP 事件
+ */
+export async function levelUpHandler(
+  payload: LevelUpPayload,
+  _context: CommandContext,
+): Promise<CommandResult<void>> {
+  try {
+    const { roomId, characterId, userId, uniqueTag, reason } = payload;
+    let updatedAt = Date.now();
+
+    const mainDoc = subdocManager.getMainDoc(roomId);
+    if (!mainDoc) {
+      return { success: false, error: `MainDoc not found: ${roomId}` };
+    }
+
+    const charactersMap = mainDoc.getMap("characters") as Y.Map<Y.Map<unknown>>;
+    const charMap = charactersMap.get(characterId);
+    if (!charMap) {
+      return { success: false, error: `角色不存在: ${characterId}` };
+    }
+
+    const character = yMapToCharacter(charMap);
+    if (!canOperateCharacter(character, userId, uniqueTag)) {
+      return { success: false, error: "无权操作此角色" };
+    }
+
+    const worldConfig = readWorldConfigFromMainDoc(mainDoc);
+    const levelSystem = worldConfig.levelSystem;
+    if (!levelSystem?.enabled) {
+      return { success: false, error: "当前世界未启用等级系统" };
+    }
+
+    const levelKey = levelSystem.levelAttributeKey?.trim() || "level";
+    const currentAttributes = isRecord(character.attributes)
+      ? character.attributes
+      : {};
+    const currentLevelRaw = currentAttributes[levelKey];
+    const previousLevel =
+      typeof currentLevelRaw === "number" && Number.isFinite(currentLevelRaw)
+        ? currentLevelRaw
+        : 1;
+
+    const levelDelta = Math.max(1, Math.trunc(payload.levels ?? 1));
+    const newLevel = previousLevel + levelDelta;
+
+    const previousStats = computeFullStats({
+      baseAttributes: currentAttributes,
+      primaryAttributes: worldConfig.primaryAttributes,
+      derivedStats: worldConfig.derivedStats,
+    });
+    const growthContextAttributes: Record<string, number> = {
+      ...previousStats,
+    };
+    for (const [key, value] of Object.entries(currentAttributes)) {
+      if (isFiniteNumber(value)) {
+        growthContextAttributes[key] = value;
+      }
+    }
+
+    const attributeUpdates: Record<string, unknown> = {
+      [levelKey]: newLevel,
+    };
+    const appliedGrowth: Record<string, number> = {};
+
+    if (
+      levelSystem.autoGrowth &&
+      (levelSystem.growthMode === undefined ||
+        levelSystem.growthMode === "auto" ||
+        levelSystem.growthMode === "hybrid")
+    ) {
+      for (let level = previousLevel + 1; level <= newLevel; level += 1) {
+        for (const [field, growthValue] of Object.entries(
+          levelSystem.autoGrowth.perLevel ?? {},
+        )) {
+          const delta = resolveGrowthValue(
+            growthValue,
+            growthContextAttributes,
+          );
+          if (!Number.isFinite(delta) || delta === 0) {
+            continue;
+          }
+
+          appliedGrowth[field] = (appliedGrowth[field] ?? 0) + delta;
+          const currentValue = attributeUpdates[field];
+          const baseValue =
+            typeof currentValue === "number"
+              ? currentValue
+              : typeof currentAttributes[field] === "number"
+                ? (currentAttributes[field] as number)
+                : 0;
+          attributeUpdates[field] = baseValue + delta;
+          growthContextAttributes[field] = baseValue + delta;
+        }
+
+        for (const milestone of levelSystem.autoGrowth.milestoneGrowth ?? []) {
+          if (milestone.level !== level) {
+            continue;
+          }
+
+          for (const [field, growthValue] of Object.entries(
+            milestone.attributes,
+          )) {
+            const delta = resolveGrowthValue(
+              growthValue,
+              growthContextAttributes,
+            );
+            if (!Number.isFinite(delta) || delta === 0) {
+              continue;
+            }
+
+            appliedGrowth[field] = (appliedGrowth[field] ?? 0) + delta;
+            const currentValue = attributeUpdates[field];
+            const baseValue =
+              typeof currentValue === "number"
+                ? currentValue
+                : typeof currentAttributes[field] === "number"
+                  ? (currentAttributes[field] as number)
+                  : 0;
+            attributeUpdates[field] = baseValue + delta;
+            growthContextAttributes[field] = baseValue + delta;
+          }
+        }
+      }
+    }
+
+    const nextAttributes = {
+      ...currentAttributes,
+      ...attributeUpdates,
+    };
+    const nextStats = computeFullStats({
+      baseAttributes: nextAttributes,
+      primaryAttributes: worldConfig.primaryAttributes,
+      derivedStats: worldConfig.derivedStats,
+    });
+
+    const recoveryMode = levelSystem.resourceRecovery?.mode ?? "delta";
+    const resourceKeys = new Set(
+      (levelSystem.resourceRecovery?.resourceKeys ?? []).filter(
+        (key): key is string =>
+          typeof key === "string" && key.trim().length > 0,
+      ),
+    );
+    const resourceRecovery: Record<string, number> = {};
+
+    for (const stat of worldConfig.derivedStats) {
+      if (!stat.isResource) {
+        continue;
+      }
+      if (resourceKeys.size > 0 && !resourceKeys.has(stat.key)) {
+        continue;
+      }
+
+      const resourceKey = stat.key;
+      const maxField = stat.maxField;
+      if (!maxField) {
+        continue;
+      }
+
+      const previousCurrent =
+        typeof currentAttributes[resourceKey] === "number"
+          ? (currentAttributes[resourceKey] as number)
+          : previousStats[resourceKey];
+      const previousMax = previousStats[maxField];
+      const nextMax = nextStats[maxField];
+
+      if (!Number.isFinite(previousCurrent) || !Number.isFinite(nextMax)) {
+        continue;
+      }
+
+      let recoveredValue: number;
+      switch (recoveryMode) {
+        case "none": {
+          recoveredValue = Math.min(previousCurrent, nextMax);
+          break;
+        }
+        case "full": {
+          recoveredValue = nextMax;
+          break;
+        }
+        case "ratio": {
+          const ratio =
+            Number.isFinite(previousMax) && previousMax > 0
+              ? previousCurrent / previousMax
+              : 1;
+          recoveredValue = nextMax * ratio;
+          break;
+        }
+        case "delta":
+        default: {
+          const delta =
+            Number.isFinite(previousMax) && Number.isFinite(nextMax)
+              ? nextMax - previousMax
+              : 0;
+          recoveredValue = previousCurrent + delta;
+          break;
+        }
+      }
+
+      const clampedValue = clampResourceValue(recoveredValue, nextMax);
+      attributeUpdates[resourceKey] = clampedValue;
+      resourceRecovery[resourceKey] = clampedValue - previousCurrent;
+
+      if (typeof maxField === "string") {
+        attributeUpdates[maxField] = nextMax;
+      }
+    }
+
+    mainDoc.transact(() => {
+      applyCharacterUpdates(charMap, {
+        attributes: attributeUpdates,
+      });
+      const nextUpdatedAt = charMap.get("updatedAt");
+      if (typeof nextUpdatedAt === "number") {
+        updatedAt = nextUpdatedAt;
+      }
+    });
+
+    const event: CharacterLeveledUpEvent = {
+      roomId,
+      characterId,
+      operatorUserId: userId,
+      operatorUniqueTag: uniqueTag,
+      previousLevel,
+      newLevel,
+      appliedGrowth,
+      resourceRecovery,
+      reason,
+      updatedAt,
+    };
+    eventBus.emit(eventBus.createEvent(RoomEvents.CHARACTER_LEVELED_UP, event));
+
+    return { success: true };
   } catch (error) {
     return {
       success: false,

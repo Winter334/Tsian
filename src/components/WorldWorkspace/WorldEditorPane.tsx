@@ -2194,11 +2194,6 @@ export function WorldEditorPane({
                         (option) =>
                           option.value === (talent.category ?? "misc"),
                       )?.label;
-                      const prerequisiteCount = Object.keys(
-                        talent.prerequisites?.attributes ?? {},
-                      ).length;
-                      const exclusiveCount = talent.exclusiveWith?.length ?? 0;
-
                       return (
                         <button
                           key={`${talent.id || "talent"}-${index}`}
@@ -2260,16 +2255,6 @@ export function WorldEditorPane({
                             <DimensionMetaBadge
                               label="分类"
                               value={categoryLabel ?? "其他"}
-                            />
-                            <DimensionMetaBadge
-                              label="前置属性"
-                              value={String(prerequisiteCount)}
-                              accent={prerequisiteCount > 0}
-                            />
-                            <DimensionMetaBadge
-                              label="互斥"
-                              value={String(exclusiveCount)}
-                              accent={exclusiveCount > 0}
                             />
                           </div>
                           <p
@@ -2357,7 +2342,6 @@ export function WorldEditorPane({
 
                       <TalentCardEditor
                         talent={activeTalent}
-                        attributeOptions={primaryAttributes}
                         nameInputRef={talentNameInputRef}
                         onChange={(updates) =>
                           onUpdateTalent(resolvedActiveTalentIndex, updates)
@@ -6043,21 +6027,15 @@ function TalentRulesCardEditor({
 
 function TalentCardEditor({
   talent,
-  attributeOptions,
   nameInputRef,
   onChange,
   onRemove,
 }: {
   talent: TalentConfig;
-  attributeOptions: PrimaryAttributeConfig[];
   nameInputRef?: React.RefObject<HTMLInputElement | null>;
   onChange: (updates: Partial<TalentConfig>) => void;
   onRemove: () => void;
 }) {
-  const prerequisiteEntries = buildNumericFieldEntries(
-    talent.prerequisites?.attributes,
-  );
-
   return (
     <Card variant="outlined" className="space-y-3 p-4">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -6105,65 +6083,6 @@ function TalentCardEditor({
           placeholder="描述天赋效果与叙事语义"
         />
       </Field>
-
-      <div className="grid gap-3 lg:grid-cols-2">
-        <NumericFieldListEditor
-          title="前置属性要求"
-          description="普通作者可直接增删属性门槛；系统会自动清理空条目。"
-          fieldLabel="目标属性"
-          valueLabel="最低值"
-          addLabel="添加前置条件"
-          emptyMessage={
-            attributeOptions.length === 0
-              ? "先在属性分区配置主要属性后，再为天赋添加前置条件。"
-              : "当前没有前置属性要求；留空表示任何角色都可选择。"
-          }
-          fieldOptions={attributeOptions.map((item) => ({
-            value: item.key,
-            label: `${item.label}（${item.key}）`,
-          }))}
-          entries={prerequisiteEntries}
-          onChange={(entries) => {
-            const nextAttributes = buildNumericFieldRecord(entries);
-            onChange({
-              prerequisites: nextAttributes
-                ? { attributes: nextAttributes }
-                : undefined,
-            });
-          }}
-        />
-
-        <div
-          className="rounded-xl border px-4 py-3"
-          style={{
-            borderColor: colorAlpha("border", 0.3),
-            background: colorAlpha("bgCard", 0.22),
-          }}
-        >
-          <Field label="互斥天赋（逗号分隔）">
-            <Textarea
-              value={(talent.exclusiveWith ?? []).join(", ")}
-              onChange={(event) =>
-                onChange({
-                  exclusiveWith: event.target.value
-                    .split(",")
-                    .map((item) => item.trim())
-                    .filter(Boolean),
-                })
-              }
-              className="min-h-28"
-              placeholder="berserker, darkvision"
-            />
-          </Field>
-          <p
-            className="mt-2 text-xs"
-            style={{ color: colorAlpha("textMuted", 0.72) }}
-          >
-            互斥关系当前仍保留文本输入；若需要更复杂的条件与
-            modifier，请继续使用高级 JSON。
-          </p>
-        </div>
-      </div>
 
       <div className="flex justify-end">
         <Button variant="outline" size="sm" onClick={onRemove}>

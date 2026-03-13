@@ -106,24 +106,14 @@ export interface TalentConfig {
   category?: "combat" | "magic" | "survival" | "social" | "misc";
   /** 图标标识（UI 用） */
   icon?: string;
+  /** 品质 ID，引用 talentRules.rarities */
+  rarity?: string;
 
   /**
    * 结构化被动修正（引擎自动执行）
    * 不设置则天赋仅作为语义标签供 AI 参考
    */
   modifiers?: PassiveModifier[];
-
-  /**
-   * 前置条件（可选，用于 UI 过滤）
-   */
-  prerequisites?: {
-    attributes?: Record<string, number>;
-  };
-
-  /**
-   * 与其他天赋互斥的 ID 列表
-   */
-  exclusiveWith?: string[];
 }
 
 // ═══════════════════════════════════════════════════
@@ -288,6 +278,101 @@ export interface World {
   narrative?: WorldNarrativeSeed;
 }
 
+/** 奖励包定义 */
+export interface RewardPackage {
+  type:
+    | "attribute_points"
+    | "attribute_bonus"
+    | "free_talent_draw"
+    | "grant_talent"
+    | "skill_pick"
+    | "grant_skill"
+    | "grant_item";
+  /** 属性点数量（type=attribute_points 时） */
+  points?: number;
+  /** 属性加成（type=attribute_bonus 时） */
+  attributes?: Record<string, number | string>;
+  /** 天赋抽取次数（type=free_talent_draw 时） */
+  drawCount?: number;
+  /** 抽取池 ID（type=free_talent_draw 时） */
+  poolId?: string;
+  /** 每次抽取展示候选数（type=free_talent_draw 时） */
+  offersPerDraw?: number;
+  /** 保底品质（type=free_talent_draw 时） */
+  guaranteedRarity?: string;
+  /** 天赋 ID（type=grant_talent 时） */
+  talentId?: string;
+  /** 技能 ID（type=skill_pick/grant_skill 时） */
+  skillId?: string;
+  /** 物品 ID（type=grant_item 时） */
+  itemId?: string;
+  /** 物品数量（type=grant_item 时） */
+  quantity?: number;
+}
+
+/** 资源恢复模式 */
+export type ResourceRecoveryMode = "none" | "full" | "delta" | "ratio";
+
+/** 成长模式 */
+export type GrowthMode = "auto" | "allocation" | "hybrid";
+
+/** 等级系统配置 */
+export interface LevelSystemConfig {
+  /** 是否启用等级系统 */
+  enabled?: boolean;
+  /** 等级属性键名，默认 "level" */
+  levelAttributeKey?: string;
+  /** 触发模式 */
+  triggerModes?: Array<"narrative" | "manual">;
+
+  /** 成长模式，默认 "auto" */
+  growthMode?: GrowthMode;
+
+  /** 自动成长配置 */
+  autoGrowth?: {
+    /** 每级固定成长 */
+    perLevel?: Record<string, number | string>;
+    /** 关键等级额外成长 */
+    milestoneGrowth?: Array<{
+      level: number;
+      attributes: Record<string, number | string>;
+    }>;
+  };
+
+  /** 升级奖励 */
+  rewards?: {
+    /** 是否自动发放 */
+    autoApply?: boolean;
+    /** 每级通用奖励 */
+    perLevel?: RewardPackage[];
+    /** 里程碑奖励 */
+    milestones?: Array<{
+      level: number;
+      rewards: RewardPackage[];
+    }>;
+  };
+
+  /** 资源恢复策略 */
+  resourceRecovery?: {
+    /** 恢复模式，默认 "delta" */
+    mode?: ResourceRecoveryMode;
+    /** 受影响的资源键名列表 */
+    resourceKeys?: string[];
+  };
+
+  /** 叙事配置 */
+  narrative?: {
+    /** AI 是否可主动触发升级 */
+    allowAiTrigger?: boolean;
+    /** 升级是否需要玩家确认 */
+    requirePlayerConfirmation?: boolean;
+    /** 是否生成系统日志 */
+    emitSystemLog?: boolean;
+    /** 升级表现模式 */
+    visibility?: "hidden" | "summary" | "ceremony";
+  };
+}
+
 export interface WorldConfig {
   version: 1;
   worldId?: string;
@@ -307,6 +392,9 @@ export interface WorldConfig {
     /** 是否允许游戏中获得新天赋（默认 true） */
     allowAcquireDuringGame?: boolean;
   };
+
+  /** 等级系统配置 */
+  levelSystem?: LevelSystemConfig;
 
   /** 角色创建维度列表，替代原来的 races / backgrounds */
   dimensions?: CharacterDimension[];
@@ -572,6 +660,21 @@ export const DEFAULT_WORLD_CONFIG: WorldConfig = {
   talentRules: {
     initialCount: 2,
     allowAcquireDuringGame: true,
+  },
+  levelSystem: {
+    enabled: true,
+    levelAttributeKey: "level",
+    triggerModes: ["narrative", "manual"],
+    growthMode: "auto",
+    resourceRecovery: {
+      mode: "delta",
+    },
+    narrative: {
+      allowAiTrigger: true,
+      requirePlayerConfirmation: false,
+      emitSystemLog: true,
+      visibility: "summary",
+    },
   },
   pointBuyRules: {
     allocatableAttributes: ["str", "vit", "agi", "int", "spr", "luk"],

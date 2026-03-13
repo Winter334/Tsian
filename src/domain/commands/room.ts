@@ -73,6 +73,8 @@ export const RoomCommands = {
   CREATE_CHARACTER: "room/character/create",
   /** 更新角色 */
   UPDATE_CHARACTER: "room/character/update",
+  /** 角色升级 */
+  LEVEL_UP: "room/character/level-up" as const,
 
   // ===== NPC 管理 =====
   /** 创建 NPC（由规则引擎在处理 Parser AI 输出时调用） */
@@ -479,4 +481,20 @@ export interface UpdateCharacterPayload {
   uniqueTag: string;
   /** 更新的字段 */
   updates: UpdateCharacterParams;
+}
+
+/** 等级提升命令负载 */
+export interface LevelUpPayload {
+  /** 房间 ID */
+  roomId: string;
+  /** 角色 ID */
+  characterId: string;
+  /** 操作者用户 ID */
+  userId: string;
+  /** 操作者唯一标签 */
+  uniqueTag: string;
+  /** 升级级数，默认 1 */
+  levels?: number;
+  /** 升级原因（叙事描述） */
+  reason?: string;
 }
