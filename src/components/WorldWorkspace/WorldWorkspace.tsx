@@ -141,6 +141,11 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
     success("已重置", "草稿已恢复到最近一次保存状态");
   }, [success, workspace]);
 
+  const handleResetToDefault = useCallback(() => {
+    workspace.resetToBuiltinDefault();
+    success("已重置", "世界配置已恢复为内置默认值");
+  }, [success, workspace]);
+
   const handleToggleRawRulesEditor = useCallback(() => {
     if (
       workspace.rawRulesEditorOpen &&
@@ -336,6 +341,7 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
                   void handleSave();
                 }}
                 onReset={handleReset}
+                onResetToDefault={handleResetToDefault}
                 onToggleRawRulesEditor={handleToggleRawRulesEditor}
                 onClose={handleCloseRequest}
               />

@@ -10,13 +10,20 @@ import {
   Loader2,
   Plus,
   RefreshCcw,
+  RotateCcw,
   Save,
   Sparkles,
   X,
 } from "lucide-react";
-import { ReactNode, useCallback, useRef, type ChangeEvent } from "react";
+import {
+  ReactNode,
+  useCallback,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 
-import { Button } from "@/components/ui";
+import { Button, ConfirmDialog } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { animation, color, colorAlpha, gradientText } from "@/styles/tokens";
 
@@ -39,6 +46,7 @@ interface WorldWorkspaceToolbarProps {
   onExportWorld: () => void;
   onSave: () => void;
   onReset: () => void;
+  onResetToDefault?: () => void;
   onToggleRawRulesEditor: () => void;
   onClose: () => void;
 }
@@ -57,10 +65,13 @@ export function WorldWorkspaceToolbar({
   onExportWorld,
   onSave,
   onReset,
+  onResetToDefault,
   onToggleRawRulesEditor,
   onClose,
 }: WorldWorkspaceToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [resetToDefaultConfirmOpen, setResetToDefaultConfirmOpen] =
+    useState(false);
   const isFullRawRulesEditorOpen =
     rawRulesEditorOpen && rawRulesEditorScope === "full";
 
@@ -80,6 +91,14 @@ export function WorldWorkspaceToolbar({
     },
     [onImportFile],
   );
+
+  const handleResetToDefaultClick = useCallback(() => {
+    setResetToDefaultConfirmOpen(true);
+  }, []);
+
+  const handleConfirmResetToDefault = useCallback(() => {
+    onResetToDefault?.();
+  }, [onResetToDefault]);
 
   return (
     <div
@@ -187,6 +206,13 @@ export function WorldWorkspaceToolbar({
               disabled={!hasSelection || !isDirty}
               compact={!isDesktop}
             />
+            <ToolbarActionButton
+              icon={<RotateCcw className="h-4 w-4" />}
+              label="重置为内置默认"
+              onClick={handleResetToDefaultClick}
+              disabled={!hasSelection || !onResetToDefault}
+              compact={!isDesktop}
+            />
           </div>
         </div>
 
@@ -224,6 +250,16 @@ export function WorldWorkspaceToolbar({
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={resetToDefaultConfirmOpen}
+        onOpenChange={setResetToDefaultConfirmOpen}
+        title="重置为内置默认"
+        description="确定要将此世界配置重置为内置默认值吗？当前的所有自定义规则修改将被覆盖。此操作仅影响草稿，保存后才会生效。"
+        confirmText="重置"
+        cancelText="取消"
+        onConfirm={handleConfirmResetToDefault}
+      />
     </div>
   );
 }
