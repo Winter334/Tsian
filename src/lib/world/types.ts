@@ -319,16 +319,21 @@ export interface RewardPackage {
   quantity?: number;
 }
 
-/** 资源恢复模式 */
-export type ResourceRecoveryMode = "none" | "full" | "delta" | "ratio";
-
 /** 成长模式 */
 export type GrowthMode = "auto" | "allocation" | "hybrid";
 
+/** 单个等级的进度定义 */
+export interface LevelProgressDefinition {
+  /** 等级值 */
+  level: number;
+  /** 等级名称 */
+  name: string;
+  /** 达到该等级所需进度 */
+  requiredProgress: number;
+}
+
 /** 等级系统配置 */
 export interface LevelSystemConfig {
-  /** 是否启用等级系统 */
-  enabled?: boolean;
   /** 等级属性键名，默认 "level" */
   levelAttributeKey?: string;
   /** 触发模式 */
@@ -338,19 +343,10 @@ export interface LevelSystemConfig {
   progress?: {
     /** 进度值存储属性键名，默认 "level_progress" */
     progressAttributeKey?: string;
-    /** 阈值模式，P1 仅支持 "table" */
-    thresholdMode?: "table" | "formula";
-    /** 固定阈值表 */
-    thresholdTable?: Array<{
-      level: number;
-      requiredProgress: number;
-    }>;
-    /** 公式表达式（P1 仅声明类型，不提供实现） */
-    thresholdFormula?: string;
+    /** 按等级有序排列的进度真源配置 */
+    levels?: LevelProgressDefinition[];
     /** 升级后是否保留溢出进度，默认 true */
     carryOverflow?: boolean;
-    /** 进度可见性 */
-    visibility?: "hidden" | "summary" | "detailed";
   };
 
   /** 成长模式，默认 "auto" */
@@ -385,8 +381,6 @@ export interface LevelSystemConfig {
 
   /** 升级奖励 */
   rewards?: {
-    /** 是否自动发放 */
-    autoApply?: boolean;
     /** 每级通用奖励 */
     perLevel?: RewardPackage[];
     /** 里程碑奖励 */
@@ -394,26 +388,6 @@ export interface LevelSystemConfig {
       level: number;
       rewards: RewardPackage[];
     }>;
-  };
-
-  /** 资源恢复策略 */
-  resourceRecovery?: {
-    /** 恢复模式，默认 "delta" */
-    mode?: ResourceRecoveryMode;
-    /** 受影响的资源键名列表 */
-    resourceKeys?: string[];
-  };
-
-  /** 叙事配置 */
-  narrative?: {
-    /** AI 是否可主动触发升级 */
-    allowAiTrigger?: boolean;
-    /** 升级是否需要玩家确认 */
-    requirePlayerConfirmation?: boolean;
-    /** 是否生成系统日志 */
-    emitSystemLog?: boolean;
-    /** 升级表现模式 */
-    visibility?: "hidden" | "summary" | "ceremony";
   };
 }
 
@@ -742,19 +716,9 @@ export const DEFAULT_WORLD_CONFIG: WorldConfig = {
     duplicatePolicy: "exclude_owned",
   },
   levelSystem: {
-    enabled: true,
     levelAttributeKey: "level",
     triggerModes: ["narrative", "manual"],
     growthMode: "auto",
-    resourceRecovery: {
-      mode: "delta",
-    },
-    narrative: {
-      allowAiTrigger: true,
-      requirePlayerConfirmation: false,
-      emitSystemLog: true,
-      visibility: "summary",
-    },
   },
   pointBuyRules: {
     allocatableAttributes: ["str", "vit", "agi", "int", "spr", "luk"],

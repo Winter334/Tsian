@@ -16,6 +16,12 @@ interface TalentRarityEditorProps {
   onUpdate: (id: string, updates: Partial<TalentRarity>) => void;
 }
 
+const EDITOR_CARD_HOVER_STYLE = {
+  scale: 1,
+  y: 0,
+  borderColor: colorAlpha("primary", 0.52),
+} as const;
+
 export function TalentRarityEditor({
   rarities,
   onAdd,
@@ -67,7 +73,11 @@ export function TalentRarityEditor({
   };
 
   return (
-    <Card variant="outlined" className="space-y-4 p-4">
+    <Card
+      variant="outlined"
+      whileHover={EDITOR_CARD_HOVER_STYLE}
+      className="space-y-4 p-4"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h4

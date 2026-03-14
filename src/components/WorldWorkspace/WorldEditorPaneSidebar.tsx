@@ -301,8 +301,8 @@ function getSectionSummary(
 
     case "level-system": {
       const configuredLevelSystem = world.rules.levelSystem;
-      if (!configuredLevelSystem?.enabled) {
-        return "当前未启用等级系统";
+      if (!configuredLevelSystem) {
+        return "当前未配置等级系统";
       }
 
       const growthModeLabel =
@@ -315,7 +315,7 @@ function getSectionSummary(
         (configuredLevelSystem.triggerModes ?? [])
           .map((mode) => (mode === "manual" ? "手动" : "叙事"))
           .join(" / ") || "未配置触发";
-      return `${growthModeLabel} · ${triggerLabel} · ${configuredLevelSystem.resourceRecovery?.mode ?? "delta"} 恢复`;
+      return `${growthModeLabel} · ${triggerLabel} · 升级资源按上限增量同步恢复`;
     }
 
     case "inventoryRules": {

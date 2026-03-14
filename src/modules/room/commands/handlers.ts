@@ -336,6 +336,73 @@ function resolveCharacterLevel(
   return defaultLevel;
 }
 
+function resolveRequiredProgressForLevel(
+  levels: WorldConfig["levelSystem"] extends infer T
+    ? T extends { progress?: infer P }
+      ? P extends { levels?: infer L }
+        ? L
+        : never
+      : never
+    : never,
+  targetLevel: number,
+): number | undefined {
+  if (!Array.isArray(levels)) {
+    return undefined;
+  }
+
+  const targetEntry = levels.find(
+    (entry) =>
+      entry.level === targetLevel && Number.isFinite(entry.requiredProgress),
+  );
+
+  if (!targetEntry) {
+    return undefined;
+  }
+
+  return Math.max(0, targetEntry.requiredProgress);
+}
+
+function resolveProgressDeltaRequirement(
+  levels: WorldConfig["levelSystem"] extends infer T
+    ? T extends { progress?: infer P }
+      ? P extends { levels?: infer L }
+        ? L
+        : never
+      : never
+    : never,
+  previousLevel: number,
+  targetLevel: number,
+): number | undefined {
+  const targetRequiredProgress = resolveRequiredProgressForLevel(
+    levels,
+    targetLevel,
+  );
+  if (targetRequiredProgress === undefined) {
+    return undefined;
+  }
+
+  const previousRequiredProgress =
+    resolveRequiredProgressForLevel(levels, previousLevel) ?? 0;
+
+  return Math.max(0, targetRequiredProgress - previousRequiredProgress);
+}
+
+function resolveLevelName(
+  worldConfig: WorldConfig,
+  level: number,
+): string | undefined {
+  const name = worldConfig.levelSystem?.progress?.levels?.find(
+    (entry) => entry.level === level,
+  )?.name;
+
+  if (typeof name !== "string") {
+    return undefined;
+  }
+
+  const normalized = name.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 async function dispatchInventoryRewardCommand<TPayload, TResult>(
   type: string,
   payload: TPayload,
@@ -3472,8 +3539,8 @@ export async function levelUpHandler(
 
     const worldConfig = readWorldConfigFromMainDoc(mainDoc);
     const levelSystem = worldConfig.levelSystem;
-    if (!levelSystem?.enabled) {
-      return { success: false, error: "当前世界未启用等级系统" };
+    if (!levelSystem) {
+      return { success: false, error: "当前世界未配置等级系统" };
     }
 
     const levelKey = levelSystem.levelAttributeKey?.trim() || "level";
@@ -3540,32 +3607,23 @@ export async function levelUpHandler(
       const currentProgress = isFiniteNumber(currentProgressValue)
         ? currentProgressValue
         : 0;
+      const requiredProgress = resolveProgressDeltaRequirement(
+        progressConfig.levels ?? [],
+        previousLevel,
+        newLevel,
+      );
 
-      if (
-        progressConfig.thresholdMode === "table" &&
-        Array.isArray(progressConfig.thresholdTable)
-      ) {
-        const thresholdEntry = progressConfig.thresholdTable.find(
-          (entry) =>
-            entry.level === previousLevel &&
-            Number.isFinite(entry.requiredProgress),
-        );
-        const requiredProgress = thresholdEntry
-          ? Math.max(0, thresholdEntry.requiredProgress)
-          : undefined;
-
-        if (requiredProgress !== undefined) {
-          if (currentProgress < requiredProgress) {
-            progressInsufficient = true;
-          }
-
-          const nextProgress =
-            progressConfig.carryOverflow === false
-              ? 0
-              : Math.max(0, currentProgress - requiredProgress);
-          attributeUpdates[progressAttributeKey] = nextProgress;
-          progressOverflow = nextProgress;
+      if (requiredProgress !== undefined) {
+        if (currentProgress < requiredProgress) {
+          progressInsufficient = true;
         }
+
+        const nextProgress =
+          progressConfig.carryOverflow === false
+            ? 0
+            : Math.max(0, currentProgress - requiredProgress);
+        attributeUpdates[progressAttributeKey] = nextProgress;
+        progressOverflow = nextProgress;
       }
     }
 
@@ -3662,7 +3720,7 @@ export async function levelUpHandler(
     }
 
     const rewardsConfig = levelSystem.rewards;
-    if (rewardsConfig && rewardsConfig.autoApply !== false) {
+    if (rewardsConfig) {
       const rewardPackages: RewardPackage[] = [];
 
       for (let level = previousLevel + 1; level <= newLevel; level += 1) {
@@ -3857,20 +3915,10 @@ export async function levelUpHandler(
       derivedStats: worldConfig.derivedStats,
     });
 
-    const recoveryMode = levelSystem.resourceRecovery?.mode ?? "delta";
-    const resourceKeys = new Set(
-      (levelSystem.resourceRecovery?.resourceKeys ?? []).filter(
-        (key): key is string =>
-          typeof key === "string" && key.trim().length > 0,
-      ),
-    );
     const resourceRecovery: Record<string, number> = {};
 
     for (const stat of worldConfig.derivedStats) {
       if (!stat.isResource) {
-        continue;
-      }
-      if (resourceKeys.size > 0 && !resourceKeys.has(stat.key)) {
         continue;
       }
 
@@ -3887,39 +3935,15 @@ export async function levelUpHandler(
       const previousMax = previousStats[maxField];
       const nextMax = nextStats[maxField];
 
-      if (!Number.isFinite(previousCurrent) || !Number.isFinite(nextMax)) {
+      if (
+        !Number.isFinite(previousCurrent) ||
+        !Number.isFinite(previousMax) ||
+        !Number.isFinite(nextMax)
+      ) {
         continue;
       }
 
-      let recoveredValue: number;
-      switch (recoveryMode) {
-        case "none": {
-          recoveredValue = Math.min(previousCurrent, nextMax);
-          break;
-        }
-        case "full": {
-          recoveredValue = nextMax;
-          break;
-        }
-        case "ratio": {
-          const ratio =
-            Number.isFinite(previousMax) && previousMax > 0
-              ? previousCurrent / previousMax
-              : 1;
-          recoveredValue = nextMax * ratio;
-          break;
-        }
-        case "delta":
-        default: {
-          const delta =
-            Number.isFinite(previousMax) && Number.isFinite(nextMax)
-              ? nextMax - previousMax
-              : 0;
-          recoveredValue = previousCurrent + delta;
-          break;
-        }
-      }
-
+      const recoveredValue = previousCurrent + (nextMax - previousMax);
       const clampedValue = clampResourceValue(recoveredValue, nextMax);
       attributeUpdates[resourceKey] = clampedValue;
       resourceRecovery[resourceKey] = clampedValue - previousCurrent;
@@ -3980,6 +4004,12 @@ export async function levelUpHandler(
       operatorUniqueTag: uniqueTag,
       previousLevel,
       newLevel,
+      ...(resolveLevelName(worldConfig, previousLevel)
+        ? { previousLevelName: resolveLevelName(worldConfig, previousLevel) }
+        : {}),
+      ...(resolveLevelName(worldConfig, newLevel)
+        ? { newLevelName: resolveLevelName(worldConfig, newLevel) }
+        : {}),
       appliedGrowth,
       resourceRecovery,
       ...(progressOverflow === undefined ? {} : { progressOverflow }),
@@ -4178,8 +4208,8 @@ export async function allocateLevelPointsHandler(
 
     const worldConfig = readWorldConfigFromMainDoc(mainDoc);
     const levelSystem = worldConfig.levelSystem;
-    if (!levelSystem?.enabled) {
-      return { success: false, error: "当前世界未启用等级系统" };
+    if (!levelSystem) {
+      return { success: false, error: "当前世界未配置等级系统" };
     }
 
     if (

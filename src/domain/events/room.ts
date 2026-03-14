@@ -503,8 +503,12 @@ export interface CharacterLeveledUpEvent {
   operatorUniqueTag: string;
   /** 升级前等级 */
   previousLevel: number;
+  /** 升级前等级名称 */
+  previousLevelName?: string;
   /** 升级后等级 */
   newLevel: number;
+  /** 升级后等级名称 */
+  newLevelName?: string;
   /** 自动成长应用的属性变更摘要 */
   appliedGrowth: Record<string, number>;
   /** 资源恢复摘要 */

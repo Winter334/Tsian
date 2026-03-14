@@ -44,7 +44,7 @@ export function getPendingLevelAllocationState(
   }
 
   const levelSystem = worldConfig.levelSystem;
-  if (!levelSystem?.enabled) {
+  if (!levelSystem) {
     return null;
   }
 

@@ -1483,7 +1483,7 @@ export function WorldEditorPane({
       sectionContent = (
         <FormSection
           title="等级系统"
-          description="配置升级触发、进度阈值、自动成长、属性点分配、资源恢复与叙事表现；复杂奖励包继续通过高级规则编辑维护。"
+          description="配置升级触发、进度阈值、自动成长、属性点分配与奖励内容；升级资源恢复统一按上限增量同步，复杂奖励包继续通过高级规则编辑维护。"
           action={
             <div className="flex flex-wrap gap-2">
               <SectionRulesEditorButton
@@ -1499,7 +1499,6 @@ export function WorldEditorPane({
           <LevelSystemEditor
             value={levelSystem ?? {}}
             primaryAttributes={primaryAttributes}
-            derivedStats={derivedStats}
             onChange={onUpdateLevelSystem}
           />
         </FormSection>

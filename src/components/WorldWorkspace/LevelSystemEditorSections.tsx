@@ -4,87 +4,23 @@ import { useMemo, type ReactNode } from "react";
 import { Button, Card, Input, Select, Toggle } from "@/components/ui";
 import type { LevelSystemConfig } from "@/lib/world/types";
 import { color, colorAlpha } from "@/styles/tokens";
-import {
-  getGrowthModeLabel,
-  getGrowthModeSummary,
-  getProgressVisibilityLabel,
-  getResourceRecoveryLabel,
-  getResourceRecoverySummary,
-  getTriggerModeSummary,
-  LEVEL_SYSTEM_TEMPLATES,
-  type LevelSystemTemplateId,
-} from "./level-system-templates";
 
 const NUMERIC_LITERAL_REGEX = /^-?\d+(?:\.\d+)?$/;
+const EDITOR_CARD_HOVER_STYLE = {
+  scale: 1,
+  y: 0,
+  borderColor: colorAlpha("primary", 0.52),
+} as const;
 
 export type SelectOption = { value: string; label: string };
 
 type StringNumberEntry = { field: string; value: string };
-type ThresholdTableEntry = NonNullable<
-  NonNullable<LevelSystemConfig["progress"]>["thresholdTable"]
+type LevelProgressEntry = NonNullable<
+  NonNullable<LevelSystemConfig["progress"]>["levels"]
 >[number];
 type MilestoneGrowthEntry = NonNullable<
   NonNullable<LevelSystemConfig["autoGrowth"]>["milestoneGrowth"]
 >[number];
-
-interface LevelSystemTemplateCardProps {
-  selectedTemplateId: LevelSystemTemplateId | "";
-  descriptionText: string;
-  canApply: boolean;
-  onSelectTemplate: (value: LevelSystemTemplateId | "") => void;
-  onApply: () => void;
-}
-
-export function LevelSystemTemplateCard({
-  selectedTemplateId,
-  descriptionText,
-  canApply,
-  onSelectTemplate,
-  onApply,
-}: LevelSystemTemplateCardProps) {
-  return (
-    <div
-      className="rounded-xl border px-4 py-3"
-      style={{
-        borderColor: colorAlpha("border", 0.3),
-        background: colorAlpha("bgCard", 0.22),
-      }}
-    >
-      <div className="space-y-3">
-        <SectionHeader
-          title="应用预设模板"
-          description="根据世界类型快速覆盖当前等级系统配置；复杂奖励包仍通过高级 JSON 细调。"
-        />
-        <EditorField label="模板选择">
-          <Select
-            value={selectedTemplateId}
-            onValueChange={(nextValue) =>
-              onSelectTemplate(nextValue as LevelSystemTemplateId | "")
-            }
-            options={[
-              { value: "", label: "选择推荐模板" },
-              ...LEVEL_SYSTEM_TEMPLATES.map((template) => ({
-                value: template.id,
-                label: template.name,
-              })),
-            ]}
-          />
-        </EditorField>
-        <InlineHint>{descriptionText}</InlineHint>
-        <div className="flex justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!canApply}
-            onClick={onApply}
-          >
-            应用预设模板
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function LevelSystemValidationPanel({
   warnings,
@@ -96,7 +32,11 @@ export function LevelSystemValidationPanel({
   }
 
   return (
-    <Card variant="outlined" className="space-y-3 p-4">
+    <Card
+      variant="outlined"
+      whileHover={EDITOR_CARD_HOVER_STYLE}
+      className="space-y-3 p-4"
+    >
       <div className="flex items-start gap-3">
         <span className="mt-0.5" style={{ color: color("warning") }}>
           <AlertTriangle className="h-4 w-4" />
@@ -138,139 +78,6 @@ export function LevelSystemValidationPanel({
   );
 }
 
-interface LevelSystemPreviewPanelProps {
-  growthMode: NonNullable<LevelSystemConfig["growthMode"]>;
-  triggerModes: LevelSystemConfig["triggerModes"] | undefined;
-  progressAttributeKey: string;
-  progressVisibility: NonNullable<
-    NonNullable<LevelSystemConfig["progress"]>["visibility"]
-  >;
-  progressPreviewLabel: string;
-  resourceRecoveryMode: NonNullable<
-    NonNullable<LevelSystemConfig["resourceRecovery"]>["mode"]
-  >;
-  resourcePreviewLabel: string;
-  showAutoGrowth: boolean;
-  autoGrowthPreviewItems: string[];
-  showAllocation: boolean;
-  allocationPreviewLabel: string;
-  narrativePreviewItems: string[];
-}
-
-export function LevelSystemPreviewPanel({
-  growthMode,
-  triggerModes,
-  progressAttributeKey,
-  progressVisibility,
-  progressPreviewLabel,
-  resourceRecoveryMode,
-  resourcePreviewLabel,
-  showAutoGrowth,
-  autoGrowthPreviewItems,
-  showAllocation,
-  allocationPreviewLabel,
-  narrativePreviewItems,
-}: LevelSystemPreviewPanelProps) {
-  return (
-    <Card variant="outlined" className="p-0">
-      <details open className="rounded-xl">
-        <summary
-          className="cursor-pointer list-none px-4 py-4"
-          style={{ color: color("textPrimary") }}
-        >
-          <SectionHeader
-            title="配置预览"
-            description="概览当前触发、成长、资源与叙事表现，便于快速确认该世界的升级体验走向。"
-          />
-        </summary>
-        <div
-          className="space-y-4 border-t px-4 py-4"
-          style={{ borderColor: colorAlpha("border", 0.3) }}
-        >
-          <div className="grid gap-3 lg:grid-cols-2">
-            <PreviewSection
-              title="成长模式"
-              description={getGrowthModeSummary(growthMode)}
-            >
-              <PreviewItem
-                label="当前模式"
-                value={getGrowthModeLabel(growthMode)}
-              />
-            </PreviewSection>
-            <PreviewSection
-              title="触发方式"
-              description={getTriggerModeSummary(triggerModes)}
-            >
-              <PreviewItem
-                label="触发组合"
-                value={formatTriggerModes(triggerModes)}
-              />
-            </PreviewSection>
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            <PreviewSection
-              title="进度与阈值"
-              description={progressPreviewLabel}
-            >
-              <PreviewItem label="进度字段" value={progressAttributeKey} />
-              <PreviewItem
-                label="可见性"
-                value={getProgressVisibilityLabel(progressVisibility)}
-              />
-            </PreviewSection>
-            <PreviewSection
-              title="资源刷新"
-              description={getResourceRecoverySummary(resourceRecoveryMode)}
-            >
-              <PreviewItem
-                label="恢复策略"
-                value={getResourceRecoveryLabel(resourceRecoveryMode)}
-              />
-              <PreviewItem label="影响资源" value={resourcePreviewLabel} />
-            </PreviewSection>
-          </div>
-
-          <PreviewSection
-            title="每级自动成长"
-            description={
-              showAutoGrowth
-                ? "升级时自动追加的基础属性变化预览。"
-                : "当前成长模式不包含自动成长。"
-            }
-          >
-            {showAutoGrowth ? (
-              autoGrowthPreviewItems.length > 0 ? (
-                <PreviewList items={autoGrowthPreviewItems} />
-              ) : (
-                <InlineHint>当前未配置每级固定成长。</InlineHint>
-              )
-            ) : (
-              <InlineHint>当前模式下不启用自动成长。</InlineHint>
-            )}
-          </PreviewSection>
-
-          {showAllocation ? (
-            <PreviewSection
-              title="分配点数规则"
-              description="升级后可分配属性点的发放方式、目标范围与额外约束。"
-            >
-              <PreviewItem label="规则概览" value={allocationPreviewLabel} />
-            </PreviewSection>
-          ) : null}
-
-          <PreviewSection
-            title="叙事配置"
-            description="升级如何进入 AI 叙事、确认流程与系统反馈。"
-          >
-            <PreviewList items={narrativePreviewItems} />
-          </PreviewSection>
-        </div>
-      </details>
-    </Card>
-  );
-}
-
 export function DetailsCard({
   title,
   description,
@@ -281,7 +88,11 @@ export function DetailsCard({
   children: ReactNode;
 }) {
   return (
-    <Card variant="outlined" className="p-0">
+    <Card
+      variant="outlined"
+      whileHover={EDITOR_CARD_HOVER_STYLE}
+      className="p-0"
+    >
       <details open className="rounded-xl">
         <summary
           className="cursor-pointer list-none px-4 py-4"
@@ -353,58 +164,6 @@ export function InlineHint({ children }: { children: ReactNode }) {
     <p className="text-xs" style={{ color: colorAlpha("textMuted", 0.72) }}>
       {children}
     </p>
-  );
-}
-
-function PreviewSection({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
-  return (
-    <div
-      className="space-y-3 rounded-xl border px-4 py-3"
-      style={{
-        borderColor: colorAlpha("border", 0.3),
-        background: colorAlpha("bgCard", 0.22),
-      }}
-    >
-      <SectionHeader title={title} description={description} />
-      {children}
-    </div>
-  );
-}
-
-function PreviewItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-2 text-xs">
-      <span style={{ color: colorAlpha("textMuted", 0.76) }}>{label}</span>
-      <span
-        className="min-w-0 flex-1 text-right wrap-break-word"
-        style={{ color: color("textPrimary") }}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function PreviewList({ items }: { items: string[] }) {
-  return (
-    <ul className="list-disc space-y-1.5 pl-4 text-xs">
-      {items.map((item, index) => (
-        <li
-          key={`preview-item-${index}`}
-          style={{ color: color("textPrimary") }}
-        >
-          {item}
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -641,12 +400,12 @@ export function StringNumberRecordEditor({
   );
 }
 
-export function ThresholdTableEditor({
+export function LevelProgressEditor({
   entries,
   onChange,
 }: {
-  entries: ThresholdTableEntry[];
-  onChange: (entries: ThresholdTableEntry[]) => void;
+  entries: LevelProgressEntry[];
+  onChange: (entries: LevelProgressEntry[]) => void;
 }) {
   return (
     <div
@@ -658,8 +417,8 @@ export function ThresholdTableEditor({
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <SectionHeader
-          title="阈值表"
-          description="按等级维护升级参考进度阈值。level 表示目标等级，requiredProgress 表示参考累计进度。"
+          title="等级进度"
+          description="按等级顺序维护升级数据。每项同时定义等级值、等级名称，以及达到该等级所需的累计进度。"
         />
         <Button
           variant="outline"
@@ -668,27 +427,39 @@ export function ThresholdTableEditor({
             onChange([
               ...entries,
               {
-                level: entries.length + 1,
-                requiredProgress: 0,
+                level:
+                  entries.length > 0
+                    ? Math.max(...entries.map((entry) => entry.level)) + 1
+                    : 1,
+                name: "新等级",
+                requiredProgress:
+                  entries.length > 0
+                    ? Math.max(
+                        0,
+                        entries[entries.length - 1]?.requiredProgress ?? 0,
+                      )
+                    : 0,
               },
             ])
           }
         >
           <Plus className="mr-1 h-4 w-4" />
-          添加阈值
+          添加等级
         </Button>
       </div>
 
       {entries.length === 0 ? (
-        <InlineHint>当前还没有阈值表项，可先补充等级与参考进度。</InlineHint>
+        <InlineHint>
+          当前还没有等级进度定义，可先从 1 级开始补充等级名与所需进度。
+        </InlineHint>
       ) : (
         <div className="space-y-3">
           {entries.map((entry, index) => (
             <div
-              key={`threshold-${index}`}
-              className="grid gap-3 md:grid-cols-[8rem_minmax(0,1fr)_auto] [&>label]:min-w-0"
+              key={`level-progress-${index}`}
+              className="grid gap-3 md:grid-cols-[7rem_minmax(0,1.1fr)_minmax(0,1fr)_auto] [&>label]:min-w-0"
             >
-              <EditorField label="等级">
+              <EditorField label="等级值">
                 <Input
                   type="number"
                   value={entry.level}
@@ -709,7 +480,25 @@ export function ThresholdTableEditor({
                   }
                 />
               </EditorField>
-              <EditorField label="所需进度">
+              <EditorField label="等级名称">
+                <Input
+                  value={entry.name}
+                  onChange={(event) =>
+                    onChange(
+                      entries.map((item, itemIndex) =>
+                        itemIndex === index
+                          ? {
+                              ...item,
+                              name: event.target.value,
+                            }
+                          : item,
+                      ),
+                    )
+                  }
+                  placeholder="如：见习者 / 筑基 / 青铜"
+                />
+              </EditorField>
+              <EditorField label="达到该等级所需进度">
                 <Input
                   type="number"
                   value={entry.requiredProgress}
@@ -929,14 +718,4 @@ function getMergedOptions(
   }
 
   return result;
-}
-
-function formatTriggerModes(
-  triggerModes: LevelSystemConfig["triggerModes"] | undefined,
-): string {
-  const labels = (triggerModes ?? []).map((mode) =>
-    mode === "narrative" ? "叙事触发" : "手动触发",
-  );
-
-  return labels.length > 0 ? labels.join(" / ") : "未启用";
 }

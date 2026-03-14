@@ -482,8 +482,15 @@ export function LevelUpNotification({
                           textShadow: glow("secondary", "sm", 0.18),
                         }}
                       >
-                        等级提升！ Lv.{notification.previousLevel} → Lv.
-                        {notification.newLevel}
+                        等级提升！
+                        {notification.previousLevelName?.trim()
+                          ? ` ${notification.previousLevelName.trim()} `
+                          : " "}
+                        Lv.{notification.previousLevel} →
+                        {notification.newLevelName?.trim()
+                          ? ` ${notification.newLevelName.trim()} `
+                          : " "}
+                        Lv.{notification.newLevel}
                       </h2>
                       <p
                         className="text-sm leading-relaxed"

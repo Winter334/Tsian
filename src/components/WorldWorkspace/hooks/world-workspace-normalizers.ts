@@ -176,7 +176,6 @@ type EditableTalentRarity = NonNullable<
 >[number];
 type EditableTalentPool = NonNullable<EditableTalentRules["pools"]>[number];
 type EditableTalentPityRule = NonNullable<EditableTalentRules["pity"]>[number];
-type EditableLevelSystem = NonNullable<WorldConfig["levelSystem"]>;
 
 export function extractFormulaIdentifiers(formula: string): string[] {
   const matched = formula.match(FORMULA_IDENTIFIER_REGEX);
@@ -692,9 +691,12 @@ function normalizeRewardPackageList(value: unknown): RewardPackage[] {
 export function normalizeLevelSystem(
   value: unknown,
   context: Pick<WorldConfig, "primaryAttributes" | "derivedStats">,
-): EditableLevelSystem {
-  const record = isRecord(value) ? value : {};
-  const enabled = typeof record.enabled === "boolean" ? record.enabled : false;
+): WorldConfig["levelSystem"] {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const record = value;
   const levelAttributeKey = toRequiredString(record.levelAttributeKey, "level");
   const triggerModes = toUniqueStringArray(record.triggerModes).filter(
     (item): item is "narrative" | "manual" =>
@@ -708,25 +710,17 @@ export function normalizeLevelSystem(
       : "auto";
 
   const progressRecord = isRecord(record.progress) ? record.progress : {};
-  const thresholdMode =
-    progressRecord.thresholdMode === "formula" ? "formula" : "table";
-  const thresholdTable = Array.isArray(progressRecord.thresholdTable)
-    ? progressRecord.thresholdTable.map((item, index) => {
-        const threshold = isRecord(item) ? item : {};
+  const levels = Array.isArray(progressRecord.levels)
+    ? progressRecord.levels.map((item, index) => {
+        const level = isRecord(item) ? item : {};
         return {
-          level: toOptionalPositiveInteger(threshold.level) ?? index + 1,
+          level: toOptionalPositiveInteger(level.level) ?? index + 1,
+          name: toRequiredString(level.name, `等级 ${index + 1}`),
           requiredProgress:
-            toOptionalNonNegativeInteger(threshold.requiredProgress) ?? 0,
+            toOptionalNonNegativeInteger(level.requiredProgress) ?? 0,
         };
       })
     : [];
-  const thresholdFormula = toOptionalString(progressRecord.thresholdFormula);
-  const progressVisibility =
-    progressRecord.visibility === "hidden" ||
-    progressRecord.visibility === "detailed" ||
-    progressRecord.visibility === "summary"
-      ? progressRecord.visibility
-      : "summary";
 
   const autoGrowthRecord = isRecord(record.autoGrowth) ? record.autoGrowth : {};
   const autoGrowthPerLevel =
@@ -771,38 +765,9 @@ export function normalizeLevelSystem(
       })
     : [];
 
-  const resourceRecoveryRecord = isRecord(record.resourceRecovery)
-    ? record.resourceRecovery
-    : {};
-  const defaultResourceKeys = Array.from(
-    new Set(
-      context.derivedStats
-        .filter((stat) => stat.isResource || stat.category === "resource")
-        .map((stat) => stat.key),
-    ),
-  );
-  const resourceKeys =
-    toUniqueStringArray(resourceRecoveryRecord.resourceKeys).length > 0
-      ? toUniqueStringArray(resourceRecoveryRecord.resourceKeys)
-      : defaultResourceKeys;
-  const resourceRecoveryMode =
-    resourceRecoveryRecord.mode === "none" ||
-    resourceRecoveryRecord.mode === "full" ||
-    resourceRecoveryRecord.mode === "ratio" ||
-    resourceRecoveryRecord.mode === "delta"
-      ? resourceRecoveryRecord.mode
-      : "delta";
-
-  const narrativeRecord = isRecord(record.narrative) ? record.narrative : {};
-  const narrativeVisibility =
-    narrativeRecord.visibility === "hidden" ||
-    narrativeRecord.visibility === "ceremony" ||
-    narrativeRecord.visibility === "summary"
-      ? narrativeRecord.visibility
-      : "summary";
+  const rewardsPerLevel = normalizeRewardPackageList(rewardsRecord.perLevel);
 
   return {
-    enabled,
     levelAttributeKey,
     triggerModes:
       triggerModes.length > 0 ? triggerModes : ["narrative", "manual"],
@@ -811,14 +776,11 @@ export function normalizeLevelSystem(
         progressRecord.progressAttributeKey,
         "level_progress",
       ),
-      thresholdMode,
-      thresholdTable,
-      ...(thresholdFormula ? { thresholdFormula } : {}),
+      levels,
       carryOverflow:
         typeof progressRecord.carryOverflow === "boolean"
           ? progressRecord.carryOverflow
           : true,
-      visibility: progressVisibility,
     },
     growthMode,
     autoGrowth: {
@@ -845,31 +807,8 @@ export function normalizeLevelSystem(
           : true,
     },
     rewards: {
-      autoApply:
-        typeof rewardsRecord.autoApply === "boolean"
-          ? rewardsRecord.autoApply
-          : true,
-      perLevel: normalizeRewardPackageList(rewardsRecord.perLevel),
+      perLevel: rewardsPerLevel,
       milestones: rewardMilestones,
-    },
-    resourceRecovery: {
-      mode: resourceRecoveryMode,
-      resourceKeys,
-    },
-    narrative: {
-      allowAiTrigger:
-        typeof narrativeRecord.allowAiTrigger === "boolean"
-          ? narrativeRecord.allowAiTrigger
-          : true,
-      requirePlayerConfirmation:
-        typeof narrativeRecord.requirePlayerConfirmation === "boolean"
-          ? narrativeRecord.requirePlayerConfirmation
-          : false,
-      emitSystemLog:
-        typeof narrativeRecord.emitSystemLog === "boolean"
-          ? narrativeRecord.emitSystemLog
-          : true,
-      visibility: narrativeVisibility,
     },
   };
 }

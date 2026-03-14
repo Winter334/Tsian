@@ -16,6 +16,11 @@ export type TalentSelectOption = { value: string; label: string };
 export type TagSelectionItem = { id: string; name: string };
 
 const EMPTY_SELECT_VALUE = "__none__";
+const EDITOR_CARD_HOVER_STYLE = {
+  scale: 1,
+  y: 0,
+  borderColor: colorAlpha("primary", 0.52),
+} as const;
 
 export function TalentRulesCardEditor({
   talentRules,
@@ -25,7 +30,11 @@ export function TalentRulesCardEditor({
   onChange: (updates: Partial<TalentRulesValue>) => void;
 }) {
   return (
-    <Card variant="outlined" className="space-y-4 p-4">
+    <Card
+      variant="outlined"
+      whileHover={EDITOR_CARD_HOVER_STYLE}
+      className="space-y-4 p-4"
+    >
       <div>
         <h4
           className="text-sm font-semibold"
@@ -147,7 +156,11 @@ export function TalentPityRulesEditor({
   onUpdate: (index: number, updates: Partial<TalentPityRuleValue>) => void;
 }) {
   return (
-    <Card variant="outlined" className="space-y-4 p-4">
+    <Card
+      variant="outlined"
+      whileHover={EDITOR_CARD_HOVER_STYLE}
+      className="space-y-4 p-4"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h4
@@ -312,7 +325,11 @@ export function TalentCardEditor({
   };
 
   return (
-    <Card variant="outlined" className="space-y-4 p-4">
+    <Card
+      variant="outlined"
+      whileHover={EDITOR_CARD_HOVER_STYLE}
+      className="space-y-4 p-4"
+    >
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Field label="天赋 ID">
           <Input
