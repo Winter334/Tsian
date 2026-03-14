@@ -389,14 +389,16 @@ function DesktopLayout({
   editorPane: React.ReactNode;
 }) {
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col xl:flex-row">
       <div
-        className="h-full min-h-0 w-72 shrink-0 border-r"
+        className="min-h-0 border-b xl:h-full xl:w-72 xl:shrink-0 xl:border-b-0 xl:border-r"
         style={{ borderColor: colorAlpha("primary", 0.16) }}
       >
         {listPane}
       </div>
-      <div className="h-full min-h-0 min-w-0 flex-1">{editorPane}</div>
+      <div className="h-full min-h-0 min-w-0 flex-1 overflow-hidden">
+        {editorPane}
+      </div>
     </div>
   );
 }

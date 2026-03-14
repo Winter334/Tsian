@@ -51,15 +51,10 @@ import { WorldEditorPaneDerivedStatsSection } from "./WorldEditorPaneDerivedStat
 import { WorldEditorPaneDimensionsSection } from "./WorldEditorPaneDimensionsSection";
 import { WorldEditorPaneEquipmentSection } from "./WorldEditorPaneEquipmentSection";
 import { WorldEditorPaneItemTemplatesSection } from "./WorldEditorPaneItemTemplatesSection";
+import { type WorldEditorSectionId } from "./WorldEditorPaneSections";
 import {
-  WORLD_EDITOR_SECTIONS,
-  type WorldEditorSectionId,
-} from "./WorldEditorPaneSections";
-import {
-  ValidationPanel,
   WorldEditorDesktopSidebar,
   WorldEditorMobileSectionNavigation,
-  WorldEditorSectionBanner,
 } from "./WorldEditorPaneSidebar";
 import { WorldEditorPaneSkillTemplatesSection } from "./WorldEditorPaneSkillTemplatesSection";
 import type {
@@ -213,7 +208,6 @@ function getRawRulesEditorMeta(
 
 interface WorldEditorPaneProps {
   world: World | null;
-  validationMessages: string[];
   rawRulesEditorOpen: boolean;
   rawRulesEditorScope: WorldRulesEditorScope;
   rawRulesText: string;
@@ -322,7 +316,6 @@ interface WorldEditorPaneProps {
 
 export function WorldEditorPane({
   world,
-  validationMessages,
   rawRulesEditorOpen,
   rawRulesEditorScope,
   rawRulesText,
@@ -503,12 +496,6 @@ export function WorldEditorPane({
     [world],
   );
 
-  const activeSectionMeta = useMemo(
-    () =>
-      WORLD_EDITOR_SECTIONS.find((section) => section.id === activeSection) ??
-      WORLD_EDITOR_SECTIONS[0],
-    [activeSection],
-  );
   const rawRulesEditorMeta = getRawRulesEditorMeta(rawRulesEditorScope);
   const dcPresetEntries = Object.entries(checkRules?.dcPresets ?? {});
   const opposedPresetEntries = Object.entries(checkRules?.opposedPresets ?? {});
@@ -1582,12 +1569,10 @@ export function WorldEditorPane({
   }
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col lg:flex-row">
+    <div className="relative flex h-full min-h-0 flex-col 2xl:flex-row">
       <WorldEditorDesktopSidebar
         world={world}
         activeSection={activeSection}
-        activeSectionMeta={activeSectionMeta}
-        validationMessages={validationMessages}
         onSelectSection={setActiveSection}
       />
 
@@ -1603,8 +1588,6 @@ export function WorldEditorPane({
             />
           </div>
 
-          <WorldEditorSectionBanner section={activeSectionMeta} />
-
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={activeSection}
@@ -1616,10 +1599,6 @@ export function WorldEditorPane({
               {sectionContent}
             </motion.div>
           </AnimatePresence>
-
-          <div className="lg:hidden">
-            <ValidationPanel messages={validationMessages} />
-          </div>
         </div>
       </ScrollArea>
 

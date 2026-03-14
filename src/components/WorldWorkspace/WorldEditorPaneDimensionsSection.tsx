@@ -105,7 +105,7 @@ export function WorldEditorPaneDimensionsSection({
       }
     >
       {dimensions.length > 0 ? (
-        <div className="grid gap-3 xl:h-168 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+        <div className="grid gap-3 2xl:h-168 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
           <Panel variant="outlined" className={MASTER_DETAIL_LIST_PANEL_CLASS}>
             <div
               className={MASTER_DETAIL_LIST_CONTENT_CLASS}
@@ -220,7 +220,7 @@ export function WorldEditorPaneDimensionsSection({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.14 }}
-                className="space-y-3 xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-1"
+                className="min-w-0 space-y-3 2xl:h-full 2xl:min-h-0 2xl:overflow-y-auto 2xl:pr-1"
               >
                 <Panel variant="outlined" className="p-3 sm:p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -478,7 +478,7 @@ function DimensionCard({
           </div>
 
           {dimension.options.length > 0 ? (
-            <div className="grid gap-3 xl:h-168 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+            <div className="grid gap-3 2xl:h-168 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
               <Panel
                 variant="outlined"
                 className={MASTER_DETAIL_LIST_PANEL_CLASS}
@@ -597,7 +597,7 @@ function DimensionCard({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.14 }}
-                    className="space-y-3 xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-1"
+                    className="min-w-0 space-y-3 2xl:h-full 2xl:min-h-0 2xl:overflow-y-auto 2xl:pr-1"
                   >
                     <Panel variant="outlined" className="p-3 sm:p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -666,7 +666,7 @@ function DimensionCard({
             编辑创建流程中的标题、标识、排序与说明文案。
           </p>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(120px,0.6fr)_minmax(0,1fr)] [&>label]:min-w-0 [&>div]:min-w-0">
+          <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(120px,0.6fr)_minmax(0,1fr)] [&>label]:min-w-0 [&>div]:min-w-0">
             <WorldEditorField label="维度名称">
               <Input
                 value={dimension.label}
@@ -737,7 +737,7 @@ function DimensionCard({
 
   return (
     <WorldEditorInventoryCard variant="outlined" className="space-y-4 p-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-start 2xl:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <h4
@@ -795,7 +795,7 @@ function DimensionCard({
             当前仅渲染这个维度的详情；选项预览：{collapsedPreview}
           </p>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap lg:shrink-0 lg:justify-end">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap 2xl:shrink-0 2xl:justify-end">
           <Button
             variant="outline"
             size="sm"

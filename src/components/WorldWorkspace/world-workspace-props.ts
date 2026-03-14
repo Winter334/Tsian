@@ -50,7 +50,6 @@ export function buildWorldEditorPaneProps(
 ): WorldEditorPaneProps {
   const editorStateProps = {
     world: workspace.draft,
-    validationMessages: workspace.validationMessages,
   };
 
   const rawRulesEditorProps = {

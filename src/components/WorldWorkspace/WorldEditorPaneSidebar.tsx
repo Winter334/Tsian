@@ -12,33 +12,25 @@ import {
 interface WorldEditorSidebarProps {
   world: World;
   activeSection: WorldEditorSectionId;
-  activeSectionMeta: WorldEditorSectionDefinition;
-  validationMessages: string[];
   onSelectSection: (section: WorldEditorSectionId) => void;
 }
 
 export function WorldEditorDesktopSidebar({
   world,
   activeSection,
-  activeSectionMeta,
-  validationMessages,
   onSelectSection,
 }: WorldEditorSidebarProps) {
   return (
     <div
-      className="hidden border-b lg:flex lg:h-full lg:min-h-0 lg:w-76 lg:shrink-0 lg:flex-col lg:border-b-0 lg:border-r lg:overflow-hidden"
+      className="hidden border-b lg:flex lg:w-full lg:flex-col 2xl:h-full 2xl:min-h-0 2xl:w-76 2xl:shrink-0 2xl:border-b-0 2xl:border-r 2xl:overflow-hidden"
       style={{ borderColor: colorAlpha("primary", 0.14) }}
     >
-      <div className="space-y-4 px-4 py-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
-        <EditorOverviewPanel world={world} activeSection={activeSectionMeta} />
-
+      <div className="px-4 py-4 lg:flex lg:flex-col 2xl:min-h-0 2xl:flex-1">
         <SectionNavigation
           world={world}
           activeSection={activeSection}
           onSelectSection={onSelectSection}
         />
-
-        <ValidationPanel messages={validationMessages} />
       </div>
     </div>
   );
@@ -363,7 +355,7 @@ function getSectionSummary(
   }
 }
 
-function EditorOverviewPanel({
+export function EditorOverviewPanel({
   world,
   activeSection,
 }: {
@@ -431,9 +423,9 @@ function SectionNavigation({
   return (
     <Panel
       variant="outlined"
-      className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:[&>div]:flex lg:[&>div]:min-h-0 lg:[&>div]:flex-1 lg:[&>div]:flex-col"
+      className="lg:[&>div]:min-w-0 2xl:flex 2xl:min-h-0 2xl:flex-1 2xl:flex-col 2xl:[&>div]:flex 2xl:[&>div]:min-h-0 2xl:[&>div]:flex-1 2xl:[&>div]:flex-col"
     >
-      <div className="p-3 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+      <div className="p-3 2xl:flex 2xl:min-h-0 2xl:flex-1 2xl:flex-col">
         <div>
           <h3
             className="text-sm font-semibold"
@@ -449,8 +441,8 @@ function SectionNavigation({
           </p>
         </div>
 
-        <ScrollArea className="mt-4 pb-1 lg:min-h-0 lg:flex-1 lg:overflow-x-hidden lg:pr-1">
-          <div className="flex gap-2 lg:flex-col">
+        <ScrollArea className="mt-4 pb-1 lg:overflow-x-auto 2xl:min-h-0 2xl:flex-1 2xl:overflow-x-hidden 2xl:pr-1">
+          <div className="flex gap-2 2xl:flex-col">
             {WORLD_EDITOR_SECTIONS.map((section) => {
               const selected = section.id === activeSection;
               return (
@@ -460,7 +452,7 @@ function SectionNavigation({
                   aria-pressed={selected}
                   onClick={() => onSelectSection(section.id)}
                   className={cn(
-                    "min-w-60 rounded-xl border px-4 py-3 text-left transition-all lg:min-w-0",
+                    "min-w-56 shrink-0 rounded-xl border px-4 py-3 text-left transition-all 2xl:min-w-0",
                   )}
                   style={{
                     color: selected
