@@ -1,25 +1,29 @@
 import { useMemo, useState } from "react";
 
-import { Card, ConfirmDialog, Input, Select } from "@/components/ui";
+import { ConfirmDialog } from "@/components/ui";
 import type {
   DerivedStatConfig,
   LevelSystemConfig,
   PrimaryAttributeConfig,
 } from "@/lib/world/types";
-import { color, colorAlpha } from "@/styles/tokens";
 import {
-  DetailsCard,
-  EditorField,
+  LevelSystemAllocationSection,
+  LevelSystemAutoGrowthSection,
+  LevelSystemBasicsSection,
+  LevelSystemNarrativeSection,
+  LevelSystemProgressSection,
+  LevelSystemResourceRecoverySection,
+  LevelSystemRewardsSection,
+  type LevelSystemAllocationSectionValue,
+  type LevelSystemAutoGrowthSectionValue,
+  type LevelSystemNarrativeSectionValue,
+  type LevelSystemProgressSectionValue,
+  type LevelSystemResourceRecoverySectionValue,
+  type LevelSystemRewardsSectionValue,
+} from "./LevelSystemEditorFormSections";
+import {
   LevelSystemPreviewPanel,
-  LevelSystemTemplateCard,
   LevelSystemValidationPanel,
-  MilestoneGrowthEditor,
-  SectionHeader,
-  StatusBadge,
-  StringNumberRecordEditor,
-  TagToggleGroup,
-  ThresholdTableEditor,
-  ToggleSetting,
   type SelectOption,
 } from "./LevelSystemEditorSections";
 import {
@@ -29,85 +33,6 @@ import {
   validateLevelSystemConfig,
   type LevelSystemTemplateId,
 } from "./level-system-templates";
-
-const NUMERIC_LITERAL_REGEX = /^-?\d+(?:\.\d+)?$/;
-
-const GROWTH_MODE_OPTIONS = [
-  { value: "auto", label: "自动成长" },
-  { value: "allocation", label: "属性点分配" },
-  { value: "hybrid", label: "混合模式" },
-] as const;
-
-const TRIGGER_MODE_OPTIONS = [
-  { value: "narrative", label: "叙事触发" },
-  { value: "manual", label: "手动触发" },
-] as const;
-
-const THRESHOLD_MODE_OPTIONS = [
-  { value: "table", label: "阈值表" },
-  { value: "formula", label: "公式" },
-] as const;
-
-const PROGRESS_VISIBILITY_OPTIONS = [
-  { value: "hidden", label: "隐藏" },
-  { value: "summary", label: "摘要" },
-  { value: "detailed", label: "详细" },
-] as const;
-
-const RESOURCE_RECOVERY_MODE_OPTIONS = [
-  { value: "none", label: "不恢复" },
-  { value: "full", label: "完全恢复" },
-  { value: "delta", label: "按增量恢复" },
-  { value: "ratio", label: "按比例映射" },
-] as const;
-
-const NARRATIVE_VISIBILITY_OPTIONS = [
-  { value: "hidden", label: "隐藏" },
-  { value: "summary", label: "摘要" },
-  { value: "ceremony", label: "仪式感表现" },
-] as const;
-
-type ProgressValue = NonNullable<LevelSystemConfig["progress"]>;
-type ProgressConfig = {
-  progressAttributeKey: string;
-  thresholdMode: NonNullable<ProgressValue["thresholdMode"]>;
-  thresholdTable: NonNullable<ProgressValue["thresholdTable"]>;
-  thresholdFormula: ProgressValue["thresholdFormula"];
-  carryOverflow: boolean;
-  visibility: NonNullable<ProgressValue["visibility"]>;
-};
-type AutoGrowthValue = NonNullable<LevelSystemConfig["autoGrowth"]>;
-type AutoGrowthConfig = {
-  perLevel: NonNullable<AutoGrowthValue["perLevel"]>;
-  milestoneGrowth: NonNullable<AutoGrowthValue["milestoneGrowth"]>;
-};
-type AllocationValue = NonNullable<LevelSystemConfig["allocation"]>;
-type AllocationConfig = {
-  pointAttributeKey: string;
-  allocatableAttributes: NonNullable<AllocationValue["allocatableAttributes"]>;
-  pointsPerLevel: NonNullable<AllocationValue["pointsPerLevel"]>;
-  minPerAttribute: AllocationValue["minPerAttribute"];
-  maxPerAttribute: AllocationValue["maxPerAttribute"];
-  allowDeferredAllocation: boolean;
-};
-type RewardsValue = NonNullable<LevelSystemConfig["rewards"]>;
-type RewardsConfig = {
-  autoApply: boolean;
-  perLevel: NonNullable<RewardsValue["perLevel"]>;
-  milestones: NonNullable<RewardsValue["milestones"]>;
-};
-type ResourceRecoveryValue = NonNullable<LevelSystemConfig["resourceRecovery"]>;
-type ResourceRecoveryConfig = {
-  mode: NonNullable<ResourceRecoveryValue["mode"]>;
-  resourceKeys: NonNullable<ResourceRecoveryValue["resourceKeys"]>;
-};
-type NarrativeValue = NonNullable<LevelSystemConfig["narrative"]>;
-type NarrativeConfig = {
-  allowAiTrigger: boolean;
-  requirePlayerConfirmation: boolean;
-  emitSystemLog: boolean;
-  visibility: NonNullable<NarrativeValue["visibility"]>;
-};
 
 interface LevelSystemEditorProps {
   value: LevelSystemConfig;
@@ -135,7 +60,7 @@ export function LevelSystemEditor({
     [value.triggerModes],
   );
   const growthMode = value.growthMode ?? "auto";
-  const progress = useMemo<ProgressConfig>(
+  const progress = useMemo<LevelSystemProgressSectionValue>(
     () => ({
       progressAttributeKey:
         value.progress?.progressAttributeKey ?? "level_progress",
@@ -147,14 +72,14 @@ export function LevelSystemEditor({
     }),
     [value.progress],
   );
-  const autoGrowth = useMemo<AutoGrowthConfig>(
+  const autoGrowth = useMemo<LevelSystemAutoGrowthSectionValue>(
     () => ({
       perLevel: value.autoGrowth?.perLevel ?? {},
       milestoneGrowth: value.autoGrowth?.milestoneGrowth ?? [],
     }),
     [value.autoGrowth],
   );
-  const allocation = useMemo<AllocationConfig>(
+  const allocation = useMemo<LevelSystemAllocationSectionValue>(
     () => ({
       pointAttributeKey:
         value.allocation?.pointAttributeKey ?? "unspent_attribute_points",
@@ -167,7 +92,7 @@ export function LevelSystemEditor({
     }),
     [value.allocation],
   );
-  const rewards = useMemo<RewardsConfig>(
+  const rewards = useMemo<LevelSystemRewardsSectionValue>(
     () => ({
       autoApply: value.rewards?.autoApply ?? true,
       perLevel: value.rewards?.perLevel ?? [],
@@ -175,14 +100,14 @@ export function LevelSystemEditor({
     }),
     [value.rewards],
   );
-  const resourceRecovery = useMemo<ResourceRecoveryConfig>(
+  const resourceRecovery = useMemo<LevelSystemResourceRecoverySectionValue>(
     () => ({
       mode: value.resourceRecovery?.mode ?? "delta",
       resourceKeys: value.resourceRecovery?.resourceKeys ?? [],
     }),
     [value.resourceRecovery],
   );
-  const narrative = useMemo<NarrativeConfig>(
+  const narrative = useMemo<LevelSystemNarrativeSectionValue>(
     () => ({
       allowAiTrigger: value.narrative?.allowAiTrigger ?? true,
       requirePlayerConfirmation:
@@ -327,7 +252,9 @@ export function LevelSystemEditor({
     [progress],
   );
 
-  const updateProgress = (updates: Partial<ProgressConfig>) => {
+  const updateProgress = (
+    updates: Partial<LevelSystemProgressSectionValue>,
+  ) => {
     onChange({
       progress: {
         ...progress,
@@ -336,7 +263,9 @@ export function LevelSystemEditor({
     });
   };
 
-  const updateAutoGrowth = (updates: Partial<AutoGrowthConfig>) => {
+  const updateAutoGrowth = (
+    updates: Partial<LevelSystemAutoGrowthSectionValue>,
+  ) => {
     onChange({
       autoGrowth: {
         ...autoGrowth,
@@ -345,7 +274,9 @@ export function LevelSystemEditor({
     });
   };
 
-  const updateAllocation = (updates: Partial<AllocationConfig>) => {
+  const updateAllocation = (
+    updates: Partial<LevelSystemAllocationSectionValue>,
+  ) => {
     onChange({
       allocation: {
         ...allocation,
@@ -354,7 +285,18 @@ export function LevelSystemEditor({
     });
   };
 
-  const updateResourceRecovery = (updates: Partial<ResourceRecoveryConfig>) => {
+  const updateRewards = (updates: Partial<LevelSystemRewardsSectionValue>) => {
+    onChange({
+      rewards: {
+        ...rewards,
+        ...updates,
+      },
+    });
+  };
+
+  const updateResourceRecovery = (
+    updates: Partial<LevelSystemResourceRecoverySectionValue>,
+  ) => {
     onChange({
       resourceRecovery: {
         ...resourceRecovery,
@@ -363,7 +305,9 @@ export function LevelSystemEditor({
     });
   };
 
-  const updateNarrative = (updates: Partial<NarrativeConfig>) => {
+  const updateNarrative = (
+    updates: Partial<LevelSystemNarrativeSectionValue>,
+  ) => {
     onChange({
       narrative: {
         ...narrative,
@@ -399,416 +343,64 @@ export function LevelSystemEditor({
   return (
     <>
       <div className="space-y-4">
-        <Card variant="outlined" className="space-y-4 p-4">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-            <div className="space-y-4">
-              <div className="grid gap-3 lg:grid-cols-2">
-                <ToggleSetting
-                  title="启用等级系统"
-                  description="关闭后，运行时不会按等级系统配置驱动成长、奖励与资源恢复。"
-                  checked={enabled}
-                  onCheckedChange={(checked) => onChange({ enabled: checked })}
-                />
-                <EditorField label="成长模式">
-                  <Select
-                    value={growthMode}
-                    onValueChange={(nextValue) =>
-                      onChange({
-                        growthMode:
-                          nextValue as LevelSystemConfig["growthMode"],
-                      })
-                    }
-                    options={GROWTH_MODE_OPTIONS.map((option) => ({
-                      value: option.value,
-                      label: option.label,
-                    }))}
-                  />
-                </EditorField>
-              </div>
+        <LevelSystemBasicsSection
+          enabled={enabled}
+          growthMode={growthMode}
+          levelAttributeKey={levelAttributeKey}
+          triggerModes={triggerModes}
+          selectedTemplateId={selectedTemplateId}
+          templateDescriptionText={
+            selectedTemplate?.description ??
+            "选择模板后，可通过确认对话框将基础、进度、成长、资源与叙事配置快速覆盖到当前世界。"
+          }
+          canApplyTemplate={selectedTemplate !== null}
+          onEnabledChange={(checked) => onChange({ enabled: checked })}
+          onGrowthModeChange={(nextValue) =>
+            onChange({ growthMode: nextValue })
+          }
+          onLevelAttributeKeyChange={(nextValue) =>
+            onChange({ levelAttributeKey: nextValue })
+          }
+          onTriggerModesChange={(nextValues) =>
+            onChange({ triggerModes: nextValues })
+          }
+          onSelectTemplate={setSelectedTemplateId}
+          onApplyTemplate={handleRequestApplyTemplate}
+        />
 
-              <div className="grid gap-3 lg:grid-cols-2">
-                <EditorField
-                  label="等级属性键"
-                  hint="建议指向已有 primaryAttributes 字段，默认使用 level。"
-                >
-                  <Input
-                    value={levelAttributeKey}
-                    onChange={(event) =>
-                      onChange({ levelAttributeKey: event.target.value })
-                    }
-                    placeholder="level"
-                  />
-                </EditorField>
-                <EditorField
-                  label="触发模式"
-                  hint="可同时开启叙事与手动触发；成长判定仍由系统命令结算。"
-                >
-                  <TagToggleGroup
-                    options={TRIGGER_MODE_OPTIONS.map((option) => ({
-                      value: option.value,
-                      label: option.label,
-                    }))}
-                    selectedValues={triggerModes}
-                    onToggle={(nextValues) =>
-                      onChange({
-                        triggerModes: nextValues.filter(
-                          (
-                            item,
-                          ): item is NonNullable<
-                            LevelSystemConfig["triggerModes"]
-                          >[number] =>
-                            item === "narrative" || item === "manual",
-                        ),
-                      })
-                    }
-                  />
-                </EditorField>
-              </div>
-            </div>
-
-            <LevelSystemTemplateCard
-              selectedTemplateId={selectedTemplateId}
-              descriptionText={
-                selectedTemplate?.description ??
-                "选择模板后，可通过确认对话框将基础、进度、成长、资源与叙事配置快速覆盖到当前世界。"
-              }
-              canApply={selectedTemplate !== null}
-              onSelectTemplate={setSelectedTemplateId}
-              onApply={handleRequestApplyTemplate}
-            />
-          </div>
-        </Card>
-
-        <DetailsCard
-          title="进度配置"
-          description="定义成长进度字段、升级参考阈值与可见性；达到阈值后仍需显式执行升级命令。"
-        >
-          <div className="grid gap-3 lg:grid-cols-2">
-            <EditorField label="进度属性键">
-              <Input
-                value={progress.progressAttributeKey}
-                onChange={(event) =>
-                  updateProgress({ progressAttributeKey: event.target.value })
-                }
-                placeholder="level_progress"
-              />
-            </EditorField>
-            <EditorField label="阈值模式">
-              <Select
-                value={progress.thresholdMode}
-                onValueChange={(nextValue) =>
-                  updateProgress({
-                    thresholdMode: nextValue as ProgressConfig["thresholdMode"],
-                  })
-                }
-                options={THRESHOLD_MODE_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                }))}
-              />
-            </EditorField>
-          </div>
-
-          {progress.thresholdMode === "table" ? (
-            <ThresholdTableEditor
-              entries={progress.thresholdTable}
-              onChange={(entries) =>
-                updateProgress({ thresholdTable: entries })
-              }
-            />
-          ) : (
-            <EditorField label="阈值公式">
-              <Input
-                value={progress.thresholdFormula ?? ""}
-                onChange={(event) =>
-                  updateProgress({ thresholdFormula: event.target.value })
-                }
-                placeholder="100 + level * 25"
-              />
-            </EditorField>
-          )}
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            <ToggleSetting
-              title="保留溢出进度"
-              description="开启后，升级参考值超出阈值的部分会继续保留在进度字段中。"
-              checked={progress.carryOverflow}
-              onCheckedChange={(checked) =>
-                updateProgress({ carryOverflow: checked })
-              }
-            />
-            <EditorField label="进度展示方式">
-              <Select
-                value={progress.visibility}
-                onValueChange={(nextValue) =>
-                  updateProgress({
-                    visibility: nextValue as ProgressConfig["visibility"],
-                  })
-                }
-                options={PROGRESS_VISIBILITY_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                }))}
-              />
-            </EditorField>
-          </div>
-        </DetailsCard>
+        <LevelSystemProgressSection
+          value={progress}
+          onChange={updateProgress}
+        />
 
         {showAutoGrowth ? (
-          <Card variant="outlined" className="space-y-4 p-4">
-            <SectionHeader
-              title="自动成长"
-              description="升级后自动结算的属性变化；支持纯数字与表达式字符串。"
-            />
-
-            <StringNumberRecordEditor
-              title="每级固定成长"
-              description="定义每次升级时稳定追加的属性成长。"
-              addLabel="添加成长项"
-              emptyMessage="当前没有每级固定成长，可为力量、耐久等属性追加固定或表达式成长。"
-              fieldOptions={primaryAttributeOptions}
-              value={autoGrowth.perLevel}
-              onChange={(perLevel) => updateAutoGrowth({ perLevel })}
-            />
-
-            <MilestoneGrowthEditor
-              milestones={autoGrowth.milestoneGrowth}
-              fieldOptions={primaryAttributeOptions}
-              onChange={(milestones) =>
-                updateAutoGrowth({ milestoneGrowth: milestones })
-              }
-            />
-          </Card>
+          <LevelSystemAutoGrowthSection
+            value={autoGrowth}
+            primaryAttributeOptions={primaryAttributeOptions}
+            onChange={updateAutoGrowth}
+          />
         ) : null}
 
         {showAllocation ? (
-          <Card variant="outlined" className="space-y-4 p-4">
-            <SectionHeader
-              title="属性点分配"
-              description="定义升级后未分配属性点的存储字段、分配目标与单次限制。"
-            />
-
-            <div className="grid gap-3 lg:grid-cols-2">
-              <EditorField label="未分配点数字段">
-                <Input
-                  value={allocation.pointAttributeKey}
-                  onChange={(event) =>
-                    updateAllocation({ pointAttributeKey: event.target.value })
-                  }
-                  placeholder="unspent_attribute_points"
-                />
-              </EditorField>
-              <EditorField
-                label="每级发放点数"
-                hint="可填写数字，或填写表达式字符串作为后续运行时扩展入口。"
-              >
-                <Input
-                  value={String(allocation.pointsPerLevel)}
-                  onChange={(event) =>
-                    updateAllocation({
-                      pointsPerLevel:
-                        parseStringNumberInput(event.target.value) ??
-                        event.target.value,
-                    })
-                  }
-                  placeholder="1"
-                />
-              </EditorField>
-            </div>
-
-            <EditorField
-              label="可分配属性"
-              hint="默认从主要属性中筛选，并自动排除等级字段与未分配点数字段。"
-            >
-              <TagToggleGroup
-                options={allocatableAttributeOptions}
-                selectedValues={allocation.allocatableAttributes}
-                onToggle={(nextValues) =>
-                  updateAllocation({ allocatableAttributes: nextValues })
-                }
-                emptyMessage="当前没有可分配属性候选，请先检查主要属性配置。"
-              />
-            </EditorField>
-
-            <div className="grid gap-3 lg:grid-cols-3">
-              <EditorField label="单属性最小分配（可选）">
-                <Input
-                  type="number"
-                  value={allocation.minPerAttribute ?? ""}
-                  onChange={(event) =>
-                    updateAllocation({
-                      minPerAttribute:
-                        event.target.value.trim() === ""
-                          ? undefined
-                          : Number(event.target.value),
-                    })
-                  }
-                />
-              </EditorField>
-              <EditorField label="单属性最大分配（可选）">
-                <Input
-                  type="number"
-                  value={allocation.maxPerAttribute ?? ""}
-                  onChange={(event) =>
-                    updateAllocation({
-                      maxPerAttribute:
-                        event.target.value.trim() === ""
-                          ? undefined
-                          : Number(event.target.value),
-                    })
-                  }
-                />
-              </EditorField>
-              <ToggleSetting
-                title="允许延后分配"
-                description="开启后，升级可先记录未分配点数，由玩家稍后处理。"
-                checked={allocation.allowDeferredAllocation}
-                onCheckedChange={(checked) =>
-                  updateAllocation({ allowDeferredAllocation: checked })
-                }
-              />
-            </div>
-          </Card>
+          <LevelSystemAllocationSection
+            value={allocation}
+            allocatableAttributeOptions={allocatableAttributeOptions}
+            onChange={updateAllocation}
+          />
         ) : null}
 
-        <Card variant="outlined" className="space-y-4 p-4">
-          <SectionHeader
-            title="资源恢复"
-            description="控制升级时当前资源值的刷新方式；这里只影响 current 值，不定义上限公式。"
-          />
+        <LevelSystemResourceRecoverySection
+          value={resourceRecovery}
+          resourceOptions={resourceOptions}
+          onChange={updateResourceRecovery}
+        />
 
-          <div className="grid gap-3 lg:grid-cols-2">
-            <EditorField label="恢复模式">
-              <Select
-                value={resourceRecovery.mode}
-                onValueChange={(nextValue) =>
-                  updateResourceRecovery({
-                    mode: nextValue as ResourceRecoveryConfig["mode"],
-                  })
-                }
-                options={RESOURCE_RECOVERY_MODE_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                }))}
-              />
-            </EditorField>
-            <EditorField
-              label="受影响资源字段"
-              hint="默认从 resource 类衍生属性中推导，可按需缩小范围。"
-            >
-              <TagToggleGroup
-                options={resourceOptions}
-                selectedValues={resourceRecovery.resourceKeys}
-                onToggle={(nextValues) =>
-                  updateResourceRecovery({ resourceKeys: nextValues })
-                }
-                emptyMessage="当前还没有资源型衍生属性候选。"
-              />
-            </EditorField>
-          </div>
-        </Card>
+        <LevelSystemNarrativeSection
+          value={narrative}
+          onChange={updateNarrative}
+        />
 
-        <Card variant="outlined" className="space-y-4 p-4">
-          <SectionHeader
-            title="叙事配置"
-            description="控制升级是否允许 AI 主动触发、是否需要玩家确认，以及升级表现风格。"
-          />
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            <ToggleSetting
-              title="允许 AI 触发升级"
-              description="开启后，叙事系统可在满足世界观条件时建议或触发升级。"
-              checked={narrative.allowAiTrigger}
-              onCheckedChange={(checked) =>
-                updateNarrative({ allowAiTrigger: checked })
-              }
-            />
-            <ToggleSetting
-              title="需要玩家确认"
-              description="开启后，升级动作需要玩家显式确认后再继续结算。"
-              checked={narrative.requirePlayerConfirmation}
-              onCheckedChange={(checked) =>
-                updateNarrative({ requirePlayerConfirmation: checked })
-              }
-            />
-            <ToggleSetting
-              title="写入系统日志"
-              description="控制升级是否生成系统日志与显式的成长反馈记录。"
-              checked={narrative.emitSystemLog}
-              onCheckedChange={(checked) =>
-                updateNarrative({ emitSystemLog: checked })
-              }
-            />
-            <EditorField label="表现可见性">
-              <Select
-                value={narrative.visibility}
-                onValueChange={(nextValue) =>
-                  updateNarrative({
-                    visibility: nextValue as NarrativeConfig["visibility"],
-                  })
-                }
-                options={NARRATIVE_VISIBILITY_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                }))}
-              />
-            </EditorField>
-          </div>
-        </Card>
-
-        <Card variant="outlined" className="space-y-4 p-4">
-          <SectionHeader
-            title="奖励配置"
-            description="首版仅结构化维护自动发放开关；复杂奖励包仍通过本分区高级 JSON 兜底。"
-          />
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            <ToggleSetting
-              title="自动发放奖励"
-              description="关闭后，升级只记录等级变化与待处理状态，不立即自动结算奖励包。"
-              checked={rewards.autoApply}
-              onCheckedChange={(checked) =>
-                onChange({
-                  rewards: {
-                    ...rewards,
-                    autoApply: checked,
-                  },
-                })
-              }
-            />
-            <div
-              className="rounded-xl border px-4 py-3"
-              style={{
-                borderColor: colorAlpha("border", 0.3),
-                background: colorAlpha("bgCard", 0.22),
-              }}
-            >
-              <p
-                className="text-sm font-medium"
-                style={{ color: color("textPrimary") }}
-              >
-                高级奖励包
-              </p>
-              <p
-                className="mt-1 text-xs"
-                style={{ color: colorAlpha("textMuted", 0.72) }}
-              >
-                当前结构化面板不会覆盖 perLevel / milestones
-                的奖励包内容，请使用当前分区的高级 JSON 编辑器维护。
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <StatusBadge
-                  label="每级奖励"
-                  value={`${rewards.perLevel.length} 项`}
-                />
-                <StatusBadge
-                  label="里程碑"
-                  value={`${rewards.milestones.length} 项`}
-                />
-              </div>
-            </div>
-          </div>
-        </Card>
+        <LevelSystemRewardsSection value={rewards} onChange={updateRewards} />
 
         <LevelSystemValidationPanel warnings={validationWarnings} />
 
@@ -850,15 +442,6 @@ export function LevelSystemEditor({
   );
 }
 
-function parseStringNumberInput(value: string): number | string | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-
-  return NUMERIC_LITERAL_REGEX.test(trimmed) ? Number(trimmed) : trimmed;
-}
-
 function buildRecordPreviewEntries(
   value: Record<string, number | string> | undefined,
   labelMap: Map<string, string>,
@@ -870,7 +453,7 @@ function buildRecordPreviewEntries(
 }
 
 function buildAllocationPreview(
-  allocation: AllocationConfig,
+  allocation: LevelSystemAllocationSectionValue,
   labelMap: Map<string, string>,
 ): string {
   const parts = [
@@ -915,7 +498,9 @@ function buildKeyListPreview(
   return keys.map((key) => formatFieldLabel(key, labelMap)).join("、");
 }
 
-function buildNarrativePreviewItems(narrative: NarrativeConfig): string[] {
+function buildNarrativePreviewItems(
+  narrative: LevelSystemNarrativeSectionValue,
+): string[] {
   return [
     `AI 触发：${(narrative.allowAiTrigger ?? true) ? "允许" : "关闭"}`,
     `玩家确认：${(narrative.requirePlayerConfirmation ?? false) ? "需要" : "不需要"}`,
@@ -924,7 +509,9 @@ function buildNarrativePreviewItems(narrative: NarrativeConfig): string[] {
   ];
 }
 
-function buildProgressPreview(progress: ProgressConfig): string {
+function buildProgressPreview(
+  progress: LevelSystemProgressSectionValue,
+): string {
   const thresholdLabel =
     (progress.thresholdMode ?? "table") === "formula"
       ? `公式：${progress.thresholdFormula?.trim() || "未填写"}`

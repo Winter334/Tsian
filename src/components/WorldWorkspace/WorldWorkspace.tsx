@@ -34,6 +34,11 @@ import {
   type WorldRulesEditorScope,
   type WorldWorkspaceMobilePage,
 } from "./hooks/useWorldWorkspaceState";
+import {
+  buildWorldEditorPaneProps,
+  buildWorldListPaneProps,
+  buildWorldWorkspaceToolbarProps,
+} from "./world-workspace-props";
 import { WorldEditorPane } from "./WorldEditorPane";
 import { WorldListPane } from "./WorldListPane";
 import { WorldWorkspaceToolbar } from "./WorldWorkspaceToolbar";
@@ -207,96 +212,76 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [closeConfirmOpen, handleCloseRequest, open]);
 
-  const editorPane = useMemo(
-    () => (
-      <WorldEditorPane
-        world={workspace.draft}
-        validationMessages={workspace.validationMessages}
-        rawRulesEditorOpen={workspace.rawRulesEditorOpen}
-        rawRulesEditorScope={workspace.rawRulesEditorScope}
-        rawRulesText={workspace.rawRulesText}
-        rawRulesError={workspace.rawRulesError}
-        onOpenRawRulesEditor={workspace.openRawRulesEditor}
-        onCloseRawRulesEditor={workspace.closeRawRulesEditor}
-        onUpdateMeta={workspace.updateMeta}
-        onUpdateNarrative={workspace.updateNarrative}
-        onUpdatePrimaryAttribute={workspace.updatePrimaryAttribute}
-        onAddPrimaryAttribute={workspace.addPrimaryAttribute}
-        onRemovePrimaryAttribute={workspace.removePrimaryAttribute}
-        onUpdatePointBuyRules={workspace.updatePointBuyRules}
-        onUpdateCheckRules={workspace.updateCheckRules}
-        onAddDcPreset={workspace.addDcPreset}
-        onUpdateDcPreset={workspace.updateDcPreset}
-        onRemoveDcPreset={workspace.removeDcPreset}
-        onAddOpposedPreset={workspace.addOpposedPreset}
-        onUpdateOpposedPreset={workspace.updateOpposedPreset}
-        onRemoveOpposedPreset={workspace.removeOpposedPreset}
-        onAddDCGuidelineItem={workspace.addDCGuidelineItem}
-        onUpdateDCGuidelineItem={workspace.updateDCGuidelineItem}
-        onRemoveDCGuidelineItem={workspace.removeDCGuidelineItem}
-        onUpdateDerivedStat={workspace.updateDerivedStat}
-        onAddDerivedStat={workspace.addDerivedStat}
-        onRemoveDerivedStat={workspace.removeDerivedStat}
-        onUpdateCondition={workspace.updateCondition}
-        onAddCondition={workspace.addCondition}
-        onRemoveCondition={workspace.removeCondition}
-        onUpdateDimension={workspace.updateDimension}
-        onAddDimension={workspace.addDimension}
-        onRemoveDimension={workspace.removeDimension}
-        onUpdateDimensionOption={workspace.updateDimensionOption}
-        onAddDimensionOption={workspace.addDimensionOption}
-        onRemoveDimensionOption={workspace.removeDimensionOption}
-        onUpdateTalentRules={workspace.updateTalentRules}
-        onAddTalentRarity={workspace.addTalentRarity}
-        onRemoveTalentRarity={workspace.removeTalentRarity}
-        onUpdateTalentRarity={workspace.updateTalentRarity}
-        onAddTalentPool={workspace.addTalentPool}
-        onRemoveTalentPool={workspace.removeTalentPool}
-        onUpdateTalentPool={workspace.updateTalentPool}
-        onAddTalentPityRule={workspace.addTalentPityRule}
-        onRemoveTalentPityRule={workspace.removeTalentPityRule}
-        onUpdateTalentPityRule={workspace.updateTalentPityRule}
-        onUpdateLevelSystem={workspace.updateLevelSystem}
-        onUpdateTalent={workspace.updateTalent}
-        onAddTalent={workspace.addTalent}
-        onRemoveTalent={workspace.removeTalent}
-        onAddEquipSlot={workspace.addEquipSlot}
-        onUpdateEquipSlot={workspace.updateEquipSlot}
-        onRemoveEquipSlot={workspace.removeEquipSlot}
-        onUpdateDefaultCapacity={workspace.updateDefaultCapacity}
-        onUpdateItemTemplate={workspace.updateItemTemplate}
-        onAddItemTemplate={workspace.addItemTemplate}
-        onRemoveItemTemplate={workspace.removeItemTemplate}
-        onUpdateSkillTemplate={workspace.updateSkillTemplate}
-        onAddSkillTemplate={workspace.addSkillTemplate}
-        onRemoveSkillTemplate={workspace.removeSkillTemplate}
-        onSetRawRulesText={workspace.setRawRulesText}
-        onApplyRawRulesText={handleApplyRawRulesText}
-      />
-    ),
+  const editorPaneProps = useMemo(
+    () =>
+      buildWorldEditorPaneProps(workspace, {
+        onApplyRawRulesText: handleApplyRawRulesText,
+      }),
     [handleApplyRawRulesText, workspace],
+  );
+
+  const listPaneProps = useMemo(
+    () =>
+      buildWorldListPaneProps(workspace, {
+        onDeleteWorld: handleDeleteWorld,
+      }),
+    [handleDeleteWorld, workspace],
+  );
+
+  const toolbarProps = useMemo(
+    () =>
+      buildWorldWorkspaceToolbarProps(workspace, {
+        isDesktop,
+        onCreateWorld: () => {
+          void handleCreateWorld();
+        },
+        onImportFile: (file) => {
+          void handleImportWorld(file);
+        },
+        onExportWorld: handleExportWorld,
+        onSave: () => {
+          void handleSave();
+        },
+        onReset: handleReset,
+        onResetToDefault: handleResetToDefault,
+        onToggleRawRulesEditor: handleToggleRawRulesEditor,
+        onClose: handleCloseRequest,
+      }),
+    [
+      handleCloseRequest,
+      handleCreateWorld,
+      handleExportWorld,
+      handleImportWorld,
+      handleReset,
+      handleResetToDefault,
+      handleSave,
+      handleToggleRawRulesEditor,
+      isDesktop,
+      workspace,
+    ],
+  );
+
+  const editorPane = useMemo(
+    () => <WorldEditorPane {...editorPaneProps} />,
+    [editorPaneProps],
+  );
+
+  const listPane = useMemo(
+    () => <WorldListPane {...listPaneProps} />,
+    [listPaneProps],
   );
 
   const renderMobilePage = useCallback(
     (page: WorldWorkspaceMobilePage) => {
       switch (page) {
         case "list":
-          return (
-            <WorldListPane
-              worlds={workspace.worlds}
-              activeWorldId={workspace.activeWorldId}
-              selectedWorldId={workspace.selectedWorldId}
-              onSelectWorld={workspace.selectWorld}
-              onSetActiveWorld={workspace.setActiveWorld}
-              onDeleteWorld={handleDeleteWorld}
-            />
-          );
+          return listPane;
         case "editor":
         default:
           return editorPane;
       }
     },
-    [editorPane, handleDeleteWorld, workspace],
+    [editorPane, listPane],
   );
 
   return (
@@ -331,46 +316,11 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
             )}
 
             <div className="relative z-10 flex h-full min-h-0 flex-col">
-              <WorldWorkspaceToolbar
-                isDesktop={isDesktop}
-                mobilePage={workspace.mobilePage}
-                isDirty={workspace.isDirty}
-                isSaving={workspace.isSaving}
-                hasSelection={!!workspace.draft}
-                rawRulesEditorOpen={workspace.rawRulesEditorOpen}
-                rawRulesEditorScope={workspace.rawRulesEditorScope}
-                onNavigateMobile={workspace.setMobilePage}
-                onCreateWorld={() => {
-                  void handleCreateWorld();
-                }}
-                onImportFile={(file) => {
-                  void handleImportWorld(file);
-                }}
-                onExportWorld={handleExportWorld}
-                onSave={() => {
-                  void handleSave();
-                }}
-                onReset={handleReset}
-                onResetToDefault={handleResetToDefault}
-                onToggleRawRulesEditor={handleToggleRawRulesEditor}
-                onClose={handleCloseRequest}
-              />
+              <WorldWorkspaceToolbar {...toolbarProps} />
 
               <div className="relative min-h-0 flex-1 overflow-hidden">
                 {isDesktop ? (
-                  <DesktopLayout
-                    listPane={
-                      <WorldListPane
-                        worlds={workspace.worlds}
-                        activeWorldId={workspace.activeWorldId}
-                        selectedWorldId={workspace.selectedWorldId}
-                        onSelectWorld={workspace.selectWorld}
-                        onSetActiveWorld={workspace.setActiveWorld}
-                        onDeleteWorld={handleDeleteWorld}
-                      />
-                    }
-                    editorPane={editorPane}
-                  />
+                  <DesktopLayout listPane={listPane} editorPane={editorPane} />
                 ) : (
                   <MobileLayout
                     page={workspace.mobilePage}
