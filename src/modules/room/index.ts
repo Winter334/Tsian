@@ -42,6 +42,7 @@ import {
 import {
   advancePhaseHandler,
   allocateLevelPointsHandler,
+  claimTalentDrawHandler,
   completePhaseHandler,
   completeTurnHandler,
   createCharacterHandler,
@@ -519,6 +520,7 @@ function createRoomCommandHandlers(): Record<
     [RoomCommands.CREATE_CHARACTER]: wrap(createCharacterHandler),
     [RoomCommands.UPDATE_CHARACTER]: wrap(updateCharacterHandler),
     [RoomCommands.LEVEL_UP]: wrap(levelUpHandler),
+    [RoomCommands.CLAIM_TALENT_DRAW]: wrap(claimTalentDrawHandler),
     [RoomCommands.ALLOCATE_LEVEL_POINTS]: wrap(allocateLevelPointsHandler),
     [RoomCommands.KICK_MEMBER]: wrap(kickMemberHandler),
     [RoomCommands.DELETE_ROOM]: wrap(deleteRoomHandler),

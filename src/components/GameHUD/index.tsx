@@ -6,6 +6,7 @@ import { selectSessionMode, useSessionStore } from "@/stores";
 import { animation, colorAlpha, glow } from "@/styles/tokens";
 
 import { LeftSidebar } from "./LeftSidebar";
+import { LevelUpNotification } from "./LevelUpNotification";
 import { RightSidebar, type RightSidebarTab } from "./RightSidebar";
 import { SidebarDrawer } from "./SidebarDrawer";
 import { TopBar } from "./TopBar";
@@ -141,6 +142,7 @@ export function GameHUD({
           border: `1px solid ${colorAlpha("primary", 0.14)}`,
         }}
       >
+        <LevelUpNotification onOpenCharacterPanel={onOpenCharacterPanel} />
         <motion.div
           className="absolute inset-0 pointer-events-none"
           animate={{

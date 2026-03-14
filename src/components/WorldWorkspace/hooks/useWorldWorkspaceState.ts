@@ -32,8 +32,10 @@ import type {
   DimensionOption,
   EquipSlotDefinition,
   InventoryRulesConfig,
+  LevelSystemConfig,
   PointBuyRules,
   PrimaryAttributeConfig,
+  RewardPackage,
   TalentConfig,
   World,
   WorldConfig,
@@ -51,6 +53,7 @@ export type WorldRulesEditorScope =
   | "conditions"
   | "dimensions"
   | "talents"
+  | "level-system"
   | "inventoryRules"
   | "itemTemplates"
   | "skillTemplates";
@@ -79,12 +82,14 @@ type EditableRulesTalentsSnapshot = Pick<
 type EditableRulesInventoryRulesSnapshot = Pick<WorldConfig, "inventoryRules">;
 type EditableRulesItemTemplatesSnapshot = Pick<WorldConfig, "itemTemplates">;
 type EditableRulesSkillTemplatesSnapshot = Pick<WorldConfig, "skillTemplates">;
+type EditableRulesLevelSystemSnapshot = Pick<WorldConfig, "levelSystem">;
 type EditableTalentRules = NonNullable<WorldConfig["talentRules"]>;
 type EditableTalentRarity = NonNullable<
   EditableTalentRules["rarities"]
 >[number];
 type EditableTalentPool = NonNullable<EditableTalentRules["pools"]>[number];
 type EditableTalentPityRule = NonNullable<EditableTalentRules["pity"]>[number];
+type EditableLevelSystem = NonNullable<WorldConfig["levelSystem"]>;
 
 type EditableDCPresets = NonNullable<CheckRuleConfig["dcPresets"]>;
 type EditableDCPreset = EditableDCPresets[string];
@@ -193,6 +198,22 @@ export interface WorldWorkspaceActions {
   addCondition: () => void;
   removeCondition: (index: number) => void;
   updateTalentRules: (updates: Partial<EditableTalentRules>) => void;
+  addTalentRarity: () => void;
+  removeTalentRarity: (id: string) => void;
+  updateTalentRarity: (
+    id: string,
+    updates: Partial<EditableTalentRarity>,
+  ) => void;
+  addTalentPool: () => void;
+  removeTalentPool: (id: string) => void;
+  updateTalentPool: (id: string, updates: Partial<EditableTalentPool>) => void;
+  addTalentPityRule: () => void;
+  removeTalentPityRule: (index: number) => void;
+  updateTalentPityRule: (
+    index: number,
+    updates: Partial<EditableTalentPityRule>,
+  ) => void;
+  updateLevelSystem: (updates: Partial<LevelSystemConfig>) => void;
   updateTalent: (index: number, updates: Partial<TalentConfig>) => void;
   addTalent: () => void;
   removeTalent: (index: number) => void;
@@ -308,6 +329,42 @@ function toNumberRecord(value: unknown): Record<string, number> | undefined {
     if (typeof entry === "number" && Number.isFinite(entry)) {
       result[key] = entry;
     }
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+const NUMERIC_LITERAL_REGEX = /^-?\d+(?:\.\d+)?$/;
+
+function toStringNumberValue(value: unknown): number | string | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  const text = toOptionalString(value);
+  if (!text) {
+    return undefined;
+  }
+
+  return NUMERIC_LITERAL_REGEX.test(text) ? Number(text) : text;
+}
+
+function toStringNumberRecord(
+  value: unknown,
+): Record<string, number | string> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const result: Record<string, number | string> = {};
+  for (const [rawKey, entry] of Object.entries(value)) {
+    const key = rawKey.trim();
+    const nextValue = toStringNumberValue(entry);
+    if (!key || nextValue === undefined) {
+      continue;
+    }
+
+    result[key] = nextValue;
   }
 
   return Object.keys(result).length > 0 ? result : undefined;
@@ -829,6 +886,251 @@ function normalizeTalentRules(
   };
 }
 
+function toRewardPackageType(
+  value: unknown,
+): RewardPackage["type"] | undefined {
+  return value === "attribute_points" ||
+    value === "attribute_bonus" ||
+    value === "free_talent_draw" ||
+    value === "grant_talent" ||
+    value === "skill_pick" ||
+    value === "grant_skill" ||
+    value === "grant_item"
+    ? value
+    : undefined;
+}
+
+function normalizeRewardPackage(value: unknown): RewardPackage | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const type = toRewardPackageType(value.type);
+  if (!type) {
+    return null;
+  }
+
+  const points = toOptionalNonNegativeInteger(value.points);
+  const attributes = toStringNumberRecord(value.attributes);
+  const drawCount = toOptionalPositiveInteger(value.drawCount);
+  const poolId = toOptionalString(value.poolId);
+  const offersPerDraw = toOptionalPositiveInteger(value.offersPerDraw);
+  const guaranteedRarity = toOptionalString(value.guaranteedRarity);
+  const talentId = toOptionalString(value.talentId);
+  const skillId = toOptionalString(value.skillId);
+  const itemId = toOptionalString(value.itemId);
+  const quantity = toOptionalPositiveInteger(value.quantity);
+
+  return {
+    type,
+    ...(points === undefined ? {} : { points }),
+    ...(attributes ? { attributes } : {}),
+    ...(drawCount === undefined ? {} : { drawCount }),
+    ...(poolId ? { poolId } : {}),
+    ...(offersPerDraw === undefined ? {} : { offersPerDraw }),
+    ...(guaranteedRarity ? { guaranteedRarity } : {}),
+    ...(talentId ? { talentId } : {}),
+    ...(skillId ? { skillId } : {}),
+    ...(itemId ? { itemId } : {}),
+    ...(quantity === undefined ? {} : { quantity }),
+  };
+}
+
+function normalizeRewardPackageList(value: unknown): RewardPackage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => normalizeRewardPackage(item))
+    .filter((item): item is RewardPackage => item !== null);
+}
+
+function normalizeLevelSystem(
+  value: unknown,
+  context: Pick<WorldConfig, "primaryAttributes" | "derivedStats">,
+): EditableLevelSystem {
+  const record = isRecord(value) ? value : {};
+  const enabled = typeof record.enabled === "boolean" ? record.enabled : false;
+  const levelAttributeKey = toRequiredString(record.levelAttributeKey, "level");
+  const triggerModes = toUniqueStringArray(record.triggerModes).filter(
+    (item): item is "narrative" | "manual" =>
+      item === "narrative" || item === "manual",
+  );
+  const growthMode =
+    record.growthMode === "allocation" ||
+    record.growthMode === "hybrid" ||
+    record.growthMode === "auto"
+      ? record.growthMode
+      : "auto";
+
+  const progressRecord = isRecord(record.progress) ? record.progress : {};
+  const thresholdMode =
+    progressRecord.thresholdMode === "formula" ? "formula" : "table";
+  const thresholdTable = Array.isArray(progressRecord.thresholdTable)
+    ? progressRecord.thresholdTable.map((item, index) => {
+        const threshold = isRecord(item) ? item : {};
+        return {
+          level: toOptionalPositiveInteger(threshold.level) ?? index + 1,
+          requiredProgress:
+            toOptionalNonNegativeInteger(threshold.requiredProgress) ?? 0,
+        };
+      })
+    : [];
+  const thresholdFormula = toOptionalString(progressRecord.thresholdFormula);
+  const progressVisibility =
+    progressRecord.visibility === "hidden" ||
+    progressRecord.visibility === "detailed" ||
+    progressRecord.visibility === "summary"
+      ? progressRecord.visibility
+      : "summary";
+
+  const autoGrowthRecord = isRecord(record.autoGrowth) ? record.autoGrowth : {};
+  const autoGrowthPerLevel =
+    toStringNumberRecord(autoGrowthRecord.perLevel) ?? {};
+  const milestoneGrowth = Array.isArray(autoGrowthRecord.milestoneGrowth)
+    ? autoGrowthRecord.milestoneGrowth.map((item, index) => {
+        const milestone = isRecord(item) ? item : {};
+        return {
+          level: toOptionalPositiveInteger(milestone.level) ?? index + 1,
+          attributes: toStringNumberRecord(milestone.attributes) ?? {},
+        };
+      })
+    : [];
+
+  const allocationRecord = isRecord(record.allocation) ? record.allocation : {};
+  const pointAttributeKey = toRequiredString(
+    allocationRecord.pointAttributeKey,
+    "unspent_attribute_points",
+  );
+  const defaultAllocatableAttributes = context.primaryAttributes
+    .map((attribute) => attribute.key)
+    .filter(
+      (attributeKey) =>
+        attributeKey !== levelAttributeKey &&
+        attributeKey !== pointAttributeKey,
+    );
+  const allocatableAttributes =
+    toUniqueStringArray(allocationRecord.allocatableAttributes).length > 0
+      ? toUniqueStringArray(allocationRecord.allocatableAttributes)
+      : defaultAllocatableAttributes;
+  const pointsPerLevel =
+    toStringNumberValue(allocationRecord.pointsPerLevel) ?? 1;
+
+  const rewardsRecord = isRecord(record.rewards) ? record.rewards : {};
+  const rewardMilestones = Array.isArray(rewardsRecord.milestones)
+    ? rewardsRecord.milestones.map((item, index) => {
+        const milestone = isRecord(item) ? item : {};
+        return {
+          level: toOptionalPositiveInteger(milestone.level) ?? index + 1,
+          rewards: normalizeRewardPackageList(milestone.rewards),
+        };
+      })
+    : [];
+
+  const resourceRecoveryRecord = isRecord(record.resourceRecovery)
+    ? record.resourceRecovery
+    : {};
+  const defaultResourceKeys = Array.from(
+    new Set(
+      context.derivedStats
+        .filter((stat) => stat.isResource || stat.category === "resource")
+        .map((stat) => stat.key),
+    ),
+  );
+  const resourceKeys =
+    toUniqueStringArray(resourceRecoveryRecord.resourceKeys).length > 0
+      ? toUniqueStringArray(resourceRecoveryRecord.resourceKeys)
+      : defaultResourceKeys;
+  const resourceRecoveryMode =
+    resourceRecoveryRecord.mode === "none" ||
+    resourceRecoveryRecord.mode === "full" ||
+    resourceRecoveryRecord.mode === "ratio" ||
+    resourceRecoveryRecord.mode === "delta"
+      ? resourceRecoveryRecord.mode
+      : "delta";
+
+  const narrativeRecord = isRecord(record.narrative) ? record.narrative : {};
+  const narrativeVisibility =
+    narrativeRecord.visibility === "hidden" ||
+    narrativeRecord.visibility === "ceremony" ||
+    narrativeRecord.visibility === "summary"
+      ? narrativeRecord.visibility
+      : "summary";
+
+  return {
+    enabled,
+    levelAttributeKey,
+    triggerModes:
+      triggerModes.length > 0 ? triggerModes : ["narrative", "manual"],
+    progress: {
+      progressAttributeKey: toRequiredString(
+        progressRecord.progressAttributeKey,
+        "level_progress",
+      ),
+      thresholdMode,
+      thresholdTable,
+      ...(thresholdFormula ? { thresholdFormula } : {}),
+      carryOverflow:
+        typeof progressRecord.carryOverflow === "boolean"
+          ? progressRecord.carryOverflow
+          : true,
+      visibility: progressVisibility,
+    },
+    growthMode,
+    autoGrowth: {
+      perLevel: autoGrowthPerLevel,
+      milestoneGrowth,
+    },
+    allocation: {
+      pointAttributeKey,
+      allocatableAttributes,
+      pointsPerLevel,
+      ...(toOptionalNumber(allocationRecord.minPerAttribute) === undefined
+        ? {}
+        : {
+            minPerAttribute: toOptionalNumber(allocationRecord.minPerAttribute),
+          }),
+      ...(toOptionalNumber(allocationRecord.maxPerAttribute) === undefined
+        ? {}
+        : {
+            maxPerAttribute: toOptionalNumber(allocationRecord.maxPerAttribute),
+          }),
+      allowDeferredAllocation:
+        typeof allocationRecord.allowDeferredAllocation === "boolean"
+          ? allocationRecord.allowDeferredAllocation
+          : true,
+    },
+    rewards: {
+      autoApply:
+        typeof rewardsRecord.autoApply === "boolean"
+          ? rewardsRecord.autoApply
+          : true,
+      perLevel: normalizeRewardPackageList(rewardsRecord.perLevel),
+      milestones: rewardMilestones,
+    },
+    resourceRecovery: {
+      mode: resourceRecoveryMode,
+      resourceKeys,
+    },
+    narrative: {
+      allowAiTrigger:
+        typeof narrativeRecord.allowAiTrigger === "boolean"
+          ? narrativeRecord.allowAiTrigger
+          : true,
+      requirePlayerConfirmation:
+        typeof narrativeRecord.requirePlayerConfirmation === "boolean"
+          ? narrativeRecord.requirePlayerConfirmation
+          : false,
+      emitSystemLog:
+        typeof narrativeRecord.emitSystemLog === "boolean"
+          ? narrativeRecord.emitSystemLog
+          : true,
+      visibility: narrativeVisibility,
+    },
+  };
+}
+
 function normalizeTalent(value: unknown, index: number): TalentConfig {
   const record = isRecord(value) ? value : {};
   const category = toOptionalString(record.category);
@@ -1111,6 +1413,10 @@ function normalizeWorldRules(
       ? rules.talents.map((item, index) => normalizeTalent(item, index))
       : [],
     talentRules: normalizeTalentRules(rules.talentRules),
+    levelSystem: normalizeLevelSystem(rules.levelSystem, {
+      primaryAttributes,
+      derivedStats,
+    }),
     inventoryRules:
       rules.inventoryRules === undefined
         ? cloneValue(DEFAULT_WORLD_CONFIG.inventoryRules)
@@ -1159,6 +1465,7 @@ function getRawRulesEditorPayload(
   | EditableRulesConditionsSnapshot
   | EditableRulesDimensionsSnapshot
   | EditableRulesTalentsSnapshot
+  | EditableRulesLevelSystemSnapshot
   | EditableRulesInventoryRulesSnapshot
   | EditableRulesItemTemplatesSnapshot
   | EditableRulesSkillTemplatesSnapshot {
@@ -1192,6 +1499,15 @@ function getRawRulesEditorPayload(
         ...(rules.talentRules
           ? { talentRules: cloneValue(rules.talentRules) }
           : {}),
+      };
+    case "level-system":
+      return {
+        levelSystem: cloneValue(
+          normalizeLevelSystem(rules.levelSystem, {
+            primaryAttributes: rules.primaryAttributes,
+            derivedStats: rules.derivedStats,
+          }),
+        ),
       };
     case "inventoryRules":
       return {
@@ -1296,6 +1612,17 @@ function applyRawRulesEditorPayload(
         normalizeTalent(item, index),
       );
       nextRules.talentRules = normalizeTalentRules(parsed.talentRules);
+      break;
+
+    case "level-system":
+      if (!isRecord(parsed.levelSystem)) {
+        throw new Error("等级系统分区必须包含 levelSystem 对象");
+      }
+
+      nextRules.levelSystem = normalizeLevelSystem(parsed.levelSystem, {
+        primaryAttributes: nextRules.primaryAttributes,
+        derivedStats: nextRules.derivedStats,
+      });
       break;
 
     case "inventoryRules":
@@ -2670,6 +2997,228 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     [updateDraft],
   );
 
+  const addTalentRarity = useCallback(() => {
+    updateDraft((current) => {
+      const rarities = current.rules.talentRules?.rarities ?? [];
+      current.rules.talentRules = normalizeTalentRules({
+        ...(current.rules.talentRules ?? {}),
+        rarities: [
+          ...rarities,
+          normalizeTalentRarity(
+            {
+              id: generateId("rarity"),
+              label: `品质 ${rarities.length + 1}`,
+              weight: 1,
+            },
+            rarities.length,
+          ),
+        ],
+      });
+      return current;
+    });
+  }, [updateDraft]);
+
+  const removeTalentRarity = useCallback(
+    (id: string) => {
+      updateDraft((current) => {
+        const rarities = current.rules.talentRules?.rarities ?? [];
+        if (!rarities.some((item) => item.id === id)) {
+          return current;
+        }
+
+        current.rules.talentRules = normalizeTalentRules({
+          ...(current.rules.talentRules ?? {}),
+          rarities: rarities.filter((item) => item.id !== id),
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const updateTalentRarity = useCallback(
+    (id: string, updates: Partial<EditableTalentRarity>) => {
+      updateDraft((current) => {
+        const rarities = current.rules.talentRules?.rarities ?? [];
+        const targetIndex = rarities.findIndex((item) => item.id === id);
+        if (targetIndex === -1) {
+          return current;
+        }
+
+        current.rules.talentRules = normalizeTalentRules({
+          ...(current.rules.talentRules ?? {}),
+          rarities: rarities.map((item, index) =>
+            item.id === id
+              ? normalizeTalentRarity(
+                  {
+                    ...item,
+                    ...updates,
+                  },
+                  index,
+                )
+              : item,
+          ),
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const addTalentPool = useCallback(() => {
+    updateDraft((current) => {
+      const pools = current.rules.talentRules?.pools ?? [];
+      current.rules.talentRules = normalizeTalentRules({
+        ...(current.rules.talentRules ?? {}),
+        pools: [
+          ...pools,
+          normalizeTalentPool(
+            {
+              id: generateId("pool"),
+              label: `抽取池 ${pools.length + 1}`,
+            },
+            pools.length,
+          ),
+        ],
+      });
+      return current;
+    });
+  }, [updateDraft]);
+
+  const removeTalentPool = useCallback(
+    (id: string) => {
+      updateDraft((current) => {
+        const pools = current.rules.talentRules?.pools ?? [];
+        if (!pools.some((item) => item.id === id)) {
+          return current;
+        }
+
+        current.rules.talentRules = normalizeTalentRules({
+          ...(current.rules.talentRules ?? {}),
+          pools: pools.filter((item) => item.id !== id),
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const updateTalentPool = useCallback(
+    (id: string, updates: Partial<EditableTalentPool>) => {
+      updateDraft((current) => {
+        const pools = current.rules.talentRules?.pools ?? [];
+        const targetIndex = pools.findIndex((item) => item.id === id);
+        if (targetIndex === -1) {
+          return current;
+        }
+
+        current.rules.talentRules = normalizeTalentRules({
+          ...(current.rules.talentRules ?? {}),
+          pools: pools.map((item, index) =>
+            item.id === id
+              ? normalizeTalentPool(
+                  {
+                    ...item,
+                    ...updates,
+                  },
+                  index,
+                )
+              : item,
+          ),
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const addTalentPityRule = useCallback(() => {
+    updateDraft((current) => {
+      const talentRules = current.rules.talentRules ?? {};
+      const pity = talentRules.pity ?? [];
+      current.rules.talentRules = normalizeTalentRules({
+        ...talentRules,
+        pity: [
+          ...pity,
+          normalizeTalentPityRule(
+            {
+              afterMisses: pity.length + 1,
+              guaranteeRarity: talentRules.rarities?.[0]?.id ?? "rarity_1",
+            },
+            pity.length,
+          ),
+        ],
+      });
+      return current;
+    });
+  }, [updateDraft]);
+
+  const removeTalentPityRule = useCallback(
+    (index: number) => {
+      updateDraft((current) => {
+        const pity = current.rules.talentRules?.pity ?? [];
+        if (!pity[index]) {
+          return current;
+        }
+
+        current.rules.talentRules = normalizeTalentRules({
+          ...(current.rules.talentRules ?? {}),
+          pity: pity.filter((_, itemIndex) => itemIndex !== index),
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const updateTalentPityRule = useCallback(
+    (index: number, updates: Partial<EditableTalentPityRule>) => {
+      updateDraft((current) => {
+        const pity = current.rules.talentRules?.pity ?? [];
+        const target = pity[index];
+        if (!target) {
+          return current;
+        }
+
+        current.rules.talentRules = normalizeTalentRules({
+          ...(current.rules.talentRules ?? {}),
+          pity: pity.map((item, itemIndex) =>
+            itemIndex === index
+              ? normalizeTalentPityRule(
+                  {
+                    ...item,
+                    ...updates,
+                  },
+                  itemIndex,
+                )
+              : item,
+          ),
+        });
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
+  const updateLevelSystem = useCallback(
+    (updates: Partial<LevelSystemConfig>) => {
+      updateDraft((current) => {
+        current.rules.levelSystem = normalizeLevelSystem(
+          {
+            ...(current.rules.levelSystem ?? {}),
+            ...updates,
+          },
+          {
+            primaryAttributes: current.rules.primaryAttributes,
+            derivedStats: current.rules.derivedStats,
+          },
+        );
+        return current;
+      });
+    },
+    [updateDraft],
+  );
+
   const updateTalent = useCallback(
     (index: number, updates: Partial<TalentConfig>) => {
       updateDraft((current) => {
@@ -2980,6 +3529,16 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
     addCondition,
     removeCondition,
     updateTalentRules,
+    addTalentRarity,
+    removeTalentRarity,
+    updateTalentRarity,
+    addTalentPool,
+    removeTalentPool,
+    updateTalentPool,
+    addTalentPityRule,
+    removeTalentPityRule,
+    updateTalentPityRule,
+    updateLevelSystem,
     updateTalent,
     addTalent,
     removeTalent,

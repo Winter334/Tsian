@@ -7,11 +7,12 @@
  * @module game/repository/entity-codec
  */
 
-import type {
-  Character,
-  CharacterStatus,
-  ControlType,
-  UpdateCharacterParams,
+import {
+  normalizePendingTalentDraws,
+  type Character,
+  type CharacterStatus,
+  type ControlType,
+  type UpdateCharacterParams,
 } from "@/domain/entities/character";
 import type { EntityType } from "@/domain/types";
 import { deserializeTagsFromYjs, serializeTagsForYjs } from "@/domain/types";
@@ -79,6 +80,9 @@ export function characterToYMap(character: Character): Y.Map<unknown> {
   if (character.talentIds !== undefined) {
     charMap.set("talentIds", character.talentIds);
   }
+  if (character.pendingTalentDraws !== undefined) {
+    charMap.set("pendingTalentDraws", character.pendingTalentDraws);
+  }
 
   // 属性和标签
   if (character.attributes !== undefined) {
@@ -116,6 +120,7 @@ export function yMapToCharacter(charMap: Y.Map<unknown>): Character {
   const gender = charMap.get("gender");
   const dimensionSelectionsRaw = charMap.get("dimensionSelections");
   const talentIds = charMap.get("talentIds");
+  const pendingTalentDrawsRaw = charMap.get("pendingTalentDraws");
   const attributes = charMap.get("attributes");
   const tags = charMap.get("tags");
 
@@ -175,6 +180,10 @@ export function yMapToCharacter(charMap: Y.Map<unknown>): Character {
     character.talentIds = talentIds.filter(
       (t): t is string => typeof t === "string",
     );
+  }
+  const pendingTalentDraws = normalizePendingTalentDraws(pendingTalentDrawsRaw);
+  if (pendingTalentDraws) {
+    character.pendingTalentDraws = pendingTalentDraws;
   }
   if (
     attributes &&
@@ -319,7 +328,11 @@ export function applyCharacterUpdates(
     Partial<
       Pick<
         Character,
-        "dimensionSelections" | "talentIds" | "controlType" | "tags"
+        | "dimensionSelections"
+        | "talentIds"
+        | "pendingTalentDraws"
+        | "controlType"
+        | "tags"
       >
     >;
 
@@ -331,6 +344,9 @@ export function applyCharacterUpdates(
   }
   if (extraUpdates.talentIds !== undefined) {
     charMap.set("talentIds", extraUpdates.talentIds);
+  }
+  if (extraUpdates.pendingTalentDraws !== undefined) {
+    charMap.set("pendingTalentDraws", extraUpdates.pendingTalentDraws);
   }
   if (extraUpdates.controlType !== undefined) {
     charMap.set("controlType", extraUpdates.controlType);

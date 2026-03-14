@@ -247,6 +247,16 @@ export function WorldWorkspace({ open, onOpenChange }: WorldWorkspaceProps) {
         onAddDimensionOption={workspace.addDimensionOption}
         onRemoveDimensionOption={workspace.removeDimensionOption}
         onUpdateTalentRules={workspace.updateTalentRules}
+        onAddTalentRarity={workspace.addTalentRarity}
+        onRemoveTalentRarity={workspace.removeTalentRarity}
+        onUpdateTalentRarity={workspace.updateTalentRarity}
+        onAddTalentPool={workspace.addTalentPool}
+        onRemoveTalentPool={workspace.removeTalentPool}
+        onUpdateTalentPool={workspace.updateTalentPool}
+        onAddTalentPityRule={workspace.addTalentPityRule}
+        onRemoveTalentPityRule={workspace.removeTalentPityRule}
+        onUpdateTalentPityRule={workspace.updateTalentPityRule}
+        onUpdateLevelSystem={workspace.updateLevelSystem}
         onUpdateTalent={workspace.updateTalent}
         onAddTalent={workspace.addTalent}
         onRemoveTalent={workspace.removeTalent}

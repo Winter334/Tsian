@@ -35,6 +35,7 @@ import { InventorySection } from "./InventorySection";
 import { LevelAllocationPanel } from "./LevelAllocationPanel";
 import { SkillSection } from "./SkillSection";
 import { StatusSection } from "./StatusSection";
+import { TalentDrawPanel } from "./TalentDrawPanel";
 
 // ── 类型定义 ──
 
@@ -415,10 +416,22 @@ function OverviewTabContent({
         <LevelAllocationPanel character={character} worldConfig={worldConfig} />
       </motion.div>
 
+      {character.pendingTalentDraws &&
+      character.pendingTalentDraws.length > 0 ? (
+        <motion.div
+          custom={2}
+          variants={sectionVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <TalentDrawPanel character={character} worldConfig={worldConfig} />
+        </motion.div>
+      ) : null}
+
       {/* ── 属性雷达图（居中，完整宽度） ── */}
       {allocatableKeys.length > 0 && (
         <motion.div
-          custom={2}
+          custom={3}
           variants={sectionVariants}
           initial="hidden"
           animate="visible"

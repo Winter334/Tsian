@@ -67,6 +67,8 @@ export const RoomEvents = {
   CHARACTER_UPDATED: "room.character.updated",
   /** 角色已升级 */
   CHARACTER_LEVELED_UP: "room.character.leveled_up" as const,
+  /** 运行时天赋抽取已领取 */
+  TALENT_DRAW_CLAIMED: "room.character.talent_draw_claimed" as const,
   /** 升级属性点已分配 */
   LEVEL_POINTS_ALLOCATED: "room.character.level_points_allocated" as const,
 
@@ -520,6 +522,32 @@ export interface CharacterLeveledUpEvent {
   pointsAwarded?: number;
   /** 升级原因 */
   reason?: string;
+  /** 时间戳 */
+  updatedAt: number;
+}
+
+/** 运行时天赋抽取领取事件负载 */
+export interface TalentDrawClaimedEvent {
+  /** 房间 ID */
+  roomId: string;
+  /** 角色 ID */
+  characterId: string;
+  /** 操作者用户 ID */
+  operatorUserId: string;
+  /** 操作者唯一标签 */
+  operatorUniqueTag: string;
+  /** 待领取抽取奖励 ID */
+  pendingDrawId: string;
+  /** 玩家确认选择的天赋 ID */
+  selectedTalentId: string;
+  /** 抽取池 ID */
+  poolId?: string;
+  /** 每次抽取展示的候选数量 */
+  offersPerDraw?: number;
+  /** 保底品质 */
+  guaranteedRarity?: string;
+  /** 来源描述 */
+  source?: string;
   /** 时间戳 */
   updatedAt: number;
 }

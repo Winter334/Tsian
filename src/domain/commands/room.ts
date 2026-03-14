@@ -75,6 +75,8 @@ export const RoomCommands = {
   UPDATE_CHARACTER: "room/character/update",
   /** 角色升级 */
   LEVEL_UP: "room/character/level-up" as const,
+  /** 确认运行时天赋抽取 */
+  CLAIM_TALENT_DRAW: "room/character/claim-talent-draw" as const,
   /** 分配升级属性点 */
   ALLOCATE_LEVEL_POINTS: "room/character/allocate-level-points" as const,
 
@@ -499,6 +501,22 @@ export interface LevelUpPayload {
   levels?: number;
   /** 升级原因（叙事描述） */
   reason?: string;
+}
+
+/** 领取运行时天赋抽取命令负载 */
+export interface ClaimTalentDrawPayload {
+  /** 房间 ID */
+  roomId: string;
+  /** 角色 ID */
+  characterId: string;
+  /** 操作者用户 ID */
+  userId: string;
+  /** 操作者唯一标签 */
+  uniqueTag: string;
+  /** 待领取抽取奖励 ID */
+  pendingDrawId: string;
+  /** 玩家确认选择的天赋 ID */
+  selectedTalentId: string;
 }
 
 /** 分配升级属性点命令负载 */

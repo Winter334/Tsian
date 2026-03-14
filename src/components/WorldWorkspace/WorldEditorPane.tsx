@@ -3,17 +3,7 @@
  */
 
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  type LucideIcon,
-  Package,
-  Plus,
-  Trash2,
-  WandSparkles,
-  X,
-  Zap,
-} from "lucide-react";
+import { Plus, Trash2, WandSparkles, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -37,6 +27,7 @@ import type {
   DimensionOption,
   EquipSlotDefinition,
   InventoryRulesConfig,
+  LevelSystemConfig,
   PointBuyRules,
   PrimaryAttributeConfig,
   TalentConfig,
@@ -49,14 +40,33 @@ import type {
   WorldRulesEditorScope,
   WorldScopedRulesEditorScope,
 } from "./hooks/useWorldWorkspaceState";
-
-const TALENT_CATEGORY_OPTIONS = [
-  { value: "combat", label: "战斗" },
-  { value: "magic", label: "魔法" },
-  { value: "survival", label: "生存" },
-  { value: "social", label: "社交" },
-  { value: "misc", label: "其他" },
-] as const;
+import { LevelSystemEditor } from "./LevelSystemEditor";
+import { TalentPoolEditor } from "./TalentPoolEditor";
+import { TalentRarityEditor } from "./TalentRarityEditor";
+import {
+  getTalentCategoryLabel,
+  TALENT_CATEGORY_OPTIONS,
+} from "./world-workspace-talent-shared";
+import {
+  WORLD_EDITOR_SECTIONS,
+  type WorldEditorSectionId,
+} from "./WorldEditorPaneSections";
+import {
+  ValidationPanel,
+  WorldEditorDesktopSidebar,
+  WorldEditorMobileSectionNavigation,
+  WorldEditorSectionBanner,
+} from "./WorldEditorPaneSidebar";
+import type {
+  TalentPityRuleValue,
+  TalentRulesValue,
+} from "./WorldWorkspaceTalentEditors";
+import {
+  TagSelectionField,
+  TalentCardEditor,
+  TalentPityRulesEditor,
+  TalentRulesCardEditor,
+} from "./WorldWorkspaceTalentEditors";
 
 const ITEM_CATEGORY_OPTIONS = [
   { value: "weapon", label: "武器" },
@@ -94,6 +104,9 @@ const EMPTY_CONDITIONS: ConditionConfig[] = [];
 const EMPTY_ITEM_TEMPLATES: ItemTemplate[] = [];
 const EMPTY_EQUIP_SLOT_DEFINITIONS: EquipSlotDefinition[] = [];
 const EMPTY_SKILL_TEMPLATES: SkillTemplate[] = [];
+const EMPTY_TALENT_RARITIES: NonNullable<TalentRulesValue["rarities"]> = [];
+const EMPTY_TALENT_POOLS: NonNullable<TalentRulesValue["pools"]> = [];
+const EMPTY_TALENT_PITY_RULES: NonNullable<TalentRulesValue["pity"]> = [];
 const EMPTY_PASSIVE_MODIFIERS: PassiveModifier[] = [];
 const EMPTY_NUMERIC_RECORD: Record<string, number> = {};
 
@@ -116,7 +129,8 @@ type WorkspaceEditorCardProps = {
 };
 
 type CheckRulesValue = World["rules"]["checkRules"];
-type TalentRulesValue = NonNullable<World["rules"]["talentRules"]>;
+type TalentRarityValue = NonNullable<TalentRulesValue["rarities"]>[number];
+type TalentPoolValue = NonNullable<TalentRulesValue["pools"]>[number];
 type DCPresetConfig = NonNullable<CheckRulesValue["dcPresets"]>[string];
 type OpposedPresetConfig = NonNullable<
   CheckRulesValue["opposedPresets"]
@@ -132,87 +146,6 @@ type NumericFieldEntry = {
   value: number | "";
 };
 type DimensionCardTabId = "settings" | "options";
-
-type WorldEditorSectionId =
-  | "meta"
-  | "narrative"
-  | "attributes"
-  | "derivedStats"
-  | "checkRules"
-  | "conditions"
-  | "dimensions"
-  | "talents"
-  | "inventoryRules"
-  | "itemTemplates"
-  | "skillTemplates";
-
-type WorldEditorSectionDefinition = {
-  id: WorldEditorSectionId;
-  title: string;
-  description: string;
-  icon?: LucideIcon | string;
-};
-
-const WORLD_EDITOR_SECTIONS: WorldEditorSectionDefinition[] = [
-  {
-    id: "meta",
-    title: "基础信息",
-    description: "维护作者态世界元信息与说明。",
-  },
-  {
-    id: "narrative",
-    title: "叙事启动",
-    description: "编辑 script / opening 作者态种子。",
-  },
-  {
-    id: "attributes",
-    title: "属性与点数",
-    description: "配置主要属性与角色创建点数规则。",
-  },
-  {
-    id: "derivedStats",
-    title: "衍生属性",
-    description: "配置公式、边界、UI 显示与资源字段。",
-  },
-  {
-    id: "checkRules",
-    title: "检定规则",
-    description: "配置默认骰、阈值、DC 预设与 AI 难度参考。",
-  },
-  {
-    id: "conditions",
-    title: "状态",
-    description: "维护状态名称、持续时间与基础触发模式。",
-  },
-  {
-    id: "dimensions",
-    title: "角色维度",
-    description: "配置种族、背景等创建维度与选项。",
-  },
-  {
-    id: "talents",
-    title: "天赋",
-    description: "维护可选天赋与基础前置规则。",
-  },
-  {
-    id: "inventoryRules",
-    title: "装备系统",
-    description: "配置装备槽位与背包规则",
-    icon: "⚔️",
-  },
-  {
-    id: "itemTemplates",
-    title: "物品模板",
-    description: "维护物品模板的基础属性与效果。",
-    icon: Package,
-  },
-  {
-    id: "skillTemplates",
-    title: "技能模板",
-    description: "维护技能模板的基础属性、消耗与前置条件。",
-    icon: Zap,
-  },
-];
 
 type RawRulesEditorMeta = {
   title: string;
@@ -263,6 +196,13 @@ const SCOPED_RAW_RULES_EDITOR_META: Record<
     title: "高级模式 · 天赋规则编辑",
     description:
       "仅展示并回写 talents / talentRules 子树；前置属性条件与选择规则已结构化，复杂 modifiers 继续通过 JSON 兜底。",
+    footnote:
+      "只影响当前分区对应的规则子树，其余规则分支、基础信息与叙事启动保持不变。",
+  },
+  "level-system": {
+    title: "高级模式 · 等级系统配置",
+    description:
+      "仅展示并回写 levelSystem 子树；基础成长模式、进度、分配与叙事开关已结构化，复杂奖励包继续通过 JSON 兜底。",
     footnote:
       "只影响当前分区对应的规则子树，其余规则分支、基础信息与叙事启动保持不变。",
   },
@@ -375,6 +315,22 @@ interface WorldEditorPaneProps {
     optionIndex: number,
   ) => void;
   onUpdateTalentRules: (updates: Partial<TalentRulesValue>) => void;
+  onAddTalentRarity: () => void;
+  onRemoveTalentRarity: (id: string) => void;
+  onUpdateTalentRarity: (
+    id: string,
+    updates: Partial<TalentRarityValue>,
+  ) => void;
+  onAddTalentPool: () => void;
+  onRemoveTalentPool: (id: string) => void;
+  onUpdateTalentPool: (id: string, updates: Partial<TalentPoolValue>) => void;
+  onAddTalentPityRule: () => void;
+  onRemoveTalentPityRule: (index: number) => void;
+  onUpdateTalentPityRule: (
+    index: number,
+    updates: Partial<TalentPityRuleValue>,
+  ) => void;
+  onUpdateLevelSystem: (partial: Partial<LevelSystemConfig>) => void;
   onUpdateTalent: (index: number, updates: Partial<TalentConfig>) => void;
   onAddTalent: () => void;
   onRemoveTalent: (index: number) => void;
@@ -436,6 +392,16 @@ export function WorldEditorPane({
   onAddDimensionOption,
   onRemoveDimensionOption,
   onUpdateTalentRules,
+  onAddTalentRarity,
+  onRemoveTalentRarity,
+  onUpdateTalentRarity,
+  onAddTalentPool,
+  onRemoveTalentPool,
+  onUpdateTalentPool,
+  onAddTalentPityRule,
+  onRemoveTalentPityRule,
+  onUpdateTalentPityRule,
+  onUpdateLevelSystem,
   onUpdateTalent,
   onAddTalent,
   onRemoveTalent,
@@ -492,6 +458,26 @@ export function WorldEditorPane({
   const itemTemplates = world?.rules.itemTemplates ?? EMPTY_ITEM_TEMPLATES;
   const skillTemplates = world?.rules.skillTemplates ?? EMPTY_SKILL_TEMPLATES;
   const talentRules = world?.rules.talentRules;
+  const talentRarities = talentRules?.rarities ?? EMPTY_TALENT_RARITIES;
+  const talentPools = talentRules?.pools ?? EMPTY_TALENT_POOLS;
+  const talentPityRules = talentRules?.pity ?? EMPTY_TALENT_PITY_RULES;
+  const levelSystem = world?.rules.levelSystem;
+  const talentRarityOptions = useMemo(
+    () =>
+      talentRarities.map((rarity) => ({
+        value: rarity.id,
+        label: `${rarity.label}（${rarity.id}）`,
+      })),
+    [talentRarities],
+  );
+  const talentPoolItems = useMemo(
+    () =>
+      talentPools.map((pool) => ({
+        id: pool.id,
+        name: pool.label?.trim() || pool.id,
+      })),
+    [talentPools],
+  );
   const statFieldOptions = useMemo(
     () => [
       ...primaryAttributes.map((attribute) => ({
@@ -2161,6 +2147,34 @@ export function WorldEditorPane({
               onChange={onUpdateTalentRules}
             />
 
+            <TalentRarityEditor
+              rarities={talentRarities}
+              onAdd={onAddTalentRarity}
+              onRemove={onRemoveTalentRarity}
+              onUpdate={onUpdateTalentRarity}
+            />
+
+            <TalentPoolEditor
+              pools={talentPools}
+              categoryOptions={TALENT_CATEGORY_OPTIONS.map((option) => ({
+                value: option.value,
+                label: option.label,
+              }))}
+              rarityOptions={talentRarityOptions}
+              talentOptions={talents}
+              onAdd={onAddTalentPool}
+              onRemove={onRemoveTalentPool}
+              onUpdate={onUpdateTalentPool}
+            />
+
+            <TalentPityRulesEditor
+              pityRules={talentPityRules}
+              rarityOptions={talentRarityOptions}
+              onAdd={onAddTalentPityRule}
+              onRemove={onRemoveTalentPityRule}
+              onUpdate={onUpdateTalentPityRule}
+            />
+
             {talents.length > 0 ? (
               <div className="grid gap-3 xl:h-168 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
                 <Panel
@@ -2178,10 +2192,9 @@ export function WorldEditorPane({
                         talent.name.trim() ||
                         talent.id.trim() ||
                         `未命名天赋 ${index + 1}`;
-                      const categoryLabel = TALENT_CATEGORY_OPTIONS.find(
-                        (option) =>
-                          option.value === (talent.category ?? "misc"),
-                      )?.label;
+                      const categoryLabel = getTalentCategoryLabel(
+                        talent.category,
+                      );
                       return (
                         <button
                           key={`${talent.id || "talent"}-${index}`}
@@ -2316,13 +2329,9 @@ export function WorldEditorPane({
                             />
                             <DimensionMetaBadge
                               label="分类"
-                              value={
-                                TALENT_CATEGORY_OPTIONS.find(
-                                  (option) =>
-                                    option.value ===
-                                    (activeTalent.category ?? "misc"),
-                                )?.label ?? "其他"
-                              }
+                              value={getTalentCategoryLabel(
+                                activeTalent.category,
+                              )}
                             />
                           </div>
                         </div>
@@ -2330,6 +2339,8 @@ export function WorldEditorPane({
 
                       <TalentCardEditor
                         talent={activeTalent}
+                        rarityOptions={talentRarityOptions}
+                        poolItems={talentPoolItems}
                         nameInputRef={talentNameInputRef}
                         onChange={(updates) =>
                           onUpdateTalent(resolvedActiveTalentIndex, updates)
@@ -2346,6 +2357,33 @@ export function WorldEditorPane({
               <EmptySectionHint message="当前世界还没有可选天赋；若继续为空，角色创建流程会跳过天赋步骤。" />
             )}
           </div>
+        </FormSection>
+      );
+      break;
+
+    case "level-system":
+      sectionContent = (
+        <FormSection
+          title="等级系统"
+          description="配置升级触发、进度阈值、自动成长、属性点分配、资源恢复与叙事表现；复杂奖励包继续通过高级规则编辑维护。"
+          action={
+            <div className="flex flex-wrap gap-2">
+              <SectionRulesEditorButton
+                scope="level-system"
+                active={
+                  rawRulesEditorOpen && rawRulesEditorScope === "level-system"
+                }
+                onOpen={onOpenRawRulesEditor}
+              />
+            </div>
+          }
+        >
+          <LevelSystemEditor
+            value={levelSystem ?? {}}
+            primaryAttributes={primaryAttributes}
+            derivedStats={derivedStats}
+            onChange={onUpdateLevelSystem}
+          />
         </FormSection>
       );
       break;
@@ -3188,23 +3226,13 @@ export function WorldEditorPane({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col lg:flex-row">
-      <div
-        className="hidden border-b lg:flex lg:h-full lg:min-h-0 lg:w-76 lg:shrink-0 lg:flex-col lg:border-b-0 lg:border-r lg:overflow-hidden"
-        style={{ borderColor: colorAlpha("primary", 0.14) }}
-      >
-        <div className="space-y-4 px-4 py-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
-          <EditorOverviewPanel
-            world={world}
-            activeSection={activeSectionMeta}
-          />
-
-          <SectionNavigation
-            world={world}
-            activeSection={activeSection}
-            onSelectSection={setActiveSection}
-          />
-        </div>
-      </div>
+      <WorldEditorDesktopSidebar
+        world={world}
+        activeSection={activeSection}
+        activeSectionMeta={activeSectionMeta}
+        validationMessages={validationMessages}
+        onSelectSection={setActiveSection}
+      />
 
       <ScrollArea
         key={`${world.id}-${activeSection}`}
@@ -3212,56 +3240,13 @@ export function WorldEditorPane({
       >
         <div className="space-y-4 px-3 py-3 sm:space-y-5 sm:px-5 sm:py-4">
           <div className="lg:hidden">
-            <MobileSectionNavigation
+            <WorldEditorMobileSectionNavigation
               activeSection={activeSection}
               onSelectSection={setActiveSection}
             />
           </div>
 
-          <div className="hidden lg:block">
-            <ValidationPanel messages={validationMessages} />
-          </div>
-
-          <Panel variant="outlined" className="hidden p-4 sm:p-5 lg:block">
-            <div>
-              <div className="flex items-start gap-3">
-                {activeSectionMeta.icon ? (
-                  <span
-                    className="rounded-xl border p-2"
-                    style={{
-                      borderColor: colorAlpha("primary", 0.2),
-                      background: colorAlpha("primary", 0.08),
-                    }}
-                  >
-                    <activeSectionMeta.icon
-                      className="h-4 w-4"
-                      style={{ color: color("primary") }}
-                    />
-                  </span>
-                ) : null}
-                <div>
-                  <p
-                    className="text-xs font-medium uppercase tracking-[0.24em]"
-                    style={{ color: colorAlpha("primary", 0.82) }}
-                  >
-                    当前分区
-                  </p>
-                  <h2
-                    className="mt-2 text-base font-semibold"
-                    style={{ color: color("textPrimary") }}
-                  >
-                    {activeSectionMeta.title}
-                  </h2>
-                  <p
-                    className="mt-1 text-xs"
-                    style={{ color: colorAlpha("textMuted", 0.76) }}
-                  >
-                    {activeSectionMeta.description}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </Panel>
+          <WorldEditorSectionBanner section={activeSectionMeta} />
 
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
@@ -3299,416 +3284,12 @@ export function WorldEditorPane({
   );
 }
 
-function getSectionSummary(
-  sectionId: WorldEditorSectionId,
-  world: World,
-): string {
-  switch (sectionId) {
-    case "meta":
-      return world.meta.author
-        ? `v${world.meta.version} · ${world.meta.author}`
-        : `v${world.meta.version} · 待补作者信息`;
-
-    case "narrative": {
-      const configuredCount = [
-        world.narrative?.script,
-        world.narrative?.opening,
-      ].filter((item) => Boolean(item && item.trim().length > 0)).length;
-
-      if (configuredCount === 2) {
-        return "剧本与开幕语已配置";
-      }
-
-      if (configuredCount === 1) {
-        return "已配置 1 项叙事启动内容";
-      }
-
-      return "尚未填写叙事启动";
-    }
-
-    case "attributes": {
-      const allocatableCount =
-        world.rules.pointBuyRules?.allocatableAttributes?.length ?? 0;
-      return `${world.rules.primaryAttributes.length} 个属性 · ${allocatableCount} 个可分配字段`;
-    }
-
-    case "derivedStats": {
-      const resourceCount = world.rules.derivedStats.filter(
-        (item) => item.isResource,
-      ).length;
-      return resourceCount > 0
-        ? `${world.rules.derivedStats.length} 个衍生属性 · ${resourceCount} 个资源字段`
-        : `${world.rules.derivedStats.length} 个衍生属性`;
-    }
-
-    case "checkRules": {
-      const dcPresetCount = Object.keys(
-        world.rules.checkRules.dcPresets ?? {},
-      ).length;
-      const opposedPresetCount = Object.keys(
-        world.rules.checkRules.opposedPresets ?? {},
-      ).length;
-      return `${world.rules.checkRules.defaultDice ?? "1d20"} · ${dcPresetCount} 个 DC 预设 · ${opposedPresetCount} 个对抗预设`;
-    }
-
-    case "conditions": {
-      const triggerCount = (world.rules.conditions ?? []).filter(
-        (item) => item.trigger,
-      ).length;
-      return `${world.rules.conditions?.length ?? 0} 个状态 · ${triggerCount} 个系统触发`;
-    }
-
-    case "dimensions": {
-      const dimensionCount = world.rules.dimensions?.length ?? 0;
-      const emptyOptionCount = (world.rules.dimensions ?? []).filter(
-        (item) => item.options.length === 0,
-      ).length;
-
-      if (dimensionCount === 0) {
-        return "尚未配置角色维度";
-      }
-
-      return emptyOptionCount > 0
-        ? `${dimensionCount} 个维度 · ${emptyOptionCount} 个待补选项`
-        : `${dimensionCount} 个维度 · 选项已配置`;
-    }
-
-    case "talents": {
-      const talentCount = world.rules.talents?.length ?? 0;
-      return talentCount > 0
-        ? `${talentCount} 个天赋可供角色创建选择`
-        : "当前没有可选天赋";
-    }
-
-    case "inventoryRules": {
-      const equipSlotCount =
-        world.rules.inventoryRules?.equipSlotDefinitions?.length ?? 0;
-      const currentDefaultCapacity =
-        world.rules.inventoryRules?.defaultCapacity;
-
-      if (equipSlotCount === 0) {
-        return currentDefaultCapacity === undefined
-          ? "当前未配置装备系统"
-          : `未配置槽位 · 默认容量 ${currentDefaultCapacity}`;
-      }
-
-      return currentDefaultCapacity === undefined
-        ? `${equipSlotCount} 个装备槽位`
-        : `${equipSlotCount} 个装备槽位 · 默认容量 ${currentDefaultCapacity}`;
-    }
-
-    case "itemTemplates": {
-      const itemTemplateCount = world.rules.itemTemplates?.length ?? 0;
-      const equippableCount = (world.rules.itemTemplates ?? []).filter((item) =>
-        isEquippableItemCategory(item.category),
-      ).length;
-      return itemTemplateCount > 0
-        ? `${itemTemplateCount} 个物品模板 · ${equippableCount} 个装备类`
-        : "当前没有物品模板";
-    }
-
-    case "skillTemplates": {
-      const skillTemplateCount = world.rules.skillTemplates?.length ?? 0;
-      const activeSkillCount = (world.rules.skillTemplates ?? []).filter(
-        (item) => item.activeUsable,
-      ).length;
-      return skillTemplateCount > 0
-        ? `${skillTemplateCount} 个技能模板 · ${activeSkillCount} 个主动技能`
-        : "当前没有技能模板";
-    }
-
-    default:
-      return "";
-  }
-}
-
 function formatTimestamp(timestamp: number): string {
   if (!Number.isFinite(timestamp) || timestamp <= 0) {
     return "未记录";
   }
 
   return new Date(timestamp).toLocaleString("zh-CN", { hour12: false });
-}
-
-function EditorOverviewPanel({
-  world,
-  activeSection,
-}: {
-  world: World;
-  activeSection: WorldEditorSectionDefinition;
-}) {
-  const dimensionCount = world.rules.dimensions?.length ?? 0;
-  const talentCount = world.rules.talents?.length ?? 0;
-  const equipSlotCount =
-    world.rules.inventoryRules?.equipSlotDefinitions?.length ?? 0;
-  const itemTemplateCount = world.rules.itemTemplates?.length ?? 0;
-  const skillTemplateCount = world.rules.skillTemplates?.length ?? 0;
-  const attributeCount = world.rules.primaryAttributes.length;
-  const derivedCount = world.rules.derivedStats.length;
-  const conditionCount = world.rules.conditions?.length ?? 0;
-  const dcPresetCount = Object.keys(
-    world.rules.checkRules.dcPresets ?? {},
-  ).length;
-
-  return (
-    <Panel variant="outlined" className="p-4">
-      <p
-        className="text-xs font-medium uppercase tracking-[0.24em]"
-        style={{ color: colorAlpha("primary", 0.82) }}
-      >
-        当前世界
-      </p>
-      <h2
-        className="mt-2 truncate text-base font-semibold"
-        style={{ color: color("textPrimary") }}
-      >
-        {world.meta.name}
-      </h2>
-      <p
-        className="mt-1 text-xs"
-        style={{ color: colorAlpha("textMuted", 0.76) }}
-      >
-        当前分区：{activeSection.title}
-      </p>
-
-      <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
-        <SummaryMetric label="属性" value={String(attributeCount)} />
-        <SummaryMetric label="衍生" value={String(derivedCount)} />
-        <SummaryMetric label="检定预设" value={String(dcPresetCount)} />
-        <SummaryMetric label="状态" value={String(conditionCount)} />
-        <SummaryMetric label="维度" value={String(dimensionCount)} />
-        <SummaryMetric label="天赋" value={String(talentCount)} />
-        <SummaryMetric label="装备槽位" value={String(equipSlotCount)} />
-        <SummaryMetric label="物品模板" value={String(itemTemplateCount)} />
-        <SummaryMetric label="技能模板" value={String(skillTemplateCount)} />
-      </div>
-    </Panel>
-  );
-}
-
-function SectionNavigation({
-  world,
-  activeSection,
-  onSelectSection,
-}: {
-  world: World;
-  activeSection: WorldEditorSectionId;
-  onSelectSection: (section: WorldEditorSectionId) => void;
-}) {
-  return (
-    <Panel
-      variant="outlined"
-      className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:[&>div]:flex lg:[&>div]:min-h-0 lg:[&>div]:flex-1 lg:[&>div]:flex-col"
-    >
-      <div className="p-3 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
-        <div>
-          <h3
-            className="text-sm font-semibold"
-            style={{ color: color("textPrimary") }}
-          >
-            编辑分区
-          </h3>
-          <p
-            className="mt-1 text-xs"
-            style={{ color: colorAlpha("textMuted", 0.74) }}
-          >
-            一次只展开当前目标分区，避免在超长表单中来回滚动。
-          </p>
-        </div>
-
-        <ScrollArea className="mt-4 pb-1 lg:min-h-0 lg:flex-1 lg:overflow-x-hidden lg:pr-1">
-          <div className="flex gap-2 lg:flex-col">
-            {WORLD_EDITOR_SECTIONS.map((section) => {
-              const selected = section.id === activeSection;
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => onSelectSection(section.id)}
-                  className={cn(
-                    "min-w-60 rounded-xl border px-4 py-3 text-left transition-all lg:min-w-0",
-                  )}
-                  style={{
-                    color: selected
-                      ? color("textPrimary")
-                      : color("textSecondary"),
-                    background: selected
-                      ? colorAlpha("primary", 0.12)
-                      : colorAlpha("bgCard", 0.24),
-                    borderColor: colorAlpha(
-                      selected ? "primary" : "border",
-                      selected ? 0.42 : 0.28,
-                    ),
-                    boxShadow: selected
-                      ? `0 0 18px ${colorAlpha("primary", 0.14)}`
-                      : "none",
-                  }}
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">{section.title}</p>
-                    <p
-                      className="mt-1 text-xs"
-                      style={{
-                        color: colorAlpha("textMuted", selected ? 0.84 : 0.7),
-                      }}
-                    >
-                      {section.description}
-                    </p>
-                  </div>
-                  <p
-                    className="mt-3 text-xs"
-                    style={{
-                      color: colorAlpha("textMuted", selected ? 0.84 : 0.72),
-                    }}
-                  >
-                    {getSectionSummary(section.id, world)}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-        </ScrollArea>
-      </div>
-    </Panel>
-  );
-}
-
-function MobileSectionNavigation({
-  activeSection,
-  onSelectSection,
-}: {
-  activeSection: WorldEditorSectionId;
-  onSelectSection: (section: WorldEditorSectionId) => void;
-}) {
-  return (
-    <div
-      className="overflow-x-auto pb-1"
-      role="tablist"
-      aria-label="编辑分区快速切换"
-    >
-      <div className="flex min-w-max gap-2">
-        {WORLD_EDITOR_SECTIONS.map((section) => {
-          const selected = section.id === activeSection;
-          return (
-            <button
-              key={section.id}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              onClick={() => onSelectSection(section.id)}
-              className="shrink-0 rounded-full border px-3 py-2 text-xs font-medium whitespace-nowrap transition-all"
-              style={{
-                color: selected ? color("primary") : color("textSecondary"),
-                background: selected
-                  ? colorAlpha("primary", 0.12)
-                  : colorAlpha("bgCard", 0.24),
-                borderColor: colorAlpha(
-                  selected ? "primary" : "border",
-                  selected ? 0.42 : 0.28,
-                ),
-                boxShadow: selected
-                  ? `0 0 16px ${colorAlpha("primary", 0.12)}`
-                  : "none",
-              }}
-              title={section.description}
-            >
-              {section.title}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function SummaryMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      className="rounded-lg border px-3 py-2"
-      style={{
-        borderColor: colorAlpha("border", 0.28),
-        background: colorAlpha("bgCard", 0.28),
-      }}
-    >
-      <p
-        className="text-[11px]"
-        style={{ color: colorAlpha("textMuted", 0.7) }}
-      >
-        {label}
-      </p>
-      <p
-        className="mt-1 text-sm font-medium"
-        style={{ color: color("textPrimary") }}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function ValidationPanel({ messages }: { messages: string[] }) {
-  if (messages.length === 0) {
-    return (
-      <Panel variant="outlined" className="p-3">
-        <div className="flex items-start gap-2">
-          <CheckCircle2
-            className="mt-0.5 h-4 w-4 shrink-0"
-            style={{ color: color("success") }}
-          />
-          <div>
-            <p
-              className="text-sm font-medium"
-              style={{ color: color("textPrimary") }}
-            >
-              当前结构检查通过
-            </p>
-            <p
-              className="mt-1 text-xs"
-              style={{ color: colorAlpha("textMuted", 0.72) }}
-            >
-              未发现阻塞当前工作包范围的明显配置缺口。
-            </p>
-          </div>
-        </div>
-      </Panel>
-    );
-  }
-
-  return (
-    <Panel variant="outlined" className="p-3">
-      <div className="flex items-start gap-2">
-        <AlertTriangle
-          className="mt-0.5 h-4 w-4 shrink-0"
-          style={{ color: color("warning") }}
-        />
-        <div className="min-w-0">
-          <p
-            className="text-sm font-medium"
-            style={{ color: color("textPrimary") }}
-          >
-            当前草稿存在提示项
-          </p>
-          <ul
-            className="mt-2 list-disc space-y-1 pl-4 text-xs"
-            style={{ color: colorAlpha("textMuted", 0.78) }}
-          >
-            {messages.map((message, index) => (
-              <li
-                key={
-                  message
-                    ? `${message}-${index}`
-                    : `validation-message-${index}`
-                }
-              >
-                {message}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </Panel>
-  );
 }
 
 function RawRulesEditorOverlay({
@@ -5959,129 +5540,6 @@ function DimensionOptionCardEditor({
   );
 }
 
-function TalentRulesCardEditor({
-  talentRules,
-  onChange,
-}: {
-  talentRules?: TalentRulesValue;
-  onChange: (updates: Partial<TalentRulesValue>) => void;
-}) {
-  return (
-    <Card variant="outlined" className="space-y-4 p-4">
-      <div>
-        <h4
-          className="text-sm font-semibold"
-          style={{ color: color("textPrimary") }}
-        >
-          天赋选择规则
-        </h4>
-        <p
-          className="mt-1 text-xs"
-          style={{ color: colorAlpha("textMuted", 0.72) }}
-        >
-          这里控制角色创建阶段的基础选择数量与运行中是否允许继续获得新天赋；更复杂限制仍通过高级
-          JSON 兜底。
-        </p>
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Field label="角色创建初始抽取次数（留空=默认 2）">
-          <Input
-            type="number"
-            value={talentRules?.initialDrawCount ?? ""}
-            onChange={(event) =>
-              onChange({
-                initialDrawCount:
-                  event.target.value.trim() === ""
-                    ? undefined
-                    : Number(event.target.value),
-              })
-            }
-            placeholder="2"
-          />
-        </Field>
-        <ToggleSetting
-          title="允许游戏中获得新天赋"
-          description="关闭后，普通流程不应再让角色在运行中继续新增天赋。"
-          checked={talentRules?.allowAcquireDuringGame ?? true}
-          onCheckedChange={(checked) =>
-            onChange({ allowAcquireDuringGame: checked })
-          }
-        />
-      </div>
-    </Card>
-  );
-}
-
-function TalentCardEditor({
-  talent,
-  nameInputRef,
-  onChange,
-  onRemove,
-}: {
-  talent: TalentConfig;
-  nameInputRef?: React.RefObject<HTMLInputElement | null>;
-  onChange: (updates: Partial<TalentConfig>) => void;
-  onRemove: () => void;
-}) {
-  return (
-    <Card variant="outlined" className="space-y-3 p-4">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Field label="天赋 ID">
-          <Input
-            value={talent.id}
-            onChange={(event) => onChange({ id: event.target.value })}
-            placeholder="sharp_eye"
-          />
-        </Field>
-        <Field label="天赋名称">
-          <Input
-            ref={nameInputRef}
-            value={talent.name}
-            onChange={(event) => onChange({ name: event.target.value })}
-            placeholder="锐眼"
-          />
-        </Field>
-        <Field label="分类">
-          <Select
-            value={talent.category ?? "misc"}
-            onValueChange={(value) =>
-              onChange({ category: value as TalentConfig["category"] })
-            }
-            options={TALENT_CATEGORY_OPTIONS.map((option) => ({
-              value: option.value,
-              label: option.label,
-            }))}
-          />
-        </Field>
-        <Field label="图标（可选）">
-          <Input
-            value={talent.icon ?? ""}
-            onChange={(event) => onChange({ icon: event.target.value })}
-            placeholder="star"
-          />
-        </Field>
-      </div>
-
-      <Field label="描述">
-        <Textarea
-          value={talent.description}
-          onChange={(event) => onChange({ description: event.target.value })}
-          className="min-h-24"
-          placeholder="描述天赋效果与叙事语义"
-        />
-      </Field>
-
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={onRemove}>
-          <Trash2 className="mr-1 h-4 w-4" />
-          删除天赋
-        </Button>
-      </div>
-    </Card>
-  );
-}
-
 function normalizeManagedTemplateId(value: string): string {
   return value
     .trim()
@@ -6552,66 +6010,5 @@ function SkillTemplateCardEditor({
         </div>
       </details>
     </Card>
-  );
-}
-
-function TagSelectionField({
-  label,
-  items,
-  value,
-  onChange,
-}: {
-  label: string;
-  items: Array<{ id: string; name: string }>;
-  value: string[];
-  onChange: (nextValue: string[]) => void;
-}) {
-  return (
-    <div>
-      <span
-        className="text-xs font-medium"
-        style={{ color: color("textSecondary") }}
-      >
-        {label}
-      </span>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {items.map((item) => {
-          const selected = value.includes(item.id);
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className="rounded-full border px-3 py-1.5 text-xs transition-all"
-              style={{
-                color: selected ? color("primary") : color("textSecondary"),
-                background: selected
-                  ? colorAlpha("primary", 0.12)
-                  : "transparent",
-                borderColor: colorAlpha(
-                  selected ? "primary" : "border",
-                  selected ? 0.45 : 0.3,
-                ),
-              }}
-              onClick={() => {
-                const nextValue = selected
-                  ? value.filter((entry) => entry !== item.id)
-                  : [...value, item.id];
-                onChange(nextValue);
-              }}
-            >
-              {item.name}
-            </button>
-          );
-        })}
-        {items.length === 0 && (
-          <p
-            className="text-xs"
-            style={{ color: colorAlpha("textMuted", 0.72) }}
-          >
-            先在天赋区创建条目后再绑定。
-          </p>
-        )}
-      </div>
-    </div>
   );
 }

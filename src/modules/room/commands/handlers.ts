@@ -34,11 +34,17 @@ import {
 } from "@/core/yjs";
 import { generateRoomCode } from "@/core/yjs/subdoc-manager";
 import {
+  InventoryCommands,
+  type GrantItemPayload,
+  type GrantSkillPayload,
+} from "@/domain/commands/inventory";
+import {
   MemoryCommands,
   type AddMiniSummaryPayload,
 } from "@/domain/commands/memory";
 import type {
   AllocateLevelPointsPayload,
+  ClaimTalentDrawPayload,
   CompleteTurnPayload,
   CreateCharacterPayload,
   CreateNpcPayload,
@@ -64,6 +70,7 @@ import {
   canOperateCharacter,
   createCharacter,
   type Character,
+  type PendingTalentDraw,
 } from "@/domain/entities/character";
 import {
   RoomEvents,
@@ -77,6 +84,7 @@ import {
   type NpcInfoUpdatedEvent,
   type NpcStatusChangedEvent,
   type RoomCreatedEvent,
+  type TalentDrawClaimedEvent,
   type TurnCompletedEvent,
 } from "@/domain/events/room";
 import { SaveEvents } from "@/domain/events/save";
@@ -84,6 +92,7 @@ import { postProcessNarrativeForPersist } from "@/lib/post-process";
 import { usePresetStore } from "@/lib/prompt";
 import { resolveValueExpression } from "@/lib/rules/formula-evaluator";
 import { computeFullStats } from "@/lib/rules/stats-pipeline";
+import { generateTalentCandidates } from "@/lib/rules/talent-draw";
 import { getUniqueTag } from "@/lib/user-identity";
 import { DEFAULT_WORLD_CONFIG } from "@/lib/world";
 import {
@@ -94,10 +103,11 @@ import {
   worldNarrativeFromYMap,
   worldNarrativeToYMap,
 } from "@/lib/world/resolve-config";
-import type {
-  RewardPackage,
-  WorldConfig,
-  WorldNarrativeRuntimeSnapshot,
+import {
+  aggregateDimensionEffects,
+  type RewardPackage,
+  type WorldConfig,
+  type WorldNarrativeRuntimeSnapshot,
 } from "@/lib/world/types";
 import {
   worldConfigFromYMap,
@@ -184,6 +194,159 @@ function getPatchedNumericAttributeValue(
 
   const currentValue = currentAttributes[key];
   return isFiniteNumber(currentValue) ? currentValue : 0;
+}
+
+function toOptionalNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function canManageCharacterInRoom(
+  roomId: string,
+  character: Character,
+  userId: string,
+  uniqueTag: string,
+): boolean {
+  return (
+    canOperateCharacter(character, userId, uniqueTag) ||
+    subdocManager.isHost(roomId, userId)
+  );
+}
+
+function buildLevelRewardReason(reason?: string): string {
+  const normalizedReason = toOptionalNonEmptyString(reason);
+  return normalizedReason
+    ? `等级提升奖励：${normalizedReason}`
+    : "等级提升奖励";
+}
+
+function createPendingTalentDraw(reward: RewardPackage): PendingTalentDraw {
+  const poolId = toOptionalNonEmptyString(reward.poolId);
+  const guaranteedRarity = toOptionalNonEmptyString(reward.guaranteedRarity);
+  const offersPerDraw = isFiniteNumber(reward.offersPerDraw)
+    ? Math.max(1, Math.trunc(reward.offersPerDraw))
+    : undefined;
+
+  return {
+    id: crypto.randomUUID(),
+    ...(offersPerDraw === undefined ? {} : { offersPerDraw }),
+    ...(poolId === undefined ? {} : { poolId }),
+    ...(guaranteedRarity === undefined ? {} : { guaranteedRarity }),
+    source: "level_up",
+  };
+}
+
+function buildGrantSkillRewardPayload(
+  worldConfig: WorldConfig,
+  characterId: string,
+  reward: RewardPackage,
+  reason?: string,
+): GrantSkillPayload {
+  const skillId = toOptionalNonEmptyString(reward.skillId);
+  if (!skillId) {
+    throw new Error("升级奖励 grant_skill 缺少 skillId");
+  }
+
+  const template = worldConfig.skillTemplates?.find(
+    (skillTemplate) => skillTemplate.id === skillId,
+  );
+  if (!template) {
+    throw new Error(`升级奖励引用了不存在的技能模板: ${skillId}`);
+  }
+
+  return {
+    characterId,
+    templateId: template.id,
+    name: template.name,
+    description: template.description,
+    category: template.category,
+    ...(template.activeUsable === undefined
+      ? {}
+      : { activeUsable: template.activeUsable }),
+    ...(template.cost === undefined ? {} : { cost: template.cost }),
+    reason: buildLevelRewardReason(reason),
+  };
+}
+
+function buildGrantItemRewardPayload(
+  worldConfig: WorldConfig,
+  characterId: string,
+  reward: RewardPackage,
+  reason?: string,
+): GrantItemPayload {
+  const itemId = toOptionalNonEmptyString(reward.itemId);
+  if (!itemId) {
+    throw new Error("升级奖励 grant_item 缺少 itemId");
+  }
+
+  const template = worldConfig.itemTemplates?.find(
+    (itemTemplate) => itemTemplate.id === itemId,
+  );
+  if (!template) {
+    throw new Error(`升级奖励引用了不存在的物品模板: ${itemId}`);
+  }
+
+  const quantity = isFiniteNumber(reward.quantity)
+    ? Math.max(1, Math.trunc(reward.quantity))
+    : 1;
+
+  return {
+    characterId,
+    templateId: template.id,
+    name: template.name,
+    description: template.description,
+    category: template.category,
+    quantity,
+    ...(template.equipSlot === undefined
+      ? {}
+      : { equipSlot: template.equipSlot }),
+    ...(template.effects === undefined ? {} : { effects: template.effects }),
+    reason: buildLevelRewardReason(reason),
+  };
+}
+
+function resolveCharacterLevel(
+  character: Character,
+  worldConfig: WorldConfig,
+): number {
+  const levelKey =
+    worldConfig.levelSystem?.levelAttributeKey?.trim() || "level";
+  const defaultLevel =
+    worldConfig.primaryAttributes.find(
+      (attribute) => attribute.key === levelKey,
+    )?.defaultValue ?? 1;
+  const attributes = isRecord(character.attributes) ? character.attributes : {};
+  const levelValue = attributes[levelKey];
+
+  if (isFiniteNumber(levelValue)) {
+    return Math.max(1, Math.trunc(levelValue));
+  }
+
+  if (typeof levelValue === "string") {
+    const parsedValue = Number(levelValue);
+    if (Number.isFinite(parsedValue)) {
+      return Math.max(1, Math.trunc(parsedValue));
+    }
+  }
+
+  return defaultLevel;
+}
+
+async function dispatchInventoryRewardCommand<TPayload, TResult>(
+  type: string,
+  payload: TPayload,
+  sender: string,
+): Promise<CommandResult<TResult>> {
+  return commandBus.dispatch<TPayload, TResult>(
+    commandBus.createCommand(type, payload),
+    {
+      sender,
+    },
+  );
 }
 
 function getRoomConversationMetadata(
@@ -3320,9 +3483,6 @@ export async function levelUpHandler(
     const progressConfig = levelSystem.progress;
     const progressAttributeKey =
       progressConfig?.progressAttributeKey?.trim() || "level_progress";
-    const freeTalentDrawAttributeKey =
-      worldConfig.talentRules?.freeDrawAttributeKey?.trim() ||
-      "free_talent_draws";
     const currentAttributes = isRecord(character.attributes)
       ? character.attributes
       : {};
@@ -3332,10 +3492,14 @@ export async function levelUpHandler(
           typeof talentId === "string" && talentId.trim().length > 0,
       ) ?? [];
     const nextTalentIds = [...currentTalentIds];
+    const nextPendingTalentDraws = [...(character.pendingTalentDraws ?? [])];
+    const queuedSkillRewards: GrantSkillPayload[] = [];
+    const queuedItemRewards: GrantItemPayload[] = [];
     const ownedTalentIds = new Set(
       currentTalentIds.map((talentId) => talentId.trim()),
     );
     let shouldUpdateTalentIds = false;
+    let shouldUpdatePendingTalentDraws = false;
     const currentLevelRaw = currentAttributes[levelKey];
     const previousLevel =
       typeof currentLevelRaw === "number" && Number.isFinite(currentLevelRaw)
@@ -3582,33 +3746,32 @@ export async function levelUpHandler(
               continue;
             }
 
-            const nextFreeDraws =
-              getPatchedNumericAttributeValue(
-                currentAttributes,
-                attributeUpdates,
-                freeTalentDrawAttributeKey,
-              ) + drawCount;
-            attributeUpdates[freeTalentDrawAttributeKey] = nextFreeDraws;
-            growthContextAttributes[freeTalentDrawAttributeKey] = nextFreeDraws;
+            const pendingDraws: PendingTalentDraw[] = [];
+            for (let index = 0; index < drawCount; index += 1) {
+              const pendingDraw = createPendingTalentDraw(reward);
+              nextPendingTalentDraws.push(pendingDraw);
+              pendingDraws.push(pendingDraw);
+            }
+
+            shouldUpdatePendingTalentDraws = pendingDraws.length > 0;
             appliedRewards.push({
               type: reward.type,
               detail: {
-                drawCount,
-                attributeKey: freeTalentDrawAttributeKey,
-                ...(typeof reward.poolId === "string" && reward.poolId.trim()
-                  ? { poolId: reward.poolId.trim() }
+                drawCount: pendingDraws.length,
+                pendingDrawIds: pendingDraws.map(
+                  (pendingDraw) => pendingDraw.id,
+                ),
+                ...(pendingDraws[0]?.poolId
+                  ? { poolId: pendingDraws[0].poolId }
                   : {}),
-                ...(isFiniteNumber(reward.offersPerDraw)
-                  ? {
-                      offersPerDraw: Math.max(
-                        1,
-                        Math.trunc(reward.offersPerDraw),
-                      ),
-                    }
+                ...(pendingDraws[0]?.offersPerDraw
+                  ? { offersPerDraw: pendingDraws[0].offersPerDraw }
                   : {}),
-                ...(typeof reward.guaranteedRarity === "string" &&
-                reward.guaranteedRarity.trim()
-                  ? { guaranteedRarity: reward.guaranteedRarity.trim() }
+                ...(pendingDraws[0]?.guaranteedRarity
+                  ? { guaranteedRarity: pendingDraws[0].guaranteedRarity }
+                  : {}),
+                ...(pendingDraws[0]?.source
+                  ? { source: pendingDraws[0].source }
                   : {}),
               },
             });
@@ -3645,28 +3808,34 @@ export async function levelUpHandler(
             break;
           }
           case "grant_skill": {
+            const grantSkillPayload = buildGrantSkillRewardPayload(
+              worldConfig,
+              characterId,
+              reward,
+              reason,
+            );
+            queuedSkillRewards.push(grantSkillPayload);
             appliedRewards.push({
               type: reward.type,
               detail: {
-                pending: true,
-                ...(typeof reward.skillId === "string" && reward.skillId.trim()
-                  ? { skillId: reward.skillId.trim() }
-                  : {}),
+                skillId: grantSkillPayload.templateId ?? grantSkillPayload.name,
               },
             });
             break;
           }
           case "grant_item": {
+            const grantItemPayload = buildGrantItemRewardPayload(
+              worldConfig,
+              characterId,
+              reward,
+              reason,
+            );
+            queuedItemRewards.push(grantItemPayload);
             appliedRewards.push({
               type: reward.type,
               detail: {
-                pending: true,
-                ...(typeof reward.itemId === "string" && reward.itemId.trim()
-                  ? { itemId: reward.itemId.trim() }
-                  : {}),
-                ...(isFiniteNumber(reward.quantity)
-                  ? { quantity: Math.max(0, Math.trunc(reward.quantity)) }
-                  : {}),
+                itemId: grantItemPayload.templateId ?? grantItemPayload.name,
+                quantity: grantItemPayload.quantity ?? 1,
               },
             });
             break;
@@ -3764,12 +3933,45 @@ export async function levelUpHandler(
       applyCharacterUpdates(charMap, {
         attributes: attributeUpdates,
         ...(shouldUpdateTalentIds ? { talentIds: nextTalentIds } : {}),
+        ...(shouldUpdatePendingTalentDraws
+          ? { pendingTalentDraws: nextPendingTalentDraws }
+          : {}),
       });
       const nextUpdatedAt = charMap.get("updatedAt");
       if (typeof nextUpdatedAt === "number") {
         updatedAt = nextUpdatedAt;
       }
     });
+
+    for (const grantSkillPayload of queuedSkillRewards) {
+      const result = await dispatchInventoryRewardCommand<
+        GrantSkillPayload,
+        { skill: unknown }
+      >(InventoryCommands.GRANT_SKILL, grantSkillPayload, userId);
+      if (!result.success) {
+        return {
+          success: false,
+          error:
+            result.error ??
+            `发放技能奖励失败: ${grantSkillPayload.templateId ?? grantSkillPayload.name}`,
+        };
+      }
+    }
+
+    for (const grantItemPayload of queuedItemRewards) {
+      const result = await dispatchInventoryRewardCommand<
+        GrantItemPayload,
+        { item: unknown }
+      >(InventoryCommands.GRANT_ITEM, grantItemPayload, userId);
+      if (!result.success) {
+        return {
+          success: false,
+          error:
+            result.error ??
+            `发放物品奖励失败: ${grantItemPayload.templateId ?? grantItemPayload.name}`,
+        };
+      }
+    }
 
     const event: CharacterLeveledUpEvent = {
       roomId,
@@ -3788,6 +3990,148 @@ export async function levelUpHandler(
       updatedAt,
     };
     eventBus.emit(eventBus.createEvent(RoomEvents.CHARACTER_LEVELED_UP, event));
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * 领取运行时天赋抽取命令处理器
+ */
+export async function claimTalentDrawHandler(
+  payload: ClaimTalentDrawPayload,
+  _context: CommandContext,
+): Promise<CommandResult<void>> {
+  try {
+    const {
+      roomId,
+      characterId,
+      userId,
+      uniqueTag,
+      pendingDrawId,
+      selectedTalentId,
+    } = payload;
+    let updatedAt = Date.now();
+
+    const mainDoc = subdocManager.getMainDoc(roomId);
+    if (!mainDoc) {
+      return { success: false, error: `MainDoc not found: ${roomId}` };
+    }
+
+    const charactersMap = mainDoc.getMap("characters") as Y.Map<Y.Map<unknown>>;
+    const charMap = charactersMap.get(characterId);
+    if (!charMap) {
+      return { success: false, error: `角色不存在: ${characterId}` };
+    }
+
+    const character = yMapToCharacter(charMap);
+    if (!canManageCharacterInRoom(roomId, character, userId, uniqueTag)) {
+      return { success: false, error: "无权操作此角色" };
+    }
+
+    const normalizedTalentId = selectedTalentId.trim();
+    if (!normalizedTalentId) {
+      return { success: false, error: "selectedTalentId 不能为空" };
+    }
+
+    const pendingTalentDraws = character.pendingTalentDraws ?? [];
+    const pendingDraw = pendingTalentDraws.find(
+      (entry) => entry.id === pendingDrawId,
+    );
+    if (!pendingDraw) {
+      return { success: false, error: `待领取抽取不存在: ${pendingDrawId}` };
+    }
+
+    const currentTalentIds =
+      character.talentIds?.filter(
+        (talentId): talentId is string =>
+          typeof talentId === "string" && talentId.trim().length > 0,
+      ) ?? [];
+    const worldConfig = readWorldConfigFromMainDoc(mainDoc);
+    const dimensionEffects = aggregateDimensionEffects(
+      worldConfig,
+      character.dimensionSelections ?? {},
+    );
+    const ownedTalentIds = Array.from(
+      new Set([...currentTalentIds, ...dimensionEffects.grantedTalents]),
+    );
+
+    if (ownedTalentIds.includes(normalizedTalentId)) {
+      return {
+        success: false,
+        error: `角色已拥有该天赋: ${normalizedTalentId}`,
+      };
+    }
+
+    const drawResult = generateTalentCandidates({
+      allTalents: worldConfig.talents ?? [],
+      ownedTalentIds,
+      characterLevel: resolveCharacterLevel(character, worldConfig),
+      talentRules: worldConfig.talentRules,
+      ...(pendingDraw.poolId === undefined
+        ? {}
+        : { poolId: pendingDraw.poolId }),
+      ...(pendingDraw.guaranteedRarity === undefined
+        ? {}
+        : { guaranteedRarity: pendingDraw.guaranteedRarity }),
+      ...(pendingDraw.offersPerDraw === undefined
+        ? {}
+        : { offersPerDraw: pendingDraw.offersPerDraw }),
+      excludeTalentIds: dimensionEffects.excludedTalents,
+    });
+
+    if (
+      !drawResult.candidates.some((talent) => talent.id === normalizedTalentId)
+    ) {
+      return {
+        success: false,
+        error: `所选天赋不在当前合法候选集中: ${normalizedTalentId}`,
+      };
+    }
+
+    const nextTalentIds = [...currentTalentIds, normalizedTalentId];
+    const remainingPendingTalentDraws = pendingTalentDraws.filter(
+      (entry) => entry.id !== pendingDrawId,
+    );
+
+    mainDoc.transact(() => {
+      applyCharacterUpdates(charMap, {
+        talentIds: nextTalentIds,
+        pendingTalentDraws: remainingPendingTalentDraws,
+      });
+      const nextUpdatedAt = charMap.get("updatedAt");
+      if (typeof nextUpdatedAt === "number") {
+        updatedAt = nextUpdatedAt;
+      }
+    });
+
+    const event: TalentDrawClaimedEvent = {
+      roomId,
+      characterId,
+      operatorUserId: userId,
+      operatorUniqueTag: uniqueTag,
+      pendingDrawId,
+      selectedTalentId: normalizedTalentId,
+      ...(pendingDraw.poolId === undefined
+        ? {}
+        : { poolId: pendingDraw.poolId }),
+      ...(pendingDraw.offersPerDraw === undefined
+        ? {}
+        : { offersPerDraw: pendingDraw.offersPerDraw }),
+      ...(pendingDraw.guaranteedRarity === undefined
+        ? {}
+        : { guaranteedRarity: pendingDraw.guaranteedRarity }),
+      ...(pendingDraw.source === undefined
+        ? {}
+        : { source: pendingDraw.source }),
+      updatedAt,
+    };
+    eventBus.emit(eventBus.createEvent(RoomEvents.TALENT_DRAW_CLAIMED, event));
 
     return { success: true };
   } catch (error) {

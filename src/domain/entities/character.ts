@@ -26,6 +26,22 @@ export type CharacterStatus = "active" | "off_scene" | "archived" | "dead";
 export type ControlType = "player" | "npc" | "companion";
 
 /**
+ * 待领取的天赋抽取奖励
+ */
+export interface PendingTalentDraw {
+  /** 唯一标识，用于防重复领取 */
+  id: string;
+  /** 每次抽取展示的候选数量 */
+  offersPerDraw?: number;
+  /** 限定抽取池 */
+  poolId?: string;
+  /** 保底品质 */
+  guaranteedRarity?: string;
+  /** 来源描述（升级/里程碑/剧情等） */
+  source?: string;
+}
+
+/**
  * 角色实体
  */
 export interface Character extends Entity {
@@ -79,6 +95,8 @@ export interface Character extends Entity {
   dimensionSelections?: Record<string, string>;
   /** 已选天赋 ID 列表 */
   talentIds?: string[];
+  /** 待领取的运行时天赋抽取奖励 */
+  pendingTalentDraws?: PendingTalentDraw[];
 
   /**
    * 标签元数据（序列化形式）
@@ -131,6 +149,8 @@ export interface CreateCharacterParams {
   dimensionSelections?: Record<string, string>;
   /** 已选天赋 ID 列表 */
   talentIds?: string[];
+  /** 初始待领取的运行时天赋抽取奖励 */
+  pendingTalentDraws?: PendingTalentDraw[];
 }
 
 /**
@@ -161,6 +181,8 @@ export interface UpdateCharacterParams {
   dimensionSelections?: Record<string, string>;
   /** 已选天赋 ID 列表 */
   talentIds?: string[];
+  /** 待领取的运行时天赋抽取奖励 */
+  pendingTalentDraws?: PendingTalentDraw[];
 }
 
 /**
@@ -184,9 +206,65 @@ export function createCharacter(params: CreateCharacterParams): Character {
     attributes: params.attributes,
     dimensionSelections: params.dimensionSelections,
     talentIds: params.talentIds,
+    pendingTalentDraws: params.pendingTalentDraws,
     createdAt: now,
     updatedAt: now,
   };
+}
+
+function toOptionalNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+/**
+ * 归一化待领取天赋抽取奖励列表
+ */
+export function normalizePendingTalentDraws(
+  value: unknown,
+): PendingTalentDraw[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const normalized = value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        return null;
+      }
+
+      const record = entry as Record<string, unknown>;
+      const id = toOptionalNonEmptyString(record.id);
+      if (!id) {
+        return null;
+      }
+
+      const offersPerDraw =
+        typeof record.offersPerDraw === "number" &&
+        Number.isFinite(record.offersPerDraw)
+          ? Math.max(1, Math.trunc(record.offersPerDraw))
+          : undefined;
+      const poolId = toOptionalNonEmptyString(record.poolId);
+      const guaranteedRarity = toOptionalNonEmptyString(
+        record.guaranteedRarity,
+      );
+      const source = toOptionalNonEmptyString(record.source);
+
+      return {
+        id,
+        ...(offersPerDraw === undefined ? {} : { offersPerDraw }),
+        ...(poolId === undefined ? {} : { poolId }),
+        ...(guaranteedRarity === undefined ? {} : { guaranteedRarity }),
+        ...(source === undefined ? {} : { source }),
+      } satisfies PendingTalentDraw;
+    })
+    .filter((entry): entry is PendingTalentDraw => entry !== null);
+
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 /**
