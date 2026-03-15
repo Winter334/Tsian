@@ -68,6 +68,8 @@ export const narratorAgent: AgentDescriptor<PipelineBlackboard> = {
         }
       : computeArchiveData();
 
+    const turnNarrativeIntent =
+      bb.envelope?.directives?.turnNarrativeIntent ?? bb.turnNarrativeIntent;
     const narrativeHints =
       bb.envelope?.directives?.narrativeHints ?? bb.narrativeHints;
 
@@ -80,6 +82,7 @@ export const narratorAgent: AgentDescriptor<PipelineBlackboard> = {
       entityEffects: buildEntityEffects(entityAccessor, aliasMap),
       entityDisplayNames: aliasMap.displayNames,
       inventoryData: narrativeInventoryData,
+      turnNarrativeIntent,
       narrativeHints,
     };
 

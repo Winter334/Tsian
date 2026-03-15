@@ -151,6 +151,7 @@ type OutlineJsonOp =
 
 const DEFAULT_REQUIRED_TAGS = [
   "plot_directives",
+  "turn_narrative_intent",
   "narrative_hints",
   "archive_updates",
 ];
@@ -209,6 +210,7 @@ export function parseDirectorOutput(
   options?: ParseOptions,
 ): DirectorOutput {
   const plotDirectives = extractXmlContent(raw, "plot_directives");
+  const turnNarrativeIntent = extractXmlContent(raw, "turn_narrative_intent");
   const narrativeHints = extractXmlContent(raw, "narrative_hints");
   const archiveUpdatesRaw = extractXmlContent(raw, "archive_updates");
   const outlineUpdatesRaw =
@@ -229,6 +231,7 @@ export function parseDirectorOutput(
 
   return {
     plotDirectives: (plotDirectives ?? "").trim(),
+    turnNarrativeIntent: (turnNarrativeIntent ?? "").trim(),
     narrativeHints: (narrativeHints ?? "").trim(),
     archiveUpdatesRaw: (archiveUpdatesRaw ?? "").trim(),
     outlineUpdatesRaw: outlineUpdatesRaw?.trim(),

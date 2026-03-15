@@ -72,6 +72,7 @@ export interface ContextEnvelope {
   /** 导演提示与档案更新等扩展指令 */
   directives?: {
     plotDirectives?: string;
+    turnNarrativeIntent?: string;
     narrativeHints?: string;
     archiveUpdates?: unknown[];
   };

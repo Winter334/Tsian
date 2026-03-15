@@ -21,8 +21,8 @@ describe("默认叙事预设（defaultPreset）", () => {
     expect(defaultPreset.purpose).toBe("narrative");
   });
 
-  it("包含 10 个块", () => {
-    expect(defaultPreset.blocks).toHaveLength(10);
+  it("包含 11 个块", () => {
+    expect(defaultPreset.blocks).toHaveLength(11);
   });
 
   it("blockOrder 与 blocks 数量一致", () => {
@@ -87,6 +87,15 @@ describe("默认叙事预设（defaultPreset）", () => {
     expect(block!.markerConfig?.compressionThreshold).toBe(8);
   });
 
+  it("包含本回合叙事意图 marker 块", () => {
+    const block = defaultPreset.blocks.find(
+      (b) => b.markerType === "turnNarrativeIntent",
+    );
+    expect(block).toBeDefined();
+    expect(block!.marker).toBe(true);
+    expect(block!.enabled).toBe(true);
+  });
+
   it("包含叙事思维链普通块", () => {
     const block = defaultPreset.blocks.find(
       (b) => b.id === "narrative-thinking",
@@ -103,6 +112,7 @@ describe("默认叙事预设（defaultPreset）", () => {
       "world-info",
       "scenario",
       "memory-summary",
+      "turn-narrative-intent",
       "narrative-hints",
       "narrative-thinking",
       "narrative-state",
@@ -274,6 +284,16 @@ describe("默认导演预设（defaultDirectorPreset）", () => {
     expect(block!.content).toContain(
       "优先使用 update / essence / presence / relate",
     );
+  });
+
+  it("导演系统提示词明确区分本回合叙事意图与叙事提示", () => {
+    const block = defaultDirectorPreset.blocks.find(
+      (b) => b.id === "director-system",
+    );
+    expect(block).toBeDefined();
+    expect(block!.content).toContain("<turn_narrative_intent>");
+    expect(block!.content).toContain("这里回答“这回合正文必须写什么”");
+    expect(block!.content).toContain("不要再写“本回合必须发生什么剧情”");
   });
 
   it("导演预设块顺序符合设计", () => {

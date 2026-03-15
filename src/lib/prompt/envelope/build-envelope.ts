@@ -21,6 +21,7 @@ interface BuildEnvelopeData {
   };
   memoryConfig?: MemoryMarkerConfig;
   plotDirectives?: string;
+  turnNarrativeIntent?: string;
   narrativeHints?: string;
 }
 
@@ -87,9 +88,10 @@ export function buildEnvelope(
     });
   }
 
-  if (data.plotDirectives || data.narrativeHints) {
+  if (data.plotDirectives || data.turnNarrativeIntent || data.narrativeHints) {
     builder.setDirectives({
       plotDirectives: data.plotDirectives,
+      turnNarrativeIntent: data.turnNarrativeIntent,
       narrativeHints: data.narrativeHints,
     });
   }

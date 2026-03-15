@@ -49,7 +49,11 @@ function createBlackboardFixture(): Partial<PipelineBlackboard> {
         completedAt: 2,
         success: true,
         skipped: false,
-        producedFields: ["plotDirectives", "narrativeHints"],
+        producedFields: [
+          "plotDirectives",
+          "turnNarrativeIntent",
+          "narrativeHints",
+        ],
       },
       {
         agentId: "parser",
@@ -89,6 +93,7 @@ function createBlackboardFixture(): Partial<PipelineBlackboard> {
       },
     ],
     plotDirectives: "directive",
+    turnNarrativeIntent: "intent",
     narrativeHints: "hint",
     archiveUpdates: [{ kind: "archive" }],
     ruleScript: {

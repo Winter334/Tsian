@@ -25,6 +25,7 @@ import type { DirectorLogEntry, Foreshadow, Milestone } from "./types";
 
 interface DirectorBlackboardExtension {
   plotDirectives?: string;
+  turnNarrativeIntent?: string;
   narrativeHints?: string;
   archiveUpdates?: ArchiveUpdate[];
   directorAiConfig?: AIConfig;
@@ -236,6 +237,7 @@ export const directorAgent: AgentDescriptor<PipelineBlackboard> = {
   requires: ["playerInput", "entityAccessor", "aliasMap"],
   produces: [
     "plotDirectives",
+    "turnNarrativeIntent",
     "narrativeHints",
     "archiveUpdates",
   ] as unknown as (keyof PipelineBlackboard & string)[],
@@ -278,6 +280,7 @@ export const directorAgent: AgentDescriptor<PipelineBlackboard> = {
 
     const requiredTags = directorPreset.ioContract?.requiredTags ?? [
       "plot_directives",
+      "turn_narrative_intent",
       "narrative_hints",
       "archive_updates",
     ];
@@ -322,6 +325,7 @@ export const directorAgent: AgentDescriptor<PipelineBlackboard> = {
         requiredTags.length > 0 &&
         requiredTags.every((tag) => missingTags.has(tag)) &&
         parsed.plotDirectives === "" &&
+        parsed.turnNarrativeIntent === "" &&
         parsed.narrativeHints === "" &&
         parsed.archiveUpdatesRaw === "";
 
@@ -385,6 +389,7 @@ export const directorAgent: AgentDescriptor<PipelineBlackboard> = {
     const currentTurn = bb.turnNumber;
 
     directorBb.plotDirectives = parsed.plotDirectives;
+    directorBb.turnNarrativeIntent = parsed.turnNarrativeIntent;
     directorBb.narrativeHints = parsed.narrativeHints;
 
     let archiveUpdates: ArchiveUpdate[] = [];
@@ -416,6 +421,7 @@ export const directorAgent: AgentDescriptor<PipelineBlackboard> = {
         directives: {
           ...directorBb.envelope.directives,
           plotDirectives: parsed.plotDirectives,
+          turnNarrativeIntent: parsed.turnNarrativeIntent,
           narrativeHints: parsed.narrativeHints,
           archiveUpdates,
         },
@@ -426,6 +432,7 @@ export const directorAgent: AgentDescriptor<PipelineBlackboard> = {
       turn: currentTurn,
       timestamp: Date.now(),
       plotDirectives: parsed.plotDirectives,
+      turnNarrativeIntent: parsed.turnNarrativeIntent,
       narrativeHints: parsed.narrativeHints,
       archiveUpdatesSummary: parsed.archiveUpdatesRaw,
       outlineUpdatesSummary: parsed.outlineUpdatesRaw,

@@ -24,6 +24,7 @@ function cloneDirectorLogEntry(entry: DirectorLogEntry): DirectorLogEntry {
     turn: entry.turn,
     timestamp: entry.timestamp,
     plotDirectives: entry.plotDirectives,
+    turnNarrativeIntent: entry.turnNarrativeIntent,
     narrativeHints: entry.narrativeHints,
     archiveUpdatesSummary: entry.archiveUpdatesSummary,
     outlineUpdatesSummary: entry.outlineUpdatesSummary,

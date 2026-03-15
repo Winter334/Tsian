@@ -1395,6 +1395,14 @@ const MARKER_REGISTRY = [
     defaultRole: "system" as const,
   },
   {
+    id: "turnNarrativeIntent",
+    displayName: "本回合叙事意图",
+    description:
+      "导演 AI 输出的本回合必须覆盖的剧情推进要点（注入 Narrator AI）",
+    render: (context: VariableContext) => context.turnNarrativeIntent ?? "",
+    defaultRole: "system" as const,
+  },
+  {
     id: "narrativeHints",
     displayName: "叙事提示",
     description: "导演 AI 输出的叙事提示（注入 Narrator AI）",
@@ -1438,6 +1446,7 @@ export const MARKER_IDS = [
   "worldArchive",
   "scenario",
   "plotDirectives",
+  "turnNarrativeIntent",
   "narrativeHints",
   "turnInfo",
   "memorySummary",

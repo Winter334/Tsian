@@ -294,6 +294,9 @@ export interface VariableContext {
   /** 导演 AI 的剧情指导（注入 Parser AI） */
   plotDirectives?: string;
 
+  /** 导演 AI 的本回合叙事意图（注入 Narrator AI） */
+  turnNarrativeIntent?: string;
+
   /** 导演 AI 的叙事提示（注入 Narrator AI） */
   narrativeHints?: string;
 

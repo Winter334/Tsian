@@ -68,7 +68,12 @@ function createPreset(): Preset {
     },
     purpose: "director",
     ioContract: {
-      requiredTags: ["plot_directives", "narrative_hints", "archive_updates"],
+      requiredTags: [
+        "plot_directives",
+        "turn_narrative_intent",
+        "narrative_hints",
+        "archive_updates",
+      ],
       optionalTags: ["outline_updates"],
     },
   };
@@ -234,6 +239,10 @@ describe("directorAgent soft-fail boundaries", () => {
 <plot_directives>
 1. 继续推进剧情
 </plot_directives>
+<turn_narrative_intent>
+- 本回合正文必须先让玩家感受到局势继续收紧
+- 让场景中出现一个明确但未结算的危险征兆
+</turn_narrative_intent>
 <narrative_hints>
 - 保持紧张氛围
 </narrative_hints>
@@ -250,9 +259,21 @@ describe("directorAgent soft-fail boundaries", () => {
     await expect(directorAgent.execute(bb)).resolves.toBeUndefined();
 
     expect(bb.plotDirectives).toBe("1. 继续推进剧情");
+    expect(bb.turnNarrativeIntent).toBe(
+      [
+        "- 本回合正文必须先让玩家感受到局势继续收紧",
+        "- 让场景中出现一个明确但未结算的危险征兆",
+      ].join("\n"),
+    );
     expect(bb.narrativeHints).toBe("- 保持紧张氛围");
     expect(bb.archiveUpdates).toEqual([]);
     expect(bb.envelope?.directives?.plotDirectives).toBe("1. 继续推进剧情");
+    expect(bb.envelope?.directives?.turnNarrativeIntent).toBe(
+      [
+        "- 本回合正文必须先让玩家感受到局势继续收紧",
+        "- 让场景中出现一个明确但未结算的危险征兆",
+      ].join("\n"),
+    );
     expect(bb.envelope?.directives?.narrativeHints).toBe("- 保持紧张氛围");
     expect(bb.envelope?.directives?.archiveUpdates).toEqual([]);
     expect(bb.warnings).toEqual(
@@ -280,6 +301,9 @@ describe("directorAgent soft-fail boundaries", () => {
 <plot_directives>
 1. 让角色观察四周
 </plot_directives>
+<turn_narrative_intent>
+- 正文要明确落笔于角色察觉到周围异样
+</turn_narrative_intent>
 <narrative_hints>
 - 描写压迫感
 </narrative_hints>
@@ -318,6 +342,7 @@ describe("directorAgent soft-fail boundaries", () => {
     expect(directorLog[0]).toEqual(
       expect.objectContaining({
         plotDirectives: "1. 让角色观察四周",
+        turnNarrativeIntent: "- 正文要明确落笔于角色察觉到周围异样",
         narrativeHints: "- 描写压迫感",
         outlineUpdatesSummary: '[{"op":"arc_status","status":"done"}]',
       }),

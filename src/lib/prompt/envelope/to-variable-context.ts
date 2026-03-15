@@ -40,6 +40,7 @@ export function toVariableContext(
     },
     memoryData: envelope.memory?.segments,
     plotDirectives: envelope.directives?.plotDirectives,
+    turnNarrativeIntent: envelope.directives?.turnNarrativeIntent,
     narrativeHints: envelope.directives?.narrativeHints,
     user: extra.user,
     players: extra.players,

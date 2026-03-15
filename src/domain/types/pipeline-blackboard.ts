@@ -62,6 +62,8 @@ export interface PipelineBlackboard extends BlackboardBase {
 
   /** 剧情指导（导演 AI → Parser AI） */
   plotDirectives?: string;
+  /** 本回合叙事意图（导演 AI → Narrator AI） */
+  turnNarrativeIntent?: string;
   /** 叙事提示（导演 AI → Narrator AI） */
   narrativeHints?: string;
   /** 世界档案更新指令（实际类型为 ArchiveUpdate[]，此处避免 domain 依赖 modules） */

@@ -44,6 +44,7 @@ export interface DirectorLogEntry {
   turn: number;
   timestamp: number;
   plotDirectives: string;
+  turnNarrativeIntent: string;
   narrativeHints: string;
   archiveUpdatesSummary: string; // 档案更新摘要
   outlineUpdatesSummary?: string; // 大纲更新摘要
@@ -56,6 +57,7 @@ export interface DirectorLogEntry {
 // === 导演 AI 解析结果 ===
 export interface DirectorOutput {
   plotDirectives: string;
+  turnNarrativeIntent: string;
   narrativeHints: string;
   archiveUpdatesRaw: string; // 原始 XML 内容
   outlineUpdatesRaw?: string; // 原始 XML 内容
