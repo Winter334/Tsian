@@ -5,10 +5,7 @@ import { Button, Card, Input, Select, Textarea, Toggle } from "@/components/ui";
 import type { TalentConfig, World } from "@/lib/world/types";
 import { color, colorAlpha } from "@/styles/tokens";
 
-import {
-  TALENT_CATEGORY_OPTIONS,
-  TALENT_DUPLICATE_POLICY_OPTIONS,
-} from "./world-workspace-talent-shared";
+import { TALENT_DUPLICATE_POLICY_OPTIONS } from "./world-workspace-talent-shared";
 
 export type TalentRulesValue = NonNullable<World["rules"]["talentRules"]>;
 export type TalentPityRuleValue = NonNullable<TalentRulesValue["pity"]>[number];
@@ -283,25 +280,16 @@ export function TalentCardEditor({
     const nextPoolIds = Object.prototype.hasOwnProperty.call(updates, "poolIds")
       ? updates.poolIds
       : currentDraw.poolIds;
-    const nextMinLevel = Object.prototype.hasOwnProperty.call(
-      updates,
-      "minLevel",
-    )
-      ? updates.minLevel
-      : currentDraw.minLevel;
 
     onChange({
       draw:
-        nextWeight === undefined &&
-        (nextPoolIds?.length ?? 0) === 0 &&
-        nextMinLevel === undefined
+        nextWeight === undefined && (nextPoolIds?.length ?? 0) === 0
           ? undefined
           : {
               ...(nextWeight === undefined ? {} : { weight: nextWeight }),
               ...((nextPoolIds?.length ?? 0) === 0
                 ? {}
                 : { poolIds: nextPoolIds }),
-              ...(nextMinLevel === undefined ? {} : { minLevel: nextMinLevel }),
             },
     });
   };
@@ -312,7 +300,7 @@ export function TalentCardEditor({
       whileHover={EDITOR_CARD_HOVER_STYLE}
       className="space-y-4 p-4"
     >
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <Field label="天赋 ID">
           <Input
             value={talent.id}
@@ -326,18 +314,6 @@ export function TalentCardEditor({
             value={talent.name}
             onChange={(event) => onChange({ name: event.target.value })}
             placeholder="锐眼"
-          />
-        </Field>
-        <Field label="分类">
-          <Select
-            value={talent.category ?? "misc"}
-            onValueChange={(value) =>
-              onChange({ category: value as TalentConfig["category"] })
-            }
-            options={TALENT_CATEGORY_OPTIONS.map((option) => ({
-              value: option.value,
-              label: option.label,
-            }))}
           />
         </Field>
         <Field label="图标（可选）">
@@ -376,11 +352,11 @@ export function TalentCardEditor({
             className="mt-1 text-xs"
             style={{ color: colorAlpha("textMuted", 0.72) }}
           >
-            配置该天赋在抽取系统中的品质、权重、所属抽取池与等级门槛。留空时按运行时默认规则处理。
+            配置该天赋在抽取系统中的品质、权重与所属抽取池。留空时按运行时默认规则处理。
           </p>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <Field label="品质（可选）">
             <Select
               value={talent.rarity ?? EMPTY_SELECT_VALUE}
@@ -405,21 +381,6 @@ export function TalentCardEditor({
                 })
               }
               placeholder="1"
-            />
-          </Field>
-          <Field label="最低等级门槛（可选）">
-            <Input
-              type="number"
-              value={talent.draw?.minLevel ?? ""}
-              onChange={(event) =>
-                updateDraw({
-                  minLevel:
-                    event.target.value.trim() === ""
-                      ? undefined
-                      : Number(event.target.value),
-                })
-              }
-              placeholder="5"
             />
           </Field>
         </div>

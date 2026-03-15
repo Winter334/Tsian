@@ -78,6 +78,18 @@ export const useWorldStore = create<WorldStoreState>()(
           await worldStorage.saveWorld(defaultWorld);
           worldStorage.setActiveWorldId(defaultWorld.id);
           index = worldStorage.getWorldIndex();
+        } else {
+          const builtinWorld = await worldStorage.loadWorld(defaultWorld.id);
+          const shouldRefreshBuiltinSeed =
+            builtinWorld !== null &&
+            builtinWorld.meta.source === "lyra" &&
+            builtinWorld.meta.updatedAt <= 0 &&
+            JSON.stringify(builtinWorld) !== JSON.stringify(defaultWorld);
+
+          if (shouldRefreshBuiltinSeed) {
+            await worldStorage.saveWorld(defaultWorld);
+            index = worldStorage.getWorldIndex();
+          }
         }
 
         let activeWorldId = worldStorage.getActiveWorldId();

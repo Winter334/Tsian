@@ -10,20 +10,12 @@
 
 import type { Easing } from "framer-motion";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  Activity,
-  Package,
-  Shield,
-  Sparkles,
-  User,
-  Wrench,
-  Zap,
-} from "lucide-react";
+import { Activity, Package, Shield, Sparkles, User, Zap } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import type { Character } from "@/domain/entities/character";
 import { useCharacterFullStats } from "@/hooks/useCharacterFullStats";
-import { getCategoryIcon } from "@/lib/ui/category-icons";
+import { getTalentRarityVisual } from "@/lib/ui/talent-rarity";
 import type { TalentConfig, WorldConfig } from "@/lib/world/types";
 import { resolveDimensionSelections } from "@/lib/world/types";
 import { useCurrentSaveId } from "@/modules";
@@ -464,6 +456,16 @@ function TalentsTabContent({
       .map((id) => getTalent(id, worldConfig))
       .filter((t): t is TalentConfig => t != null);
   }, [character.talentIds, worldConfig]);
+  const rarityById = useMemo(
+    () =>
+      new Map(
+        (worldConfig.talentRules?.rarities ?? []).map((rarity) => [
+          rarity.id,
+          rarity,
+        ]),
+      ),
+    [worldConfig.talentRules?.rarities],
+  );
 
   // 维度自动天赋来源 (talentId → dimensionId)
   const dimensionTalentSources = useMemo(() => {
@@ -504,50 +506,71 @@ function TalentsTabContent({
             ? (worldConfig.dimensions?.find((d) => d.id === dimSource)?.label ??
               dimSource)
             : undefined;
+          const sourceTone = dimLabel ? "secondary" : "primary";
+          const rarity = talent.rarity
+            ? (rarityById.get(talent.rarity) ?? null)
+            : null;
+          const rarityVisual = getTalentRarityVisual(rarity, {
+            fallbackColor: sourceTone,
+            fallbackGlow: sourceTone,
+            backgroundAlpha: 0.08,
+            borderAlpha: 0.18,
+            glowAlpha: 0.14,
+            strongGlowAlpha: 0.22,
+            glowSize: "sm",
+            strongGlowSize: "md",
+          });
+
           return (
             <div
               key={talent.id}
               className="rounded-md px-2 py-1.5 transition-colors duration-150"
               style={{
-                background: colorAlpha("primary", 0.04),
-                border: `1px solid ${colorAlpha("primary", 0.08)}`,
+                background: `linear-gradient(135deg, ${rarityVisual.accentSoft} 0%, ${colorAlpha("bgCard", 0.62)} 72%, ${rarityVisual.glowSoft} 100%)`,
+                border: `1px solid ${rarityVisual.accentBorder}`,
+                boxShadow: rarityVisual.accentGlow,
               }}
             >
               <div className="flex items-center gap-2">
-                <span
-                  className="shrink-0"
-                  style={{
-                    color: dimLabel ? color("secondary") : color("primary"),
-                  }}
-                >
-                  {getCategoryIcon(talent.category, { miscIcon: Wrench })}
-                </span>
-                <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                <div className="min-w-0 flex flex-1 flex-wrap items-center gap-1.5">
                   <span
                     className="text-sm font-semibold"
                     style={{
-                      color: color("textPrimary"),
+                      color: rarityVisual.accentColor,
                     }}
                   >
                     {talent.name}
                   </span>
-                  {dimLabel && (
+                  {rarity?.label ? (
                     <span
-                      className="text-xs px-1 py-0.5 rounded"
+                      className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                      style={{
+                        background: rarityVisual.accentSoft,
+                        color: rarityVisual.accentColor,
+                        border: `1px solid ${rarityVisual.accentBorder}`,
+                      }}
+                    >
+                      {rarity.label}
+                    </span>
+                  ) : null}
+                  {dimLabel ? (
+                    <span
+                      className="rounded px-1.5 py-0.5 text-[10px]"
                       style={{
                         background: colorAlpha("secondary", 0.12),
                         color: color("secondary"),
+                        border: `1px solid ${colorAlpha("secondary", 0.24)}`,
                       }}
                     >
                       {dimLabel}
                     </span>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
               {talent.description && (
                 <div
-                  className="mt-2 pt-2 ml-5.5"
+                  className="mt-2 pt-2"
                   style={{
                     borderTop: `1px solid ${colorAlpha("primary", 0.1)}`,
                   }}

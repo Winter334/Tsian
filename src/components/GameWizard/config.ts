@@ -112,26 +112,9 @@ const FIXED_STEP_REGISTRY: Record<
         return true;
       }
 
-      const levelAttributeKey =
-        worldConfig.levelSystem?.levelAttributeKey ?? "level";
-      const defaultCharacterLevel =
-        worldConfig.primaryAttributes.find(
-          (attr) => attr.key === levelAttributeKey,
-        )?.defaultValue ?? 1;
-      const rawLevel = ctx.attributes?.[levelAttributeKey];
-      const characterLevel =
-        typeof rawLevel === "number"
-          ? rawLevel
-          : typeof rawLevel === "string"
-            ? Number(rawLevel)
-            : defaultCharacterLevel;
-
       const nextDrawPreview = generateTalentCandidates({
         allTalents: worldConfig.talents ?? [],
         ownedTalentIds: Array.from(new Set(ctx.talentIds ?? [])),
-        characterLevel: Number.isFinite(characterLevel)
-          ? characterLevel
-          : defaultCharacterLevel,
         talentRules: worldConfig.talentRules,
         excludeTalentIds: dimensionEffects.excludedTalents,
       });

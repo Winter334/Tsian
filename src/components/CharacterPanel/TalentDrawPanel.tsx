@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronDown, ChevronUp, Sparkles, Wrench } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Sparkles, Star } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button, Card, Panel } from "@/components/ui";
@@ -11,7 +11,10 @@ import type { Character, PendingTalentDraw } from "@/domain/entities/character";
 import type { PassiveModifier } from "@/domain/types/rule-script";
 import { useCommand, useToast } from "@/hooks";
 import { generateTalentCandidates } from "@/lib/rules/talent-draw";
-import { getCategoryIcon } from "@/lib/ui/category-icons";
+import {
+  getTalentRarityVisual,
+  type TalentRarityConfig,
+} from "@/lib/ui/talent-rarity";
 import { getOrCreateUserId, getUniqueTag } from "@/lib/user-identity";
 import {
   aggregateDimensionEffects,
@@ -21,28 +24,9 @@ import {
 import { useRoomInfo } from "@/modules";
 import { color, colorAlpha, glow } from "@/styles/tokens";
 
-type ColorKey = Parameters<typeof color>[0];
-
 interface TalentDrawPanelProps {
   character: Character;
   worldConfig: WorldConfig;
-}
-
-function getCategoryLabel(category?: TalentConfig["category"]): string {
-  switch (category) {
-    case "combat":
-      return "战斗";
-    case "magic":
-      return "魔法";
-    case "survival":
-      return "生存";
-    case "social":
-      return "社交";
-    case "misc":
-      return "其他";
-    default:
-      return "通用";
-  }
 }
 
 function formatModifierValue(value: PassiveModifier["value"]): string {
@@ -102,45 +86,6 @@ function getTalentEffectLines(talent: TalentConfig): string[] {
   return Array.from(new Set(lines));
 }
 
-function camelToKebab(value: string): string {
-  return value.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
-}
-
-function resolveConfigTokenColor(
-  token: string | undefined,
-  fallback: ColorKey,
-): string {
-  if (!token?.trim()) {
-    return color(fallback);
-  }
-
-  return `var(--color-${camelToKebab(token.trim())})`;
-}
-
-function resolveConfigTokenAlpha(
-  token: string | undefined,
-  alpha: number,
-  fallback: ColorKey,
-): string {
-  const baseColor = resolveConfigTokenColor(token, fallback);
-  return `color-mix(in srgb, ${baseColor} ${Math.round(alpha * 100)}%, transparent)`;
-}
-
-function getNumericAttribute(value: unknown, fallback: number): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return fallback;
-}
-
 function getPendingDrawSourceLabel(draw: PendingTalentDraw): string {
   const source = draw.source?.trim();
   return source && source.length > 0 ? source : "成长奖励";
@@ -148,31 +93,30 @@ function getPendingDrawSourceLabel(draw: PendingTalentDraw): string {
 
 function TalentCandidateCard({
   talent,
+  rarity,
   rarityLabel,
-  rarityColorToken,
   selected,
   disabled,
   onClick,
 }: {
   talent: TalentConfig;
+  rarity: Pick<TalentRarityConfig, "colorToken" | "glowToken"> | null;
   rarityLabel: string | null;
-  rarityColorToken?: string;
   selected: boolean;
   disabled: boolean;
   onClick: () => void;
 }) {
   const effectLines = useMemo(() => getTalentEffectLines(talent), [talent]);
-  const accentColor = resolveConfigTokenColor(rarityColorToken, "primary");
-  const accentSoft = resolveConfigTokenAlpha(
-    rarityColorToken,
-    selected ? 0.18 : 0.12,
-    "primary",
-  );
-  const accentBorder = resolveConfigTokenAlpha(
-    rarityColorToken,
-    selected ? 0.46 : 0.3,
-    "primary",
-  );
+  const rarityVisual = getTalentRarityVisual(rarity, {
+    fallbackColor: "primary",
+    fallbackGlow: "primary",
+    backgroundAlpha: selected ? 0.18 : 0.12,
+    borderAlpha: selected ? 0.46 : 0.3,
+    glowAlpha: selected ? 0.26 : 0.16,
+    strongGlowAlpha: selected ? 0.42 : 0.3,
+    glowSize: selected ? "md" : "sm",
+    strongGlowSize: "lg",
+  });
 
   return (
     <Card
@@ -181,31 +125,34 @@ function TalentCandidateCard({
       onClick={disabled ? undefined : onClick}
       className="h-full p-4"
       style={{
-        borderColor: accentBorder,
-        boxShadow: selected ? `0 0 18px ${accentSoft}` : undefined,
-        background: `linear-gradient(135deg, ${accentSoft} 0%, ${colorAlpha(
+        borderColor: rarityVisual.accentBorder,
+        boxShadow: selected
+          ? `${rarityVisual.accentGlowStrong}, inset 0 0 0 1px ${rarityVisual.glowSoft}`
+          : rarityVisual.accentGlow,
+        background: `linear-gradient(135deg, ${rarityVisual.accentSoft} 0%, ${colorAlpha(
           "bgElevated",
-          0.88,
-        )} 100%)`,
+          0.86,
+        )} 56%, ${rarityVisual.glowSoft} 100%)`,
       }}
     >
       <div className="flex items-start gap-3">
         <div
           className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
           style={{
-            background: accentSoft,
-            border: `1px solid ${accentBorder}`,
-            color: accentColor,
+            background: `linear-gradient(135deg, ${rarityVisual.accentSoft} 0%, ${rarityVisual.glowSoft} 100%)`,
+            border: `1px solid ${rarityVisual.accentBorder}`,
+            color: rarityVisual.accentColor,
+            boxShadow: rarityVisual.accentGlow,
           }}
         >
-          {getCategoryIcon(talent.category, { miscIcon: Wrench, size: "md" })}
+          <Star className="h-5 w-5" />
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h4
               className="text-sm font-semibold"
-              style={{ color: accentColor }}
+              style={{ color: rarityVisual.accentColor }}
             >
               {talent.name}
             </h4>
@@ -214,33 +161,24 @@ function TalentCandidateCard({
               <span
                 className="rounded-full px-2 py-0.5 text-[11px] font-medium"
                 style={{
-                  background: accentSoft,
-                  color: accentColor,
-                  border: `1px solid ${accentBorder}`,
+                  background: rarityVisual.accentSoft,
+                  color: rarityVisual.accentColor,
+                  border: `1px solid ${rarityVisual.accentBorder}`,
+                  boxShadow: rarityVisual.accentGlow,
                 }}
               >
                 {rarityLabel}
               </span>
             ) : null}
 
-            <span
-              className="rounded-full px-2 py-0.5 text-[11px]"
-              style={{
-                background: colorAlpha("primary", 0.08),
-                color: color("textMuted"),
-                border: `1px solid ${colorAlpha("primary", 0.12)}`,
-              }}
-            >
-              {getCategoryLabel(talent.category)}
-            </span>
-
             {selected ? (
               <span
                 className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
                 style={{
-                  background: colorAlpha("success", 0.12),
-                  color: color("success"),
-                  border: `1px solid ${colorAlpha("success", 0.22)}`,
+                  background: rarityVisual.accentSoft,
+                  color: rarityVisual.accentColor,
+                  border: `1px solid ${rarityVisual.accentBorder}`,
+                  boxShadow: rarityVisual.accentGlow,
                 }}
               >
                 <Check className="h-3 w-3" />
@@ -335,23 +273,6 @@ export function TalentDrawPanel({
       ),
     [worldConfig.talentRules?.pools],
   );
-  const levelAttributeKey =
-    worldConfig.levelSystem?.levelAttributeKey ?? "level";
-  const defaultCharacterLevel = useMemo(
-    () =>
-      worldConfig.primaryAttributes.find(
-        (attr) => attr.key === levelAttributeKey,
-      )?.defaultValue ?? 1,
-    [levelAttributeKey, worldConfig.primaryAttributes],
-  );
-  const characterLevel = useMemo(
-    () =>
-      getNumericAttribute(
-        character.attributes?.[levelAttributeKey],
-        defaultCharacterLevel,
-      ),
-    [character.attributes, defaultCharacterLevel, levelAttributeKey],
-  );
   const dimensionEffects = useMemo(
     () =>
       aggregateDimensionEffects(
@@ -410,7 +331,6 @@ export function TalentDrawPanel({
         allTalents,
         ownedTalentIds,
         talentRules: worldConfig.talentRules,
-        characterLevel,
         offersPerDraw:
           draw.offersPerDraw ?? worldConfig.talentRules?.initialOffersPerDraw,
         poolId: draw.poolId,
@@ -427,13 +347,12 @@ export function TalentDrawPanel({
       if (result.candidates.length === 0) {
         toast.warning(
           "暂无可选天赋",
-          "当前等级、已拥有天赋与维度限制下没有新的有效候选。",
+          "当前已拥有天赋与维度限制下没有新的有效候选。",
         );
       }
     },
     [
       allTalents,
-      characterLevel,
       dimensionEffects.excludedTalents,
       ownedTalentIds,
       toast,
@@ -708,7 +627,7 @@ export function TalentDrawPanel({
                           className="text-xs leading-relaxed"
                           style={{ color: colorAlpha("textMuted", 0.82) }}
                         >
-                          将根据当前等级、已拥有天赋和维度限制生成本次候选列表。
+                          将根据当前已拥有天赋和维度限制生成本次候选列表。
                         </p>
                       </div>
 
@@ -817,8 +736,8 @@ export function TalentDrawPanel({
                         >
                           <TalentCandidateCard
                             talent={candidate}
+                            rarity={rarity}
                             rarityLabel={rarity?.label ?? null}
-                            rarityColorToken={rarity?.colorToken}
                             selected={selectedTalentId === candidate.id}
                             disabled={submitting}
                             onClick={() => setSelectedTalentId(candidate.id)}
@@ -839,7 +758,7 @@ export function TalentDrawPanel({
                       color: colorAlpha("textSecondary", 0.9),
                     }}
                   >
-                    当前等级、已拥有天赋和维度限制下没有新的有效候选，暂时无法完成本次抽取。
+                    当前已拥有天赋和维度限制下没有新的有效候选，暂时无法完成本次抽取。
                   </div>
                 )}
 

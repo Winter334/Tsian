@@ -7,7 +7,7 @@
  * - 底部：外貌/性格/背景紧凑描述区
  */
 import { motion } from "framer-motion";
-import { BookOpen, Camera, Shield, Sparkles, User, Wrench } from "lucide-react";
+import { BookOpen, Camera, Shield, Sparkles, User } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -18,7 +18,7 @@ import {
 } from "react";
 
 import { useMotionTokens } from "@/hooks";
-import { getCategoryIcon } from "@/lib/ui/category-icons";
+import { getTalentRarityVisual } from "@/lib/ui/talent-rarity";
 import type { TalentConfig, WorldConfig } from "@/lib/world/types";
 import {
   aggregateDimensionEffects,
@@ -486,6 +486,16 @@ export function SoloCharConfirmStep({ context, onUpdateContext }: StepProps) {
       .map((id) => getTalent(id, worldConfig))
       .filter((t): t is TalentConfig => t != null);
   }, [context.talentIds, worldConfig]);
+  const rarityById = useMemo(
+    () =>
+      new Map(
+        (worldConfig.talentRules?.rarities ?? []).map((rarity) => [
+          rarity.id,
+          rarity,
+        ]),
+      ),
+    [worldConfig.talentRules?.rarities],
+  );
 
   // 维度自动天赋来源 (talentId → dimensionLabel)
   const dimensionTalentSources = useMemo(() => {
@@ -798,33 +808,57 @@ export function SoloCharConfirmStep({ context, onUpdateContext }: StepProps) {
                       const sourceTone = sourceDimensionLabel
                         ? "secondary"
                         : "primary";
+                      const rarity = talent.rarity
+                        ? (rarityById.get(talent.rarity) ?? null)
+                        : null;
+                      const rarityVisual = getTalentRarityVisual(rarity, {
+                        fallbackColor: sourceTone,
+                        fallbackGlow: sourceTone,
+                        backgroundAlpha: 0.1,
+                        borderAlpha: 0.24,
+                        glowAlpha: 0.16,
+                        strongGlowAlpha: 0.26,
+                        glowSize: "sm",
+                        strongGlowSize: "md",
+                      });
 
                       return (
                         <div
                           key={talent.id}
                           className="rounded-lg px-3 py-2.5"
                           style={{
-                            background: colorAlpha("bgCard", 0.55),
-                            border: `1px solid ${colorAlpha(sourceTone, 0.22)}`,
+                            background: `linear-gradient(135deg, ${rarityVisual.accentSoft} 0%, ${colorAlpha("bgCard", 0.58)} 70%, ${rarityVisual.glowSoft} 100%)`,
+                            border: `1px solid ${rarityVisual.accentBorder}`,
+                            boxShadow: rarityVisual.accentGlow,
                           }}
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span style={{ color: color("primary") }}>
-                                {getCategoryIcon(talent.category, {
-                                  miscIcon: Wrench,
-                                })}
-                              </span>
-                              <span
-                                className="text-sm font-semibold truncate"
-                                style={{ color: color("textPrimary") }}
-                              >
-                                {talent.name}
-                              </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span
+                                  className="text-sm font-semibold truncate"
+                                  style={{ color: rarityVisual.accentColor }}
+                                >
+                                  {talent.name}
+                                </span>
+                                {rarity?.label ? (
+                                  <span
+                                    className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                                    style={{
+                                      background: rarityVisual.accentSoft,
+                                      border: `1px solid ${rarityVisual.accentBorder}`,
+                                      color: rarityVisual.accentColor,
+                                      boxShadow: rarityVisual.accentGlow,
+                                    }}
+                                  >
+                                    {rarity.label}
+                                  </span>
+                                ) : null}
+                              </div>
                             </div>
 
                             <span
-                              className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full shrink-0"
+                              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] shrink-0"
                               style={{
                                 background: colorAlpha(sourceTone, 0.12),
                                 border: `1px solid ${colorAlpha(sourceTone, 0.3)}`,
@@ -848,7 +882,7 @@ export function SoloCharConfirmStep({ context, onUpdateContext }: StepProps) {
                           </div>
 
                           <p
-                            className="text-xs mt-1 leading-relaxed line-clamp-2"
+                            className="mt-1 text-xs leading-relaxed line-clamp-2"
                             style={{ color: color("textMuted") }}
                           >
                             {talent.description}

@@ -1607,7 +1607,6 @@ export function useWorldWorkspaceState(): WorldWorkspaceState &
         id: generateId("talent"),
         name: `天赋 ${current.rules.talents.length + 1}`,
         description: "",
-        category: "misc",
       });
       return current;
     });

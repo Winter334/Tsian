@@ -102,8 +102,6 @@ export interface TalentConfig {
   name: string;
   /** 天赋描述（同时作为 effectDescription 传递给 AI） */
   description: string;
-  /** 天赋分类（用于 UI 分组和选择） */
-  category?: "combat" | "magic" | "survival" | "social" | "misc";
   /** 图标标识（UI 用） */
   icon?: string;
   /** 品质 ID，引用 talentRules.rarities */
@@ -114,8 +112,6 @@ export interface TalentConfig {
     weight?: number;
     /** 归属的抽取池 ID 列表 */
     poolIds?: string[];
-    /** 最低等级门槛 */
-    minLevel?: number;
   };
 
   /**
@@ -422,17 +418,14 @@ export interface WorldConfig {
       weight: number;
       colorToken?: string;
       glowToken?: string;
-      minLevel?: number;
     }>;
     /** 抽取池定义 */
     pools?: Array<{
       id: string;
       label?: string;
-      allowedCategories?: string[];
       allowedRarities?: string[];
       includeTalentIds?: string[];
       excludeTalentIds?: string[];
-      minLevel?: number;
     }>;
     /** 保底规则 */
     pity?: Array<{
@@ -457,394 +450,1024 @@ export interface WorldConfig {
   inventoryRules?: InventoryRulesConfig;
 }
 
+const DEFAULT_CULTIVATION_REALMS = [
+  "轮海",
+  "道宫",
+  "四极",
+  "化龙",
+  "仙台",
+  "斩道",
+  "圣人",
+  "大圣",
+  "准帝",
+] as const;
+
+const DEFAULT_CULTIVATION_STAGES = [
+  "一重天",
+  "二重天",
+  "三重天",
+  "四重天",
+  "五重天",
+  "六重天",
+  "七重天",
+  "八重天",
+  "九重天",
+] as const;
+
+function buildDefaultCultivationProgressLevels(): LevelProgressDefinition[] {
+  let requiredProgress = 0;
+
+  return Array.from({ length: 81 }, (_, index) => {
+    const level = index + 1;
+    const realmIndex = Math.floor(index / 9);
+    const stageIndex = index % 9;
+
+    if (index > 0) {
+      requiredProgress += 18 + realmIndex * 10 + stageIndex * 4;
+    }
+
+    return {
+      level,
+      name: `${DEFAULT_CULTIVATION_REALMS[realmIndex]}${DEFAULT_CULTIVATION_STAGES[stageIndex]}`,
+      requiredProgress,
+    };
+  });
+}
+
+const DEFAULT_CULTIVATION_PROGRESS_LEVELS =
+  buildDefaultCultivationProgressLevels();
+
+const DEFAULT_CULTIVATION_MILESTONE_GROWTH: NonNullable<
+  NonNullable<LevelSystemConfig["autoGrowth"]>["milestoneGrowth"]
+> = [
+  { level: 9, attributes: { spr: 1, int: 1 } },
+  { level: 18, attributes: { int: 1, vit: 1 } },
+  { level: 27, attributes: { str: 1, agi: 1 } },
+  { level: 36, attributes: { str: 1, vit: 1 } },
+  { level: 45, attributes: { spr: 1, luk: 1 } },
+  { level: 54, attributes: { int: 1, agi: 1 } },
+  { level: 63, attributes: { vit: 1, luk: 1 } },
+  { level: 72, attributes: { str: 1, spr: 1 } },
+  {
+    level: 81,
+    attributes: { str: 1, spr: 1, int: 1, agi: 1, luk: 1, vit: 1 },
+  },
+];
+
 export const DEFAULT_WORLD_CONFIG: WorldConfig = {
   version: 1,
-  worldId: "lyra-isekai",
-  worldName: "此间 异世界",
+  worldId: "lyra-zhetian",
+  worldName: "遮天",
   primaryAttributes: [
     {
       key: "str",
-      label: "力量",
-      defaultValue: 10,
+      label: "体魄",
+      defaultValue: 8,
       min: 1,
-      max: 30,
-      description: "物理攻击力与负重能力",
-    },
-    {
-      key: "vit",
-      label: "耐久",
-      defaultValue: 10,
-      min: 1,
-      max: 30,
-      description: "生命力与物理防御力",
-    },
-    {
-      key: "agi",
-      label: "敏捷",
-      defaultValue: 10,
-      min: 1,
-      max: 30,
-      description: "速度、回避与先手行动",
-    },
-    {
-      key: "int",
-      label: "知力",
-      defaultValue: 10,
-      min: 1,
-      max: 30,
-      description: "魔法攻击力与知识水平",
+      max: 100,
+      description: "血气、肉身强度与正面搏杀时的根基。",
     },
     {
       key: "spr",
-      label: "精神",
-      defaultValue: 10,
+      label: "神识",
+      defaultValue: 8,
       min: 1,
-      max: 30,
-      description: "魔力储量与魔法防御力",
+      max: 100,
+      description: "灵觉、感知与驾驭法器、洞察异动的能力。",
+    },
+    {
+      key: "int",
+      label: "道感",
+      defaultValue: 8,
+      min: 1,
+      max: 100,
+      description: "参悟经文、亲和大道、凝练灵力的效率。",
+    },
+    {
+      key: "agi",
+      label: "身法",
+      defaultValue: 8,
+      min: 1,
+      max: 100,
+      description: "腾挪、御空基础与近身交锋时的机动。",
     },
     {
       key: "luk",
-      label: "幸运",
-      defaultValue: 10,
+      label: "气运",
+      defaultValue: 8,
       min: 1,
-      max: 30,
-      description: "暴击率与意外事件",
+      max: 100,
+      description: "机缘、因果与在乱世中逢凶化吉的可能。",
     },
-    { key: "level", label: "等级", defaultValue: 1, min: 1, max: 99 },
+    {
+      key: "vit",
+      label: "心性",
+      defaultValue: 8,
+      min: 1,
+      max: 100,
+      description: "意志、定力与面对诱惑、恐惧、执念时的稳定。",
+    },
+    {
+      key: "level",
+      label: "境界",
+      defaultValue: 1,
+      min: 1,
+      max: 81,
+      description: "当前修行层次，按九大境界、每境九小层的 1~81 体系推进。",
+    },
   ],
   derivedStats: [
-    // 修正值 ×6（不显示在 UI）
     {
       key: "str_mod",
-      label: "力量修正",
-      formula: "floor((str - 10) / 2)",
+      label: "体魄修正",
+      formula: "floor((str - 10) / 4)",
       dependencies: ["str"],
     },
     {
-      key: "vit_mod",
-      label: "耐久修正",
-      formula: "floor((vit - 10) / 2)",
-      dependencies: ["vit"],
-    },
-    {
-      key: "agi_mod",
-      label: "敏捷修正",
-      formula: "floor((agi - 10) / 2)",
-      dependencies: ["agi"],
-    },
-    {
-      key: "int_mod",
-      label: "知力修正",
-      formula: "floor((int - 10) / 2)",
-      dependencies: ["int"],
-    },
-    {
       key: "spr_mod",
-      label: "精神修正",
-      formula: "floor((spr - 10) / 2)",
+      label: "神识修正",
+      formula: "floor((spr - 10) / 4)",
       dependencies: ["spr"],
     },
     {
+      key: "int_mod",
+      label: "道感修正",
+      formula: "floor((int - 10) / 4)",
+      dependencies: ["int"],
+    },
+    {
+      key: "agi_mod",
+      label: "身法修正",
+      formula: "floor((agi - 10) / 4)",
+      dependencies: ["agi"],
+    },
+    {
       key: "luk_mod",
-      label: "幸运修正",
-      formula: "floor((luk - 10) / 2)",
+      label: "气运修正",
+      formula: "floor((luk - 10) / 4)",
       dependencies: ["luk"],
     },
-    // 资源属性 ×4（显示在 UI，isResource 标记）
+    {
+      key: "vit_mod",
+      label: "心性修正",
+      formula: "floor((vit - 10) / 4)",
+      dependencies: ["vit"],
+    },
     {
       key: "max_hp",
-      label: "最大HP",
-      formula: "5 + (5 + vit_mod) * level",
-      dependencies: ["vit_mod", "level"],
+      label: "血气上限",
+      formula: "30 + str * 2 + vit * 2 + level * 12",
+      dependencies: ["str", "vit", "level"],
+      min: 1,
       category: "resource",
       showInUI: true,
     },
     {
       key: "hp",
-      label: "HP",
+      label: "血气",
       formula: "max_hp",
       dependencies: ["max_hp"],
       isResource: true,
       maxField: "max_hp",
+      min: 0,
       category: "resource",
       showInUI: true,
     },
     {
-      key: "max_mp",
-      label: "最大MP",
-      formula: "max(0, (3 + spr_mod) * level)",
-      dependencies: ["spr_mod", "level"],
+      key: "max_lingli",
+      label: "灵力上限",
+      formula: "20 + int * 2 + spr * 2 + level * 14",
+      dependencies: ["int", "spr", "level"],
+      min: 0,
       category: "resource",
       showInUI: true,
     },
     {
-      key: "mp",
-      label: "MP",
-      formula: "max_mp",
-      dependencies: ["max_mp"],
+      key: "lingli",
+      label: "灵力",
+      formula: "max_lingli",
+      dependencies: ["max_lingli"],
       isResource: true,
-      maxField: "max_mp",
+      maxField: "max_lingli",
+      min: 0,
       category: "resource",
       showInUI: true,
     },
-    // 防御属性 ×2（显示在 UI）
     {
-      key: "phys_def",
-      label: "物理防御",
-      formula: "10 + vit_mod",
-      dependencies: ["vit_mod"],
+      key: "guard",
+      label: "护体",
+      formula: "8 + str_mod + vit_mod + floor(level / 3)",
+      dependencies: ["str_mod", "vit_mod", "level"],
       category: "defense",
       showInUI: true,
     },
     {
-      key: "mag_def",
-      label: "魔法防御",
-      formula: "10 + spr_mod",
-      dependencies: ["spr_mod"],
+      key: "soul_resist",
+      label: "神魂稳固",
+      formula: "8 + spr_mod + vit_mod + floor(level / 3)",
+      dependencies: ["spr_mod", "vit_mod", "level"],
       category: "defense",
+      showInUI: true,
+    },
+    {
+      key: "movement_roll",
+      label: "遁速",
+      formula: "8 + agi_mod + floor(level / 4) + floor(luk_mod / 2)",
+      dependencies: ["agi_mod", "luk_mod", "level"],
+      category: "combat",
+      showInUI: true,
+    },
+    {
+      key: "insight",
+      label: "悟性",
+      formula: "8 + spr_mod + int_mod + floor(level / 4)",
+      dependencies: ["spr_mod", "int_mod", "level"],
+      category: "misc",
       showInUI: true,
     },
   ],
   checkRules: {
-    defaultDice: "2d6",
-    criticalSuccessThreshold: 12,
-    criticalFailureThreshold: 2,
+    defaultDice: "1d20",
+    criticalSuccessThreshold: 20,
+    criticalFailureThreshold: 1,
     allowContest: true,
+    dcGuideline: {
+      scale: [
+        {
+          label: "易",
+          dc: 10,
+          description: "凡俗层面的顺手尝试，仍需基本根基。",
+        },
+        {
+          label: "常",
+          dc: 14,
+          description: "初入修行者的日常考验，需要像样底子。",
+        },
+        {
+          label: "难",
+          dc: 18,
+          description: "已非寻常修士可稳过，需要术法、胆识或积累。",
+        },
+        {
+          label: "险",
+          dc: 22,
+          description: "稍有差池便会受创，往往伴随跨层搏命与强敌压制。",
+        },
+        {
+          label: "绝",
+          dc: 28,
+          description: "多与禁地、天骄、圣兵或高层秘法相关。",
+        },
+        {
+          label: "逆天",
+          dc: 34,
+          description: "常理之上，往往只有大机缘、大代价或越境爆发可触及。",
+        },
+        {
+          label: "禁忌",
+          dc: 40,
+          description: "近乎打破位格差距的禁忌挑战，失败代价极高。",
+        },
+      ],
+    },
   },
   conditions: [],
   talents: [
-    // ── 纯结构化修正 ──
     {
-      id: "tough",
-      name: "强韧",
-      description: "天生体魄强健，能承受更多伤害",
-      category: "survival",
+      id: "mountain_survivor",
+      name: "山野求生",
+      description:
+        "你习惯在荒岭古矿与断壁残崖之间寻找活路，面对恶劣环境时更沉得住气。",
+      rarity: "common",
       modifiers: [
         {
-          scope: "damage_taken",
-          multiplier: 0.9,
-          reason: "强韧减伤 10%",
+          scope: "check",
+          filter: "skill",
+          value: 1,
+          reason: "山野求生让你在野外应对时更老练",
         },
       ],
     },
     {
-      id: "sharp_eye",
-      name: "锐眼",
-      description: "观察力超群，攻击时更加精准",
-      category: "combat",
+      id: "diligent_cultivator",
+      name: "苦修不辍",
+      description: "你能在枯燥吐纳与漫长闭关中保持节律，灵力积累更扎实。",
+      rarity: "common",
+      modifiers: [
+        {
+          scope: "stat",
+          field: "max_lingli",
+          value: 6,
+          reason: "苦修不辍提升灵力上限",
+        },
+      ],
+    },
+    {
+      id: "calm_heart",
+      name: "静水心",
+      description: "心湖平稳，不易被外魔幻象与一时情绪牵引。",
+      rarity: "common",
+      modifiers: [
+        {
+          scope: "check",
+          filter: "save",
+          value: 1,
+          reason: "静水心让你更容易稳住心神",
+        },
+      ],
+    },
+    {
+      id: "swift_steps",
+      name: "驭风步",
+      description: "你熟悉借势移步的法门，哪怕尚未真正御虹，也已有轻灵之姿。",
+      rarity: "common",
+      modifiers: [
+        {
+          scope: "stat",
+          field: "agi",
+          value: 1,
+          reason: "驭风步提升身法根底",
+        },
+      ],
+    },
+    {
+      id: "star_blessing",
+      name: "星辉庇命",
+      description: "每逢夜色垂落，你总能从群星与天象中感到一丝若有若无的眷顾。",
+      rarity: "common",
+    },
+    {
+      id: "ancient_script",
+      name: "古字识文",
+      description: "你读得懂部分残篇碑铭与上古符号，不容易在机缘前空手而归。",
+      rarity: "common",
+    },
+    {
+      id: "weapon_sense",
+      name: "兵锋直觉",
+      description:
+        "无论是凡兵还是法器，只要落入掌中，你总能迅速找到最顺手的发力方式。",
+      rarity: "common",
       modifiers: [
         {
           scope: "check",
           filter: "attack",
           value: 1,
-          reason: "锐眼命中 +1",
+          reason: "兵锋直觉提升攻击判定",
         },
       ],
     },
     {
-      id: "iron_will",
-      name: "铁壁意志",
-      description: "精神坚定如铁，豁免检定更有优势",
-      category: "survival",
+      id: "herb_affinity",
+      name: "草木通灵",
+      description: "你熟悉灵药、异草与山川气机，对疗伤与采集一道格外敏锐。",
+      rarity: "common",
+    },
+    {
+      id: "unyielding_blood",
+      name: "血性坚韧",
+      description: "伤势越重，你越能咬住最后一口气，不会轻易被击垮。",
+      rarity: "common",
+      modifiers: [
+        {
+          scope: "damage_taken",
+          multiplier: 0.95,
+          reason: "血性坚韧降低所受伤害",
+        },
+      ],
+    },
+    {
+      id: "night_traveler",
+      name: "夜行无声",
+      description: "习惯在夜色与废墟中穿行，步伐更轻，气息更稳。",
+      rarity: "common",
+    },
+    {
+      id: "gentle_words",
+      name: "言辞温润",
+      description: "你擅长在强者、商旅与同道之间缓和气氛，争取多一点余地。",
+      rarity: "common",
       modifiers: [
         {
           scope: "check",
-          filter: "save",
-          value: 2,
-          reason: "铁壁意志豁免 +2",
+          filter: "skill",
+          value: 1,
+          reason: "言辞温润提升社交与交涉稳定性",
         },
       ],
     },
-    // ── 混合型（结构化 + 语义） ──
     {
-      id: "fire_affinity",
-      name: "火之亲和",
-      description:
-        "与火元素有天生的亲和力，火焰魔法威力增强，且不会被自己的火焰伤害",
-      category: "magic",
+      id: "ember_seed",
+      name: "火种不熄",
+      description: "你体内仿佛藏着一点不灭余烬，爆发时更容易激起炽烈之势。",
+      rarity: "common",
       modifiers: [
         {
           scope: "damage_dealt",
           filter: "fire",
-          value: 3,
-          reason: "火之亲和伤害 +3",
-        },
-        {
-          scope: "damage_taken",
-          filter: "fire",
-          multiplier: 0.5,
-          reason: "火之亲和抗性",
+          value: 2,
+          reason: "火种不熄强化火行伤害",
         },
       ],
     },
     {
-      id: "silver_tongue",
-      name: "巧言",
-      description: "天生的话术天才，在社交场景中更容易说服他人",
-      category: "social",
+      id: "spirit_glimpse",
+      name: "灵目初开",
+      description:
+        "你偶尔能瞥见常人难察的气机流动，哪怕还无法完全解释那是什么。",
+      rarity: "common",
+    },
+    {
+      id: "battle_calm",
+      name: "临阵稳心",
+      description: "越是生死一线，你越能迅速压住杂念，不让心绪拖累决断。",
+      rarity: "common",
+      modifiers: [
+        {
+          scope: "check",
+          filter: "save",
+          value: 1,
+          reason: "临阵稳心提升危急时刻的定力",
+        },
+      ],
+    },
+    {
+      id: "jade_bones",
+      name: "玉骨匀息",
+      description: "你的筋骨协调、呼吸悠长，哪怕没有奇异体质，也比常人更能熬。",
+      rarity: "common",
+      modifiers: [
+        {
+          scope: "stat",
+          field: "max_hp",
+          value: 8,
+          reason: "玉骨匀息提升血气上限",
+        },
+      ],
+    },
+    {
+      id: "dustless_mind",
+      name: "尘心不染",
+      description: "你对名利得失看得比旁人稍淡，不容易在最初的修行路上迷失。",
+      rarity: "common",
+    },
+    {
+      id: "sea_of_bitter",
+      name: "苦海初辟",
+      description: "你的轮海像是更早一步被叩开，灵力流转时自有一股开阔感。",
+      rarity: "uncommon",
+      modifiers: [
+        {
+          scope: "stat",
+          field: "max_lingli",
+          value: 12,
+          reason: "苦海初辟显著提升灵力储量",
+        },
+      ],
+    },
+    {
+      id: "spring_of_life",
+      name: "命泉涌动",
+      description: "体内生机比同境修士更旺盛，恢复与耐战能力明显更高。",
+      rarity: "uncommon",
+      modifiers: [
+        {
+          scope: "stat",
+          field: "max_hp",
+          value: 12,
+          reason: "命泉涌动强化血气底蕴",
+        },
+      ],
+    },
+    {
+      id: "divine_sense",
+      name: "神识外放",
+      description: "你的神识能率先探出一步，在感知、锁定与寻踪上占据优势。",
+      rarity: "uncommon",
       modifiers: [
         {
           scope: "check",
           filter: "skill",
           value: 2,
-          reason: "巧言话术 +2",
+          reason: "神识外放提升感知与术法细节把握",
         },
       ],
     },
-    // ── 纯语义标签 ──
     {
-      id: "darkvision",
-      name: "暗视",
-      description: "能在完全黑暗的环境中视物，不受黑暗影响",
-      category: "survival",
+      id: "purple_qi",
+      name: "紫气东来",
+      description: "你偶尔会在关键节点迎来转机，像是天光曾短暂为你停驻。",
+      rarity: "uncommon",
     },
     {
-      id: "berserker",
-      name: "狂战士",
-      description: "HP 低于 30% 时进入狂暴状态，攻击力大增但无法使用魔法",
-      category: "combat",
+      id: "iron_refinement",
+      name: "炼骨如铁",
+      description: "筋骨经过异常扎实的磨砺，承受冲击与重创时更不容易崩散。",
+      rarity: "uncommon",
+      modifiers: [
+        {
+          scope: "damage_taken",
+          multiplier: 0.9,
+          reason: "炼骨如铁让肉身更能扛伤",
+        },
+      ],
+    },
+    {
+      id: "mystic_roots",
+      name: "玄门慧根",
+      description: "你对经文、术理与法门脉络有天然亲近感，悟道比常人更快半分。",
+      rarity: "uncommon",
+      modifiers: [
+        {
+          scope: "check",
+          filter: "skill",
+          value: 2,
+          reason: "玄门慧根提升悟道与术法相关判定",
+        },
+      ],
+    },
+    {
+      id: "fate_thread",
+      name: "天机一线",
+      description: "每当局势走向死胡同，你总能模糊捕捉到那一丝不该存在的生机。",
+      rarity: "uncommon",
+      modifiers: [
+        {
+          scope: "check",
+          filter: "save",
+          value: 2,
+          reason: "天机一线让你在险境中更易觅得生门",
+        },
+      ],
+    },
+    {
+      id: "artifact_bond",
+      name: "道兵契主",
+      description: "你与兵器、法器的契合度更高，催动时常能多出一分顺畅与锋芒。",
+      rarity: "uncommon",
+      modifiers: [
+        {
+          scope: "damage_dealt",
+          filter: "weapon",
+          value: 3,
+          reason: "道兵契主强化兵器造成的伤害",
+        },
+      ],
+    },
+    {
+      id: "war_insight",
+      name: "百战悟法",
+      description: "你很擅长在搏杀中临场修正出手方式，越打越能看清胜负手。",
+      rarity: "uncommon",
+      modifiers: [
+        {
+          scope: "check",
+          filter: "attack",
+          value: 2,
+          reason: "百战悟法提升连续交锋中的攻击效率",
+        },
+      ],
+    },
+    {
+      id: "source_pattern_sense",
+      name: "源纹感知",
+      description: "你对山川走势、奇石纹理与地脉伏线有超出常人的敏感。",
+      rarity: "uncommon",
+    },
+    {
+      id: "unbroken_breath",
+      name: "真息绵长",
+      description: "你体内真息循环更完整，久战之下灵力衰竭得没那么快。",
+      rarity: "uncommon",
+      modifiers: [
+        {
+          scope: "stat",
+          field: "max_lingli",
+          value: 10,
+          reason: "真息绵长提升续战灵力",
+        },
+      ],
+    },
+    {
+      id: "taiyin_soul",
+      name: "太阴灵魄",
+      description: "你的神魂气质更偏清冷幽深，出手时往往带着侵入骨髓的寒意。",
+      rarity: "rare",
+      modifiers: [
+        {
+          scope: "damage_dealt",
+          value: 3,
+          reason: "太阴灵魄提升术法伤害强度",
+        },
+      ],
+    },
+    {
+      id: "solar_bone",
+      name: "太阳真骨",
+      description: "骨血中像埋着炽热炉火，一旦强攻，往往有焚灼四方的压迫感。",
+      rarity: "rare",
+      modifiers: [
+        {
+          scope: "damage_dealt",
+          filter: "fire",
+          value: 4,
+          reason: "太阳真骨强化火行与爆发性伤害",
+        },
+      ],
+    },
+    {
+      id: "void_steps",
+      name: "虚空残痕",
+      description: "你对空间挪移有近乎本能的把握，闪避与突进都更难被预判。",
+      rarity: "rare",
+      modifiers: [
+        {
+          scope: "stat",
+          field: "agi",
+          value: 2,
+          reason: "虚空残痕提升身法与位移感知",
+        },
+      ],
+    },
+    {
+      id: "source_master_eye",
+      name: "源天灵觉",
+      description: "你对源术与地脉的理解天然领先一步，更容易辨别真假机缘。",
+      rarity: "rare",
+      modifiers: [
+        {
+          scope: "check",
+          filter: "skill",
+          value: 3,
+          reason: "源天灵觉显著提升洞察与源术判断",
+        },
+      ],
+    },
+    {
+      id: "true_dragon_pulse",
+      name: "真龙气脉",
+      description: "你的血气运转如龙，攻守转换间自有一股冲霄之势。",
+      rarity: "rare",
+      modifiers: [
+        {
+          scope: "stat",
+          field: "max_hp",
+          value: 18,
+          reason: "真龙气脉极大强化血气根基",
+        },
+        {
+          scope: "damage_dealt",
+          value: 2,
+          reason: "真龙气脉提升爆发伤害",
+        },
+      ],
+    },
+    {
+      id: "heavenly_pattern",
+      name: "天图映命",
+      description:
+        "你对天势、命数与因果纹路的感应更直接，常能看见别人看不见的线索。",
+      rarity: "rare",
+      modifiers: [
+        {
+          scope: "check",
+          filter: "skill",
+          value: 3,
+          reason: "天图映命强化推演与洞察",
+        },
+      ],
+    },
+    {
+      id: "dao_heart_clarity",
+      name: "道心通明",
+      description:
+        "你道心稳固且明澈，面对诱惑与分岔时更容易抓住真正适合自己的路。",
+      rarity: "rare",
+      modifiers: [
+        {
+          scope: "check",
+          filter: "save",
+          value: 2,
+          reason: "道心通明降低心境失守的风险",
+        },
+        {
+          scope: "stat",
+          field: "max_lingli",
+          value: 8,
+          reason: "道心通明让灵力运转更加顺畅",
+        },
+      ],
+    },
+    {
+      id: "ancient_sacred_body",
+      name: "荒古圣体",
+      description: "亿万人中难见的无双体魄，血气如海，肉身天然压胜同辈。",
+      rarity: "legendary",
+      modifiers: [
+        {
+          scope: "damage_taken",
+          multiplier: 0.8,
+          reason: "荒古圣体大幅降低所受伤害",
+        },
+        {
+          scope: "stat",
+          field: "max_hp",
+          value: 30,
+          reason: "荒古圣体拥有惊人的血气上限",
+        },
+      ],
+    },
+    {
+      id: "innate_dao_embryo",
+      name: "先天道胎",
+      description: "天生近道，举手投足皆与法理相合，术法运转几近浑然天成。",
+      rarity: "legendary",
+      modifiers: [
+        {
+          scope: "stat",
+          field: "max_lingli",
+          value: 30,
+          reason: "先天道胎极大提升灵力底蕴",
+        },
+        {
+          scope: "check",
+          filter: "skill",
+          value: 3,
+          reason: "先天道胎显著提升悟道与术法判定",
+        },
+      ],
+    },
+    {
+      id: "celestial_eyes",
+      name: "元灵仙瞳",
+      description: "双瞳近乎通灵，既可辨幻识真，也能在交锋瞬间捕捉破绽。",
+      rarity: "legendary",
+      modifiers: [
+        {
+          scope: "check",
+          filter: "attack",
+          value: 2,
+          reason: "元灵仙瞳更容易捕捉敌手破绽",
+        },
+        {
+          scope: "check",
+          filter: "skill",
+          value: 2,
+          reason: "元灵仙瞳提升观察与洞察效果",
+        },
+      ],
+    },
+    {
+      id: "emperor_star",
+      name: "帝星临身",
+      description:
+        "你像是被乱世推向了争渡之路，逢大势时总能爆发出不合常理的锋芒。",
+      rarity: "legendary",
+      modifiers: [
+        {
+          scope: "damage_dealt",
+          value: 5,
+          reason: "帝星临身强化关键时刻的压制力",
+        },
+        {
+          scope: "check",
+          filter: "save",
+          value: 2,
+          reason: "帝星临身让你在大势压迫下更能稳住自身",
+        },
+      ],
     },
   ],
   talentRules: {
-    initialDrawCount: 2,
-    initialOffersPerDraw: 3,
+    initialDrawCount: 3,
+    initialOffersPerDraw: 4,
     allowAcquireDuringGame: true,
+    drawPointCost: 0,
     duplicatePolicy: "exclude_owned",
+    rarities: [
+      {
+        id: "common",
+        label: "凡品",
+        weight: 62,
+        colorToken: "textMuted",
+      },
+      {
+        id: "uncommon",
+        label: "灵品",
+        weight: 25,
+        colorToken: "secondary",
+        glowToken: "secondary",
+      },
+      {
+        id: "rare",
+        label: "天品",
+        weight: 10,
+        colorToken: "warning",
+        glowToken: "warning",
+      },
+      {
+        id: "legendary",
+        label: "帝品",
+        weight: 3,
+        colorToken: "error",
+        glowToken: "error",
+      },
+    ],
   },
   levelSystem: {
     levelAttributeKey: "level",
     triggerModes: ["narrative", "manual"],
     growthMode: "auto",
+    progress: {
+      progressAttributeKey: "level_progress",
+      levels: DEFAULT_CULTIVATION_PROGRESS_LEVELS,
+      carryOverflow: true,
+    },
+    autoGrowth: {
+      milestoneGrowth: DEFAULT_CULTIVATION_MILESTONE_GROWTH,
+    },
+    rewards: {},
   },
   pointBuyRules: {
-    allocatableAttributes: ["str", "vit", "agi", "int", "spr", "luk"],
-    bonusPoints: 10,
-    maxPerAttribute: 20,
+    allocatableAttributes: ["str", "spr", "int", "agi", "luk", "vit"],
+    bonusPoints: 24,
+    minPerAttribute: 1,
+    maxPerAttribute: 30,
   },
   itemTemplates: [],
   skillTemplates: [],
   inventoryRules: {
-    defaultCapacity: 20,
+    defaultCapacity: 24,
     equipSlotDefinitions: [
-      { id: "main_hand", label: "主手", allowedCategories: ["weapon"] },
+      { id: "natal_artifact", label: "本命器", allowedCategories: ["weapon"] },
+      { id: "robe", label: "法衣", allowedCategories: ["armor"] },
+      { id: "talisman", label: "护符", allowedCategories: ["accessory"] },
       {
-        id: "off_hand",
-        label: "副手",
-        allowedCategories: ["weapon", "armor"],
-      },
-      { id: "head", label: "头部", allowedCategories: ["armor"] },
-      { id: "body", label: "身体", allowedCategories: ["armor"] },
-      { id: "legs", label: "腿部", allowedCategories: ["armor"] },
-      { id: "feet", label: "脚部", allowedCategories: ["armor"] },
-      {
-        id: "accessory_1",
-        label: "饰品1",
-        allowedCategories: ["accessory"],
-      },
-      {
-        id: "accessory_2",
-        label: "饰品2",
-        allowedCategories: ["accessory"],
+        id: "relic",
+        label: "异宝",
+        allowedCategories: ["weapon", "accessory"],
       },
     ],
   },
   dimensions: [
     {
-      id: "race",
-      label: "种族",
-      description: "选择你的种族，不同种族有不同的属性修正和天赋",
-      required: false,
+      id: "origin",
+      label: "出身",
+      description:
+        "你的出身决定了最初接触修行世界的方式、看待资源的角度，以及故事开局时最自然的立足点。",
+      required: true,
       order: 10,
       options: [
         {
-          id: "human",
-          name: "人类",
-          description: "最为普遍的种族, 适应力强, 拥有均衡的潜力",
-          effects: { attributeModifiers: {} },
-        },
-        {
-          id: "elf",
-          name: "精灵",
-          description: "长寿的森林民族, 擅长魔法和弓术",
+          id: "ancient_clan_branch",
+          name: "荒古世家旁支",
+          description:
+            "见过家族旧辉煌，也明白血脉与资源并不一定会落到自己头上。",
           effects: {
-            attributeModifiers: { agi: 2, int: 1, vit: -1 },
-            grantedTalents: ["darkvision"],
+            attributeModifiers: { luk: 1, int: 1 },
+            grantedTalents: ["ancient_script"],
           },
-          defaults: { appearance: "尖耳、纤细身材, 发色多为银白或金色" },
-        },
-        {
-          id: "dwarf",
-          name: "矮人",
-          description: "山岳中的工匠民族, 体格强健, 善于锻造",
-          effects: {
-            attributeModifiers: { vit: 2, str: 1, agi: -1 },
-          },
-          defaults: { appearance: "身材矮壮、蓄着浓密胡须" },
-        },
-        {
-          id: "beastfolk",
-          name: "兽人族",
-          description: "拥有兽类特征的种族, 感官敏锐, 身体能力出众",
-          effects: {
-            attributeModifiers: { str: 1, agi: 1, int: -1 },
-          },
-          defaults: { appearance: "兽耳、尾巴, 瞳孔呈兽类特征" },
-        },
-      ],
-    },
-    {
-      id: "background",
-      label: "背景",
-      description: "选择你的背景故事，它会影响你的性格和额外能力",
-      required: false,
-      order: 20,
-      options: [
-        {
-          id: "adventurer",
-          name: "冒险者",
-          description: "以接取公会委托为生的冒险者",
           defaults: {
-            personality: "好奇心旺盛, 勇于面对未知挑战",
             description:
-              "在冒险者公会注册的新人, 怀揣着对未知世界的憧憬踏上旅途",
+              "出身于没落的荒古世家旁支，知晓许多旧闻，却始终站在真正核心权力之外。",
           },
         },
         {
-          id: "knight",
-          name: "骑士",
-          description: "效忠于某位领主的骑士",
+          id: "holy_land_outer",
+          name: "圣地外门",
+          description: "曾在圣地外门抄经听法，眼界不低，却也深知强者秩序森严。",
           effects: {
-            attributeModifiers: { str: 1 },
+            attributeModifiers: { spr: 1, int: 1 },
+            grantedTalents: ["diligent_cultivator"],
           },
           defaults: {
-            personality: "正义感强, 重视荣誉和誓言",
-            description: "曾效忠于某位领主的骑士, 因故离开故土, 以剑技谋生",
-          },
-        },
-        {
-          id: "scholar",
-          name: "学者",
-          description: "来自学院的魔法研究者",
-          effects: {
-            attributeModifiers: { int: 1 },
-          },
-          defaults: {
-            personality: "求知欲强, 逻辑思维缜密, 有时会忽略周围人的感受",
-            description: "在王立学院研修魔法的学者, 为了实地研究而踏上旅途",
-          },
-        },
-        {
-          id: "merchant",
-          name: "商人",
-          description: "行走各地的旅行商人",
-          effects: {
-            attributeModifiers: { luk: 1 },
-            grantedTalents: ["silver_tongue"],
-          },
-          defaults: {
-            personality: "善于交际, 精于算计, 但骨子里是个好人",
             description:
-              "走南闯北的旅行商人, 靠着敏锐的嗅觉和话术在各城镇间贸易",
+              "你曾在圣地外门随众修行，见识过真正的天骄，也因此更清楚自身与高门之间的距离。",
+          },
+        },
+        {
+          id: "small_town_rogue",
+          name: "小城散修",
+          description: "没有大势力庇护，一切资源与功法都要靠自己摸索争取。",
+          effects: {
+            attributeModifiers: { agi: 1, vit: 1 },
+            grantedTalents: ["mountain_survivor"],
+          },
+          defaults: {
+            description:
+              "你在边荒小城与古道集市间长大，见惯弱肉强食，因此比许多人更懂得如何活下去。",
+          },
+        },
+        {
+          id: "source_mine_remnant",
+          name: "源矿遗民",
+          description:
+            "长期与古矿、奇石和地脉打交道，对危险与机缘都有异样直觉。",
+          effects: {
+            attributeModifiers: { spr: 1, luk: 1 },
+            grantedTalents: ["source_pattern_sense"],
+          },
+          defaults: {
+            description:
+              "你曾随族人辗转源矿废墟，在险地与奇石之间求生，知道宝物与灾祸往往只隔一线。",
+          },
+        },
+        {
+          id: "imperial_scout_heir",
+          name: "皇朝旧军遗孤",
+          description:
+            "在军伍旧部、边关斥候与皇朝法度的夹缝里长大，对秩序和杀机都不陌生。",
+          effects: {
+            attributeModifiers: { str: 1, vit: 1 },
+            grantedTalents: ["battle_calm"],
+          },
+          defaults: {
+            description:
+              "你出身于一支逐渐式微的皇朝旧军后裔，耳濡目染的从不是空谈，而是如何在命令与生死之间活下来。",
+          },
+        },
+        {
+          id: "herb_garden_apprentice",
+          name: "洞天药圃学徒",
+          description:
+            "长期侍弄灵药、识辨草木与地气，对疗伤、采集和耐心都有扎实底子。",
+          effects: {
+            attributeModifiers: { int: 1, spr: 1 },
+            grantedTalents: ["herb_affinity"],
+          },
+          defaults: {
+            description:
+              "你曾在洞天药圃里做最不起眼的学徒，记得每一株灵草的气味，也记得弱者若不够细心就活不久。",
+          },
+        },
+        {
+          id: "frontier_hunter",
+          name: "边荒猎户",
+          description:
+            "常年在边荒山岭与古道废村间追猎求生，对地势、夜路和潜伏格外熟悉。",
+          effects: {
+            attributeModifiers: { str: 1, agi: 1 },
+            grantedTalents: ["night_traveler"],
+          },
+          defaults: {
+            description:
+              "你从小跟着猎队穿行在断岭、荒泽与废弃驿道之间，学会的第一门本事不是修法，而是别让自己先死在夜里。",
+          },
+        },
+        {
+          id: "market_caravan_heir",
+          name: "坊市行脚商后裔",
+          description:
+            "跟着商旅车队和坊市摊行长大，见多了人心与利益，也习惯为自己争一条退路。",
+          effects: {
+            attributeModifiers: { agi: 1, luk: 1 },
+            grantedTalents: ["gentle_words"],
+          },
+          defaults: {
+            description:
+              "你识得货路、暗价和人情冷暖，知道许多机缘最早并不在秘境里，而在一句真假难辨的市井消息中。",
+          },
+        },
+        {
+          id: "forbidden_land_survivor",
+          name: "禁地幸存者",
+          description:
+            "曾从险地或禁区外围捡回一条命，此后比谁都清楚机缘背后总藏着代价。",
+          effects: {
+            attributeModifiers: { vit: 1, luk: 1 },
+            grantedTalents: ["calm_heart"],
+          },
+          defaults: {
+            description:
+              "你曾在一场近乎必死的灾祸里侥幸活下，往后每逢机缘临门，最先升起的从来不是贪念，而是警惕。",
+          },
+        },
+        {
+          id: "ruined_martial_clan",
+          name: "破败武馆传人",
+          description:
+            "祖上传下的不过是残缺拳谱与几件旧兵，但也让你比多数人更早学会发力与应对。",
+          effects: {
+            attributeModifiers: { str: 1, agi: 1 },
+            grantedTalents: ["weapon_sense"],
+          },
+          defaults: {
+            description:
+              "你守着一间早已风光不再的武馆或小门庭长大，旧架子和旧兵痕里藏着你最早理解世界的方式。",
+          },
+        },
+        {
+          id: "scripture_keeper",
+          name: "古教藏经守人",
+          description:
+            "常年替古教、古寺或残碑洞府抄录经卷，未必得传真法，却练出了读文辨义的耐心。",
+          effects: {
+            attributeModifiers: { int: 1, vit: 1 },
+            grantedTalents: ["mystic_roots"],
+          },
+          defaults: {
+            description:
+              "你做过藏经楼与古碑库最不起眼的守人，真正的高深秘法轮不到你，但残章断句早已在心里扎了根。",
           },
         },
       ],

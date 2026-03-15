@@ -496,7 +496,6 @@ export function normalizeTalentRarity(
   const record = isRecord(value) ? value : {};
   const colorToken = toOptionalString(record.colorToken);
   const glowToken = toOptionalString(record.glowToken);
-  const minLevel = toOptionalPositiveInteger(record.minLevel);
 
   return {
     id: toRequiredString(record.id, `rarity_${index + 1}`),
@@ -504,7 +503,6 @@ export function normalizeTalentRarity(
     weight: toNumber(record.weight, 1),
     ...(colorToken ? { colorToken } : {}),
     ...(glowToken ? { glowToken } : {}),
-    ...(minLevel === undefined ? {} : { minLevel }),
   };
 }
 
@@ -514,20 +512,16 @@ export function normalizeTalentPool(
 ): EditableTalentPool {
   const record = isRecord(value) ? value : {};
   const label = toOptionalString(record.label);
-  const allowedCategories = toUniqueStringArray(record.allowedCategories);
   const allowedRarities = toUniqueStringArray(record.allowedRarities);
   const includeTalentIds = toUniqueStringArray(record.includeTalentIds);
   const excludeTalentIds = toUniqueStringArray(record.excludeTalentIds);
-  const minLevel = toOptionalPositiveInteger(record.minLevel);
 
   return {
     id: toRequiredString(record.id, `pool_${index + 1}`),
     ...(label ? { label } : {}),
-    ...(allowedCategories.length > 0 ? { allowedCategories } : {}),
     ...(allowedRarities.length > 0 ? { allowedRarities } : {}),
     ...(includeTalentIds.length > 0 ? { includeTalentIds } : {}),
     ...(excludeTalentIds.length > 0 ? { excludeTalentIds } : {}),
-    ...(minLevel === undefined ? {} : { minLevel }),
   };
 }
 
@@ -553,16 +547,14 @@ function normalizeTalentDraw(value: unknown): TalentConfig["draw"] | undefined {
 
   const weight = toOptionalNumber(value.weight);
   const poolIds = toUniqueStringArray(value.poolIds);
-  const minLevel = toOptionalPositiveInteger(value.minLevel);
 
-  if (weight === undefined && poolIds.length === 0 && minLevel === undefined) {
+  if (weight === undefined && poolIds.length === 0) {
     return undefined;
   }
 
   return {
     ...(weight === undefined ? {} : { weight }),
     ...(poolIds.length > 0 ? { poolIds } : {}),
-    ...(minLevel === undefined ? {} : { minLevel }),
   };
 }
 
@@ -809,7 +801,6 @@ export function normalizeLevelSystem(
 
 export function normalizeTalent(value: unknown, index: number): TalentConfig {
   const record = isRecord(value) ? value : {};
-  const category = toOptionalString(record.category);
   const rarity = toOptionalString(record.rarity);
   const draw = normalizeTalentDraw(record.draw);
 
@@ -817,14 +808,6 @@ export function normalizeTalent(value: unknown, index: number): TalentConfig {
     id: toRequiredString(record.id, `talent_${index + 1}`),
     name: toRequiredString(record.name, `天赋 ${index + 1}`),
     description: toRequiredString(record.description, ""),
-    category:
-      category === "combat" ||
-      category === "magic" ||
-      category === "survival" ||
-      category === "social" ||
-      category === "misc"
-        ? category
-        : undefined,
     icon: toOptionalString(record.icon),
     ...(rarity ? { rarity } : {}),
     ...(draw ? { draw } : {}),

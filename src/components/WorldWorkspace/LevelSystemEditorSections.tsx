@@ -1,5 +1,5 @@
 import { AlertTriangle, Plus, Trash2 } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { Button, Card, Input, Select, Toggle } from "@/components/ui";
 import type { LevelSystemConfig } from "@/lib/world/types";
@@ -226,6 +226,83 @@ export function StatusBadge({
   );
 }
 
+function CompactSelectionButton({
+  selected,
+  title,
+  description,
+  meta,
+  onClick,
+}: {
+  selected: boolean;
+  title: string;
+  description: string;
+  meta?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      className="w-full rounded-xl border px-3 py-3 text-left transition-colors"
+      style={{
+        color: selected ? color("textPrimary") : color("textSecondary"),
+        background: selected
+          ? colorAlpha("primary", 0.12)
+          : colorAlpha("bgCard", 0.18),
+        borderColor: colorAlpha(
+          selected ? "primary" : "border",
+          selected ? 0.42 : 0.28,
+        ),
+        boxShadow: selected
+          ? `0 0 16px ${colorAlpha("primary", 0.12)}`
+          : "none",
+      }}
+      onClick={onClick}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p
+            className="truncate text-sm font-medium"
+            style={{
+              color: selected ? color("primary") : color("textPrimary"),
+            }}
+          >
+            {title}
+          </p>
+          <p
+            className="mt-1 text-xs"
+            style={{
+              color: colorAlpha("textMuted", selected ? 0.82 : 0.72),
+            }}
+          >
+            {description}
+          </p>
+        </div>
+        {meta ? (
+          <span
+            className="shrink-0 rounded-full border px-2 py-1 text-[11px]"
+            style={{
+              color: selected
+                ? color("primary")
+                : colorAlpha("textMuted", 0.82),
+              borderColor: colorAlpha(
+                selected ? "primary" : "border",
+                selected ? 0.36 : 0.24,
+              ),
+              background: selected
+                ? colorAlpha("primary", 0.12)
+                : colorAlpha("bgCard", 0.24),
+            }}
+          >
+            {meta}
+          </span>
+        ) : null}
+      </div>
+    </button>
+  );
+}
+
 export function TagToggleGroup({
   options,
   selectedValues,
@@ -407,6 +484,47 @@ export function LevelProgressEditor({
   entries: LevelProgressEntry[];
   onChange: (entries: LevelProgressEntry[]) => void;
 }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const highestLevel = useMemo(
+    () => entries.reduce((max, entry) => Math.max(max, entry.level), 0),
+    [entries],
+  );
+  const highestRequiredProgress = useMemo(
+    () =>
+      entries.reduce((max, entry) => Math.max(max, entry.requiredProgress), 0),
+    [entries],
+  );
+
+  useEffect(() => {
+    if (entries.length === 0) {
+      if (activeIndex !== 0) {
+        setActiveIndex(0);
+      }
+      return;
+    }
+
+    if (activeIndex > entries.length - 1) {
+      setActiveIndex(entries.length - 1);
+    }
+  }, [activeIndex, entries.length]);
+
+  const resolvedActiveIndex =
+    entries.length === 0 ? -1 : Math.min(activeIndex, entries.length - 1);
+  const activeEntry =
+    resolvedActiveIndex >= 0 ? entries[resolvedActiveIndex] : null;
+
+  const handleUpdateEntry = (updates: Partial<LevelProgressEntry>) => {
+    if (resolvedActiveIndex < 0) {
+      return;
+    }
+
+    onChange(
+      entries.map((item, itemIndex) =>
+        itemIndex === resolvedActiveIndex ? { ...item, ...updates } : item,
+      ),
+    );
+  };
+
   return (
     <div
       className="space-y-3 rounded-xl border px-4 py-3"
@@ -416,21 +534,31 @@ export function LevelProgressEditor({
       }}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <SectionHeader
-          title="等级进度"
-          description="按等级顺序维护升级数据。每项同时定义等级值、等级名称，以及达到该等级所需的累计进度。"
-        />
+        <div className="space-y-2">
+          <SectionHeader
+            title="等级进度"
+            description="改为先浏览等级摘要，再只展开当前选中项编辑，适合大量大小境界并存的长列表。"
+          />
+          {entries.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge label="等级数" value={`${entries.length} 项`} />
+              <StatusBadge label="最高等级" value={`Lv.${highestLevel}`} />
+              <StatusBadge
+                label="最高门槛"
+                value={`${highestRequiredProgress}`}
+              />
+            </div>
+          ) : null}
+        </div>
         <Button
           variant="outline"
           size="sm"
-          onClick={() =>
+          onClick={() => {
+            setActiveIndex(entries.length);
             onChange([
               ...entries,
               {
-                level:
-                  entries.length > 0
-                    ? Math.max(...entries.map((entry) => entry.level)) + 1
-                    : 1,
+                level: highestLevel > 0 ? highestLevel + 1 : 1,
                 name: "新等级",
                 requiredProgress:
                   entries.length > 0
@@ -440,8 +568,8 @@ export function LevelProgressEditor({
                       )
                     : 0,
               },
-            ])
-          }
+            ]);
+          }}
         >
           <Plus className="mr-1 h-4 w-4" />
           添加等级
@@ -454,86 +582,113 @@ export function LevelProgressEditor({
         </InlineHint>
       ) : (
         <div className="space-y-3">
-          {entries.map((entry, index) => (
+          <div
+            className="max-h-72 overflow-y-auto rounded-xl border p-2"
+            style={{
+              borderColor: colorAlpha("border", 0.26),
+              background: colorAlpha("bgCard", 0.14),
+            }}
+          >
             <div
-              key={`level-progress-${index}`}
-              className="grid gap-3 md:grid-cols-[7rem_minmax(0,1.1fr)_minmax(0,1fr)_auto] [&>label]:min-w-0"
+              className="grid gap-2 md:grid-cols-2 xl:grid-cols-3"
+              role="tablist"
+              aria-label="等级列表"
             >
-              <EditorField label="等级值">
-                <Input
-                  type="number"
-                  value={entry.level}
-                  onChange={(event) =>
-                    onChange(
-                      entries.map((item, itemIndex) =>
-                        itemIndex === index
-                          ? {
-                              ...item,
-                              level: Math.max(
-                                1,
-                                Number(event.target.value) || 1,
-                              ),
-                            }
-                          : item,
-                      ),
-                    )
-                  }
+              {entries.map((entry, index) => (
+                <CompactSelectionButton
+                  key={`level-progress-${index}`}
+                  selected={index === resolvedActiveIndex}
+                  title={`Lv.${entry.level} · ${entry.name.trim() || `未命名等级 ${index + 1}`}`}
+                  description={`达到该等级所需进度 ${entry.requiredProgress}`}
+                  meta={`#${index + 1}`}
+                  onClick={() => setActiveIndex(index)}
                 />
-              </EditorField>
-              <EditorField label="等级名称">
-                <Input
-                  value={entry.name}
-                  onChange={(event) =>
-                    onChange(
-                      entries.map((item, itemIndex) =>
-                        itemIndex === index
-                          ? {
-                              ...item,
-                              name: event.target.value,
-                            }
-                          : item,
-                      ),
-                    )
-                  }
-                  placeholder="如：见习者 / 筑基 / 青铜"
-                />
-              </EditorField>
-              <EditorField label="达到该等级所需进度">
-                <Input
-                  type="number"
-                  value={entry.requiredProgress}
-                  onChange={(event) =>
-                    onChange(
-                      entries.map((item, itemIndex) =>
-                        itemIndex === index
-                          ? {
-                              ...item,
-                              requiredProgress: Math.max(
-                                0,
-                                Number(event.target.value) || 0,
-                              ),
-                            }
-                          : item,
-                      ),
-                    )
-                  }
-                />
-              </EditorField>
-              <div className="flex items-end">
+              ))}
+            </div>
+          </div>
+
+          {activeEntry ? (
+            <Card
+              variant="outlined"
+              whileHover={EDITOR_CARD_HOVER_STYLE}
+              className="space-y-4 p-4"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-2">
+                  <SectionHeader
+                    title={`编辑 ${activeEntry.name.trim() || `等级 ${resolvedActiveIndex + 1}`}`}
+                    description="仅展开当前选中的等级条目，便于快速定位并减少长表单滚动。"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <StatusBadge
+                      label="等级值"
+                      value={`Lv.${activeEntry.level}`}
+                    />
+                    <StatusBadge
+                      label="累计门槛"
+                      value={`${activeEntry.requiredProgress}`}
+                    />
+                  </div>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() =>
+                  onClick={() => {
+                    setActiveIndex((currentIndex) =>
+                      entries.length <= 1
+                        ? 0
+                        : Math.min(currentIndex, entries.length - 2),
+                    );
                     onChange(
-                      entries.filter((_, itemIndex) => itemIndex !== index),
-                    )
-                  }
+                      entries.filter(
+                        (_, itemIndex) => itemIndex !== resolvedActiveIndex,
+                      ),
+                    );
+                  }}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="mr-1 h-4 w-4" />
+                  删除等级
                 </Button>
               </div>
-            </div>
-          ))}
+
+              <div className="grid gap-3 md:grid-cols-[7rem_minmax(0,1.1fr)_minmax(0,1fr)] [&>label]:min-w-0">
+                <EditorField label="等级值">
+                  <Input
+                    type="number"
+                    value={activeEntry.level}
+                    onChange={(event) =>
+                      handleUpdateEntry({
+                        level: Math.max(1, Number(event.target.value) || 1),
+                      })
+                    }
+                  />
+                </EditorField>
+                <EditorField label="等级名称">
+                  <Input
+                    value={activeEntry.name}
+                    onChange={(event) =>
+                      handleUpdateEntry({ name: event.target.value })
+                    }
+                    placeholder="如：见习者 / 筑基 / 青铜"
+                  />
+                </EditorField>
+                <EditorField label="达到该等级所需进度">
+                  <Input
+                    type="number"
+                    value={activeEntry.requiredProgress}
+                    onChange={(event) =>
+                      handleUpdateEntry({
+                        requiredProgress: Math.max(
+                          0,
+                          Number(event.target.value) || 0,
+                        ),
+                      })
+                    }
+                  />
+                </EditorField>
+              </div>
+            </Card>
+          ) : null}
         </div>
       )}
     </div>
@@ -549,6 +704,46 @@ export function MilestoneGrowthEditor({
   fieldOptions: SelectOption[];
   onChange: (entries: MilestoneGrowthEntry[]) => void;
 }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const highestMilestoneLevel = useMemo(
+    () =>
+      milestones.reduce((max, milestone) => Math.max(max, milestone.level), 0),
+    [milestones],
+  );
+
+  useEffect(() => {
+    if (milestones.length === 0) {
+      if (activeIndex !== 0) {
+        setActiveIndex(0);
+      }
+      return;
+    }
+
+    if (activeIndex > milestones.length - 1) {
+      setActiveIndex(milestones.length - 1);
+    }
+  }, [activeIndex, milestones.length]);
+
+  const resolvedActiveIndex =
+    milestones.length === 0 ? -1 : Math.min(activeIndex, milestones.length - 1);
+  const activeMilestone =
+    resolvedActiveIndex >= 0 ? milestones[resolvedActiveIndex] : null;
+  const activeAttributeCount = activeMilestone
+    ? Object.keys(activeMilestone.attributes ?? {}).length
+    : 0;
+
+  const handleUpdateMilestone = (updates: Partial<MilestoneGrowthEntry>) => {
+    if (resolvedActiveIndex < 0) {
+      return;
+    }
+
+    onChange(
+      milestones.map((item, itemIndex) =>
+        itemIndex === resolvedActiveIndex ? { ...item, ...updates } : item,
+      ),
+    );
+  };
+
   return (
     <div
       className="space-y-3 rounded-xl border px-4 py-3"
@@ -558,22 +753,34 @@ export function MilestoneGrowthEditor({
       }}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <SectionHeader
-          title="关键等级成长"
-          description="为指定等级叠加额外成长，适合里程碑突破、转职或阶段性强化。"
-        />
+        <div className="space-y-2">
+          <SectionHeader
+            title="关键等级成长"
+            description="先浏览里程碑摘要，再编辑当前选中项，避免阶段奖励配置在长表单中反复滚动。"
+          />
+          {milestones.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge label="里程碑数" value={`${milestones.length} 项`} />
+              <StatusBadge
+                label="最高触发等级"
+                value={`Lv.${highestMilestoneLevel}`}
+              />
+            </div>
+          ) : null}
+        </div>
         <Button
           variant="outline"
           size="sm"
-          onClick={() =>
+          onClick={() => {
+            setActiveIndex(milestones.length);
             onChange([
               ...milestones,
               {
                 level: milestones.length + 1,
                 attributes: {},
               },
-            ])
-          }
+            ]);
+          }}
         >
           <Plus className="mr-1 h-4 w-4" />
           添加里程碑
@@ -586,25 +793,75 @@ export function MilestoneGrowthEditor({
         </InlineHint>
       ) : (
         <div className="space-y-3">
-          {milestones.map((milestone, index) => (
+          <div
+            className="max-h-60 overflow-y-auto rounded-xl border p-2"
+            style={{
+              borderColor: colorAlpha("border", 0.26),
+              background: colorAlpha("bgCard", 0.14),
+            }}
+          >
+            <div
+              className="grid gap-2 md:grid-cols-2 xl:grid-cols-3"
+              role="tablist"
+              aria-label="里程碑列表"
+            >
+              {milestones.map((milestone, index) => {
+                const attributeCount = Object.keys(
+                  milestone.attributes ?? {},
+                ).length;
+
+                return (
+                  <CompactSelectionButton
+                    key={`milestone-${index}`}
+                    selected={index === resolvedActiveIndex}
+                    title={`Lv.${milestone.level}`}
+                    description={`${attributeCount} 项额外成长`}
+                    meta={`#${index + 1}`}
+                    onClick={() => setActiveIndex(index)}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          {activeMilestone ? (
             <Card
-              key={`milestone-${index}`}
               variant="outlined"
+              whileHover={EDITOR_CARD_HOVER_STYLE}
               className="space-y-4 p-4"
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <SectionHeader
-                  title={`里程碑 ${index + 1}`}
-                  description="定义该等级额外获得的属性成长。"
-                />
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-2">
+                  <SectionHeader
+                    title={`里程碑 ${resolvedActiveIndex + 1}`}
+                    description="移除了悬浮放大，仅保留颜色与边框反馈，避免选中与编辑时的视觉跳动。"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <StatusBadge
+                      label="触发等级"
+                      value={`Lv.${activeMilestone.level}`}
+                    />
+                    <StatusBadge
+                      label="额外成长"
+                      value={`${activeAttributeCount} 项`}
+                    />
+                  </div>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() =>
+                  onClick={() => {
+                    setActiveIndex((currentIndex) =>
+                      milestones.length <= 1
+                        ? 0
+                        : Math.min(currentIndex, milestones.length - 2),
+                    );
                     onChange(
-                      milestones.filter((_, itemIndex) => itemIndex !== index),
-                    )
-                  }
+                      milestones.filter(
+                        (_, itemIndex) => itemIndex !== resolvedActiveIndex,
+                      ),
+                    );
+                  }}
                 >
                   <Trash2 className="mr-1 h-4 w-4" />
                   删除里程碑
@@ -614,21 +871,11 @@ export function MilestoneGrowthEditor({
               <EditorField label="触发等级">
                 <Input
                   type="number"
-                  value={milestone.level}
+                  value={activeMilestone.level}
                   onChange={(event) =>
-                    onChange(
-                      milestones.map((item, itemIndex) =>
-                        itemIndex === index
-                          ? {
-                              ...item,
-                              level: Math.max(
-                                1,
-                                Number(event.target.value) || 1,
-                              ),
-                            }
-                          : item,
-                      ),
-                    )
+                    handleUpdateMilestone({
+                      level: Math.max(1, Number(event.target.value) || 1),
+                    })
                   }
                 />
               </EditorField>
@@ -639,22 +886,13 @@ export function MilestoneGrowthEditor({
                 addLabel="添加属性成长"
                 emptyMessage="当前没有额外成长，可继续添加属性项。"
                 fieldOptions={fieldOptions}
-                value={milestone.attributes}
+                value={activeMilestone.attributes}
                 onChange={(attributes) =>
-                  onChange(
-                    milestones.map((item, itemIndex) =>
-                      itemIndex === index
-                        ? {
-                            ...item,
-                            attributes: attributes ?? {},
-                          }
-                        : item,
-                    ),
-                  )
+                  handleUpdateMilestone({ attributes: attributes ?? {} })
                 }
               />
             </Card>
-          ))}
+          ) : null}
         </div>
       )}
     </div>

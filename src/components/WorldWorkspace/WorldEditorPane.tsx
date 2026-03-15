@@ -40,10 +40,6 @@ import type {
 import { LevelSystemEditor } from "./LevelSystemEditor";
 import { TalentPoolEditor } from "./TalentPoolEditor";
 import { TalentRarityEditor } from "./TalentRarityEditor";
-import {
-  getTalentCategoryLabel,
-  TALENT_CATEGORY_OPTIONS,
-} from "./world-workspace-talent-shared";
 import { WorldEditorPaneAttributesSection } from "./WorldEditorPaneAttributesSection";
 import { WorldEditorPaneCheckRulesSection } from "./WorldEditorPaneCheckRulesSection";
 import { WorldEditorPaneConditionsSection } from "./WorldEditorPaneConditionsSection";
@@ -156,7 +152,7 @@ const SCOPED_RAW_RULES_EDITOR_META: Record<
   talents: {
     title: "高级模式 · 天赋规则编辑",
     description:
-      "仅展示并回写 talents / talentRules 子树；前置属性条件与选择规则已结构化，复杂 modifiers 继续通过 JSON 兜底。",
+      "仅展示并回写 talents / talentRules 子树；抽取元数据与选择规则已结构化，复杂 modifiers 继续通过 JSON 兜底。",
     footnote:
       "只影响当前分区对应的规则子树，其余规则分支、基础信息与叙事启动保持不变。",
   },
@@ -1231,7 +1227,7 @@ export function WorldEditorPane({
       sectionContent = (
         <FormSection
           title="天赋"
-          description="维护角色创建可选天赋、前置属性条件与基础选择规则；复杂 modifier 继续通过高级规则编辑兜底。"
+          description="维护角色创建可选天赋、抽取元数据与基础选择规则；复杂 modifier 继续通过高级规则编辑兜底。"
           action={
             <div className="flex flex-wrap gap-2">
               <SectionRulesEditorButton
@@ -1261,10 +1257,6 @@ export function WorldEditorPane({
 
             <TalentPoolEditor
               pools={talentPools}
-              categoryOptions={TALENT_CATEGORY_OPTIONS.map((option) => ({
-                value: option.value,
-                label: option.label,
-              }))}
               rarityOptions={talentRarityOptions}
               talentOptions={talents}
               onAdd={onAddTalentPool}
@@ -1297,9 +1289,6 @@ export function WorldEditorPane({
                         talent.name.trim() ||
                         talent.id.trim() ||
                         `未命名天赋 ${index + 1}`;
-                      const categoryLabel = getTalentCategoryLabel(
-                        talent.category,
-                      );
                       return (
                         <button
                           key={`${talent.id || "talent"}-${index}`}
@@ -1356,12 +1345,6 @@ export function WorldEditorPane({
                             >
                               {isActive ? "当前" : `#${index + 1}`}
                             </span>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <DimensionMetaBadge
-                              label="分类"
-                              value={categoryLabel ?? "其他"}
-                            />
                           </div>
                           <p
                             className="mt-2 text-[11px] leading-5"
@@ -1431,12 +1414,6 @@ export function WorldEditorPane({
                               label="ID"
                               value={activeTalent.id || "未设置"}
                               mono
-                            />
-                            <DimensionMetaBadge
-                              label="分类"
-                              value={getTalentCategoryLabel(
-                                activeTalent.category,
-                              )}
                             />
                           </div>
                         </div>

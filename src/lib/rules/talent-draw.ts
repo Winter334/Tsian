@@ -5,7 +5,6 @@ import { createSeededRandom } from "./dice";
 export interface TalentDrawContext {
   allTalents: TalentConfig[];
   ownedTalentIds: string[];
-  characterLevel: number;
   talentRules: WorldConfig["talentRules"];
   poolId?: string;
   guaranteedRarity?: string;
@@ -39,7 +38,6 @@ function hashString(value: string): number {
 function createDeterministicRandom(ctx: TalentDrawContext): () => number {
   const rules = ctx.talentRules;
   const seedSource = [
-    `level:${ctx.characterLevel}`,
     `pool:${ctx.poolId ?? ""}`,
     `guaranteed:${ctx.guaranteedRarity ?? ""}`,
     `offers:${ctx.offersPerDraw ?? ""}`,
@@ -49,21 +47,21 @@ function createDeterministicRandom(ctx: TalentDrawContext): () => number {
     `rarities:${(rules?.rarities ?? [])
       .map(
         (rarity) =>
-          `${rarity.id}:${rarity.weight}:${rarity.label}:${rarity.colorToken ?? ""}:${rarity.glowToken ?? ""}:${rarity.minLevel ?? ""}`,
+          `${rarity.id}:${rarity.weight}:${rarity.label}:${rarity.colorToken ?? ""}:${rarity.glowToken ?? ""}`,
       )
       .sort()
       .join("|")}`,
     `pools:${(rules?.pools ?? [])
       .map(
         (pool) =>
-          `${pool.id}:${pool.label ?? ""}:${(pool.allowedCategories ?? []).slice().sort().join(",")}:${(pool.allowedRarities ?? []).slice().sort().join(",")}:${(pool.includeTalentIds ?? []).slice().sort().join(",")}:${(pool.excludeTalentIds ?? []).slice().sort().join(",")}:${pool.minLevel ?? ""}`,
+          `${pool.id}:${pool.label ?? ""}:${(pool.allowedRarities ?? []).slice().sort().join(",")}:${(pool.includeTalentIds ?? []).slice().sort().join(",")}:${(pool.excludeTalentIds ?? []).slice().sort().join(",")}`,
       )
       .sort()
       .join("|")}`,
     `talents:${ctx.allTalents
       .map(
         (talent) =>
-          `${talent.id}:${talent.rarity ?? ""}:${talent.category ?? ""}:${talent.name}:${talent.draw?.weight ?? ""}:${talent.draw?.minLevel ?? ""}:${(talent.draw?.poolIds ?? []).slice().sort().join(",")}`,
+          `${talent.id}:${talent.rarity ?? ""}:${talent.name}:${talent.draw?.weight ?? ""}:${(talent.draw?.poolIds ?? []).slice().sort().join(",")}`,
       )
       .sort()
       .join("|")}`,
@@ -139,17 +137,9 @@ function matchesPoolMembership(
 function applyPoolFilter(
   talents: TalentConfig[],
   pool: TalentPoolConfig,
-  characterLevel: number,
 ): TalentConfig[] {
-  if ((pool.minLevel ?? 0) > characterLevel) {
-    return [];
-  }
-
   const includeIds = new Set(pool.includeTalentIds ?? []);
   const excludeIds = new Set(pool.excludeTalentIds ?? []);
-  const allowedCategories = pool.allowedCategories?.length
-    ? new Set(pool.allowedCategories)
-    : null;
   const allowedRarities = pool.allowedRarities?.length
     ? new Set(pool.allowedRarities)
     : null;
@@ -164,10 +154,6 @@ function applyPoolFilter(
     }
 
     if (!matchesPoolMembership(talent, pool.id)) {
-      return false;
-    }
-
-    if (allowedCategories && !allowedCategories.has(talent.category ?? "")) {
       return false;
     }
 
@@ -197,17 +183,16 @@ function applyBaseFilter(
       return false;
     }
 
-    return (talent.draw?.minLevel ?? 0) <= ctx.characterLevel;
+    return true;
   });
 }
 
 function getActiveRarities(
   rules: WorldConfig["talentRules"],
-  characterLevel: number,
 ): TalentRarityConfig[] {
-  return [...(rules?.rarities ?? [])]
-    .filter((rarity) => (rarity.minLevel ?? 0) <= characterLevel)
-    .sort((left, right) => left.id.localeCompare(right.id));
+  return [...(rules?.rarities ?? [])].sort((left, right) =>
+    left.id.localeCompare(right.id),
+  );
 }
 
 function buildRarityBuckets(
@@ -353,10 +338,10 @@ export function generateTalentCandidates(
   }
 
   const poolCandidates = pool
-    ? applyPoolFilter(dedupedTalents, pool, ctx.characterLevel)
+    ? applyPoolFilter(dedupedTalents, pool)
     : dedupedTalents;
   const filteredCandidates = applyBaseFilter(poolCandidates, ctx);
-  const activeRarities = getActiveRarities(ctx.talentRules, ctx.characterLevel);
+  const activeRarities = getActiveRarities(ctx.talentRules);
   const hasRarityRules = activeRarities.length > 0;
   const rarityBuckets = hasRarityRules
     ? buildRarityBuckets(filteredCandidates, activeRarities)

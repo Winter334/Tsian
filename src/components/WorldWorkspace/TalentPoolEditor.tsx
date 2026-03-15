@@ -13,7 +13,6 @@ type TalentPool = NonNullable<
 
 interface TalentPoolEditorProps {
   pools: TalentPool[];
-  categoryOptions: Array<{ value: string; label: string }>;
   rarityOptions: Array<{ value: string; label: string }>;
   talentOptions: TalentConfig[];
   onAdd: () => void;
@@ -29,7 +28,6 @@ const EDITOR_CARD_HOVER_STYLE = {
 
 export function TalentPoolEditor({
   pools,
-  categoryOptions,
   rarityOptions,
   talentOptions,
   onAdd,
@@ -80,10 +78,6 @@ export function TalentPoolEditor({
     });
   };
 
-  const categoryItems = categoryOptions.map((option) => ({
-    id: option.value,
-    name: option.label,
-  }));
   const rarityItems = rarityOptions.map((option) => ({
     id: option.value,
     name: option.label,
@@ -111,7 +105,7 @@ export function TalentPoolEditor({
             className="mt-1 text-xs"
             style={{ color: colorAlpha("textMuted", 0.72) }}
           >
-            为不同来源的抽取流程配置分类、品质、显式包含/排除与等级门槛。
+            为不同来源的抽取流程配置品质、显式包含/排除与池归属。
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={handleAdd}>
@@ -176,10 +170,6 @@ export function TalentPoolEditor({
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <MetaBadge
-                      label="分类"
-                      value={String(pool.allowedCategories?.length ?? 0)}
-                    />
-                    <MetaBadge
                       label="品质"
                       value={String(pool.allowedRarities?.length ?? 0)}
                     />
@@ -197,7 +187,7 @@ export function TalentPoolEditor({
                 background: colorAlpha("bgCard", 0.16),
               }}
             >
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-2">
                 <Field label="抽取池 ID">
                   <Input
                     value={activePool.id}
@@ -216,33 +206,7 @@ export function TalentPoolEditor({
                     placeholder="新手池"
                   />
                 </Field>
-                <Field label="最低等级门槛（可选）">
-                  <Input
-                    type="number"
-                    value={activePool.minLevel ?? ""}
-                    onChange={(event) =>
-                      onUpdate(activePool.id, {
-                        minLevel:
-                          event.target.value.trim() === ""
-                            ? undefined
-                            : Number(event.target.value),
-                      })
-                    }
-                    placeholder="5"
-                  />
-                </Field>
               </div>
-
-              <TagSelectionField
-                label="允许分类"
-                description="不选时表示不按分类过滤。"
-                items={categoryItems}
-                value={activePool.allowedCategories ?? []}
-                onChange={(nextValue) =>
-                  onUpdate(activePool.id, { allowedCategories: nextValue })
-                }
-                emptyMessage="当前没有可用天赋分类。"
-              />
 
               <TagSelectionField
                 label="允许品质"
@@ -331,7 +295,6 @@ function MetaBadge({ label, value }: { label: string; value: string }) {
     </span>
   );
 }
-
 
 function EmptyState({ message }: { message: string }) {
   return (

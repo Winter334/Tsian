@@ -309,33 +309,6 @@ function buildGrantItemRewardPayload(
   };
 }
 
-function resolveCharacterLevel(
-  character: Character,
-  worldConfig: WorldConfig,
-): number {
-  const levelKey =
-    worldConfig.levelSystem?.levelAttributeKey?.trim() || "level";
-  const defaultLevel =
-    worldConfig.primaryAttributes.find(
-      (attribute) => attribute.key === levelKey,
-    )?.defaultValue ?? 1;
-  const attributes = isRecord(character.attributes) ? character.attributes : {};
-  const levelValue = attributes[levelKey];
-
-  if (isFiniteNumber(levelValue)) {
-    return Math.max(1, Math.trunc(levelValue));
-  }
-
-  if (typeof levelValue === "string") {
-    const parsedValue = Number(levelValue);
-    if (Number.isFinite(parsedValue)) {
-      return Math.max(1, Math.trunc(parsedValue));
-    }
-  }
-
-  return defaultLevel;
-}
-
 function resolveRequiredProgressForLevel(
   levels: WorldConfig["levelSystem"] extends infer T
     ? T extends { progress?: infer P }
@@ -4101,7 +4074,6 @@ export async function claimTalentDrawHandler(
     const drawResult = generateTalentCandidates({
       allTalents: worldConfig.talents ?? [],
       ownedTalentIds,
-      characterLevel: resolveCharacterLevel(character, worldConfig),
       talentRules: worldConfig.talentRules,
       ...(pendingDraw.poolId === undefined
         ? {}

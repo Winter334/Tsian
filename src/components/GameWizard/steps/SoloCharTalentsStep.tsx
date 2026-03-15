@@ -1,12 +1,15 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronRight, Sparkles, Star, Wrench } from "lucide-react";
+import { Check, ChevronRight, Sparkles, Star } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button, Card } from "@/components/ui";
 import type { PassiveModifier } from "@/domain/types/rule-script";
 import { useMotionTokens } from "@/hooks";
 import { generateTalentCandidates } from "@/lib/rules/talent-draw";
-import { getCategoryIcon } from "@/lib/ui/category-icons";
+import {
+  getTalentRarityVisual,
+  type TalentRarityConfig,
+} from "@/lib/ui/talent-rarity";
 import type { TalentConfig } from "@/lib/world/types";
 import {
   aggregateDimensionEffects,
@@ -25,30 +28,12 @@ import type { StepProps } from "../types";
 
 type DrawPhase = "idle" | "offering";
 type SourceType = "dimension" | "draw";
-type ColorKey = Parameters<typeof color>[0];
 
 interface ObtainedTalentRecord {
   talentId: string;
   talent: TalentConfig;
   source: SourceType;
   reason: string;
-}
-
-function getCategoryLabel(category?: TalentConfig["category"]): string {
-  switch (category) {
-    case "combat":
-      return "战斗";
-    case "magic":
-      return "魔法";
-    case "survival":
-      return "生存";
-    case "social":
-      return "社交";
-    case "misc":
-      return "其他";
-    default:
-      return "通用";
-  }
 }
 
 function formatModifierValue(value: PassiveModifier["value"]): string {
@@ -108,85 +93,41 @@ function getTalentEffectLines(talent: TalentConfig): string[] {
   return Array.from(new Set(lines));
 }
 
-function camelToKebab(value: string): string {
-  return value.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
-}
-
-function resolveConfigTokenColor(
-  token: string | undefined,
-  fallback: ColorKey,
-): string {
-  if (!token?.trim()) {
-    return color(fallback);
-  }
-
-  return `var(--color-${camelToKebab(token.trim())})`;
-}
-
-function resolveConfigTokenAlpha(
-  token: string | undefined,
-  alpha: number,
-  fallback: ColorKey,
-): string {
-  const baseColor = resolveConfigTokenColor(token, fallback);
-  return `color-mix(in srgb, ${baseColor} ${Math.round(alpha * 100)}%, transparent)`;
-}
-
 function createUnknownTalent(talentId: string): TalentConfig {
   return {
     id: talentId,
     name: talentId,
     description: "该天赋未在当前世界配置中找到。",
-    category: "misc",
   };
-}
-
-function getNumericAttribute(value: unknown, fallback: number): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return fallback;
 }
 
 function TalentCard({
   talent,
+  rarity,
   rarityLabel,
-  rarityColorToken,
   source,
   reason,
   interactive,
   onClick,
 }: {
   talent: TalentConfig;
+  rarity: Pick<TalentRarityConfig, "colorToken" | "glowToken"> | null;
   rarityLabel: string | null;
-  rarityColorToken?: string;
   source: SourceType;
   reason: string;
   interactive: boolean;
   onClick?: () => void;
 }) {
   const effectLines = useMemo(() => getTalentEffectLines(talent), [talent]);
-  const fallbackAccent: ColorKey =
-    source === "dimension" ? "secondary" : "primary";
-  const accentColor = resolveConfigTokenColor(rarityColorToken, fallbackAccent);
-  const accentSoft = resolveConfigTokenAlpha(
-    rarityColorToken,
-    0.14,
-    fallbackAccent,
-  );
-  const accentBorder = resolveConfigTokenAlpha(
-    rarityColorToken,
-    0.3,
-    fallbackAccent,
-  );
+  const sourceTone = source === "dimension" ? "secondary" : "primary";
+  const rarityVisual = getTalentRarityVisual(rarity, {
+    fallbackColor: sourceTone,
+    fallbackGlow: sourceTone,
+    backgroundAlpha: interactive ? 0.18 : 0.14,
+    borderAlpha: interactive ? 0.38 : 0.32,
+    glowAlpha: interactive ? 0.26 : 0.2,
+    strongGlowAlpha: interactive ? 0.4 : 0.32,
+  });
 
   return (
     <motion.div
@@ -202,50 +143,37 @@ function TalentCard({
         variant={interactive ? "elevated" : "outlined"}
         hover={interactive}
         onClick={interactive ? onClick : undefined}
-        className="h-full p-4 relative overflow-hidden"
+        className="relative h-full overflow-hidden p-4"
         style={{
           cursor: interactive ? "pointer" : "default",
-          borderColor:
-            source === "dimension"
-              ? colorAlpha("secondary", 0.35)
-              : accentBorder,
-          boxShadow:
-            source === "dimension"
-              ? glow("secondary", "sm", 0.16)
-              : `0 0 16px ${accentSoft}`,
-          background:
-            source === "dimension"
-              ? `linear-gradient(135deg, ${colorAlpha("secondary", 0.08)} 0%, ${colorAlpha("bgElevated", 0.92)} 100%)`
-              : `linear-gradient(135deg, ${accentSoft} 0%, ${colorAlpha("bgElevated", 0.9)} 100%)`,
+          borderColor: rarityVisual.accentBorder,
+          boxShadow: interactive
+            ? rarityVisual.accentGlowStrong
+            : rarityVisual.accentGlow,
+          background: `linear-gradient(135deg, ${rarityVisual.accentSoft} 0%, ${colorAlpha(
+            "bgElevated",
+            0.88,
+          )} 56%, ${rarityVisual.glowSoft} 100%)`,
         }}
       >
         <div className="flex items-start gap-3">
           <div
             className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
             style={{
-              background:
-                source === "dimension"
-                  ? colorAlpha("secondary", 0.14)
-                  : accentSoft,
-              border: `1px solid ${
-                source === "dimension"
-                  ? colorAlpha("secondary", 0.32)
-                  : accentBorder
-              }`,
-              color: source === "dimension" ? color("secondary") : accentColor,
+              background: `linear-gradient(135deg, ${rarityVisual.accentSoft} 0%, ${rarityVisual.glowSoft} 100%)`,
+              border: `1px solid ${rarityVisual.accentBorder}`,
+              color: rarityVisual.accentColor,
+              boxShadow: rarityVisual.accentGlow,
             }}
           >
-            {getCategoryIcon(talent.category, { miscIcon: Wrench, size: "md" })}
+            <Star className="h-5 w-5" />
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h3
                 className="text-sm font-semibold"
-                style={{
-                  color:
-                    source === "dimension" ? color("secondary") : accentColor,
-                }}
+                style={{ color: rarityVisual.accentColor }}
               >
                 {talent.name}
               </h3>
@@ -254,9 +182,10 @@ function TalentCard({
                 <span
                   className="rounded-full px-2 py-0.5 text-[11px] font-medium"
                   style={{
-                    background: accentSoft,
-                    color: accentColor,
-                    border: `1px solid ${accentBorder}`,
+                    background: rarityVisual.accentSoft,
+                    color: rarityVisual.accentColor,
+                    border: `1px solid ${rarityVisual.accentBorder}`,
+                    boxShadow: rarityVisual.accentGlow,
                   }}
                 >
                   {rarityLabel}
@@ -264,32 +193,11 @@ function TalentCard({
               ) : null}
 
               <span
-                className="rounded-full px-2 py-0.5 text-[11px]"
-                style={{
-                  background: colorAlpha("primary", 0.08),
-                  color: color("textMuted"),
-                  border: `1px solid ${colorAlpha("primary", 0.12)}`,
-                }}
-              >
-                {getCategoryLabel(talent.category)}
-              </span>
-
-              <span
                 className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]"
                 style={{
-                  background:
-                    source === "dimension"
-                      ? colorAlpha("secondary", 0.12)
-                      : colorAlpha("primary", 0.1),
-                  color:
-                    source === "dimension"
-                      ? color("secondary")
-                      : color("primary"),
-                  border: `1px solid ${
-                    source === "dimension"
-                      ? colorAlpha("secondary", 0.28)
-                      : colorAlpha("primary", 0.22)
-                  }`,
+                  background: colorAlpha(sourceTone, 0.12),
+                  color: color(sourceTone),
+                  border: `1px solid ${colorAlpha(sourceTone, 0.28)}`,
                 }}
               >
                 {source === "dimension" ? (
@@ -370,15 +278,6 @@ export function SoloCharTalentsStep({
   );
 
   const initialDrawCount = worldConfig.talentRules?.initialDrawCount ?? 2;
-  const levelAttributeKey =
-    worldConfig.levelSystem?.levelAttributeKey ?? "level";
-  const defaultCharacterLevel =
-    worldConfig.primaryAttributes.find((attr) => attr.key === levelAttributeKey)
-      ?.defaultValue ?? 1;
-  const characterLevel = getNumericAttribute(
-    context.attributes?.[levelAttributeKey],
-    defaultCharacterLevel,
-  );
 
   const dimensionEffects = useMemo(
     () =>
@@ -463,13 +362,11 @@ export function SoloCharTalentsStep({
     return generateTalentCandidates({
       allTalents,
       ownedTalentIds: obtainedTalentIds,
-      characterLevel,
       talentRules: worldConfig.talentRules,
       excludeTalentIds: excludedTalentIds,
     });
   }, [
     allTalents,
-    characterLevel,
     excludedTalentIds,
     isSharedBudgetMode,
     obtainedTalentIds,
@@ -485,8 +382,11 @@ export function SoloCharTalentsStep({
     remainingDraws > 0 &&
     nextDrawPreview.candidates.length === 0;
   const isOutOfAttributePoints =
-    isSharedBudgetMode && remainingDraws > 0 && remainingAttributePoints < talentPointCost;
-  const isComplete = remainingDraws === 0 || isPoolExhausted || isOutOfAttributePoints;
+    isSharedBudgetMode &&
+    remainingDraws > 0 &&
+    remainingAttributePoints < talentPointCost;
+  const isComplete =
+    remainingDraws === 0 || isPoolExhausted || isOutOfAttributePoints;
 
   const obtainedRecords = useMemo((): ObtainedTalentRecord[] => {
     const records: ObtainedTalentRecord[] = [];
@@ -615,14 +515,20 @@ export function SoloCharTalentsStep({
                 className="rounded-full px-3 py-1 text-xs font-medium"
                 style={{
                   background: colorAlpha(
-                    remainingAttributePoints < talentPointCost ? "warning" : "primary",
+                    remainingAttributePoints < talentPointCost
+                      ? "warning"
+                      : "primary",
                     0.12,
                   ),
                   color: color(
-                    remainingAttributePoints < talentPointCost ? "warning" : "primary",
+                    remainingAttributePoints < talentPointCost
+                      ? "warning"
+                      : "primary",
                   ),
                   border: `1px solid ${colorAlpha(
-                    remainingAttributePoints < talentPointCost ? "warning" : "primary",
+                    remainingAttributePoints < talentPointCost
+                      ? "warning"
+                      : "primary",
                     0.22,
                   )}`,
                 }}
@@ -677,17 +583,6 @@ export function SoloCharTalentsStep({
                     : `准备开始第 ${selectedTalentIds.length + 1} 抽`}
               </p>
             </div>
-
-            <div
-              className="rounded-full px-3 py-1 text-xs"
-              style={{
-                background: colorAlpha("bgElevated", 0.72),
-                color: colorAlpha("textSecondary", 0.88),
-                border: `1px solid ${colorAlpha("border", 0.16)}`,
-              }}
-            >
-              角色等级 Lv.{characterLevel}
-            </div>
           </div>
 
           <AnimatePresence mode="wait">
@@ -725,7 +620,7 @@ export function SoloCharTalentsStep({
                   className="mt-2 max-w-xl text-sm leading-relaxed"
                   style={{ color: colorAlpha("textMuted", 0.82) }}
                 >
-                  将根据当前等级、已拥有天赋与维度限制，生成一组新的候选天赋。确认后本轮会出现{" "}
+                  将根据当前已拥有天赋与维度限制，生成一组新的候选天赋。确认后本轮会出现{" "}
                   {nextDrawPreview.candidates.length || 0} 个可选项。
                   {isSharedBudgetMode
                     ? ` 本次选择后还会扣除 ${talentPointCost} 点属性点。`
@@ -762,8 +657,8 @@ export function SoloCharTalentsStep({
                     >
                       <TalentCard
                         talent={talent}
+                        rarity={rarity}
                         rarityLabel={rarity?.label ?? null}
-                        rarityColorToken={rarity?.colorToken}
                         source="draw"
                         reason="点击即可选中"
                         interactive
@@ -842,7 +737,7 @@ export function SoloCharTalentsStep({
                   {isOutOfAttributePoints
                     ? "当前角色创建共享属性点已不足以支付新的手动天赋，本次天赋步骤提前结束。"
                     : isPoolExhausted
-                      ? "当前世界、等级与维度限制下已经没有新的有效候选，本次角色创建的天赋抽取提前结束。"
+                      ? "当前世界、已拥有天赋与维度限制下已经没有新的有效候选，本次角色创建的天赋抽取提前结束。"
                       : "你已经完成本次角色创建阶段的全部天赋抽取，可以继续下一步确认最终角色信息。"}
                 </p>
               </motion.div>
@@ -905,8 +800,8 @@ export function SoloCharTalentsStep({
                   >
                     <TalentCard
                       talent={record.talent}
+                      rarity={rarity}
                       rarityLabel={rarity?.label ?? null}
-                      rarityColorToken={rarity?.colorToken}
                       source={record.source}
                       reason={record.reason}
                       interactive={false}
