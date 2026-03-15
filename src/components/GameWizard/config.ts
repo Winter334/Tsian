@@ -16,6 +16,11 @@ import {
   type CharacterDimension,
   type WorldConfig,
 } from "@/lib/world/types";
+import {
+  getManualTalentIds,
+  getRemainingCreationAttributePoints,
+  getTalentAttributePointCost,
+} from "./talent-point-budget";
 
 import type { GameMode, WizardContext, WizardStepConfig } from "./types";
 import { GAME_MODES } from "./types";
@@ -54,14 +59,24 @@ const FIXED_STEP_REGISTRY: Record<
   "solo-char-attributes": {
     component: SoloCharAttributesStep,
     validate: (ctx) => {
-      // 必须分配完所有点数（remaining === 0）
-      if (!ctx.allocatedPoints) return false;
-      const bonusPoints = ctx.worldConfig?.pointBuyRules?.bonusPoints ?? 10;
-      const total = Object.values(ctx.allocatedPoints).reduce(
-        (sum, v) => sum + v,
-        0,
+      const worldConfig = ctx.worldConfig;
+      if (!worldConfig) {
+        return false;
+      }
+
+      const selectedTalentIds = getManualTalentIds(
+        worldConfig,
+        ctx.dimensionSelections,
+        ctx.talentIds,
       );
-      return total === bonusPoints;
+
+      return (
+        getRemainingCreationAttributePoints(
+          worldConfig,
+          ctx.allocatedPoints,
+          selectedTalentIds.length,
+        ) === 0
+      );
     },
   },
   "solo-char-talents": {
@@ -76,13 +91,24 @@ const FIXED_STEP_REGISTRY: Record<
         worldConfig,
         ctx.dimensionSelections ?? {},
       );
-      const autoTalentIdSet = new Set(dimensionEffects.grantedTalents);
-      const selectedTalentIds = (ctx.talentIds ?? []).filter(
-        (talentId) => !autoTalentIdSet.has(talentId),
+      const selectedTalentIds = getManualTalentIds(
+        worldConfig,
+        ctx.dimensionSelections,
+        ctx.talentIds,
       );
       const initialDrawCount = worldConfig.talentRules?.initialDrawCount ?? 2;
+      const talentPointCost = getTalentAttributePointCost(worldConfig);
+      const remainingAttributePoints = getRemainingCreationAttributePoints(
+        worldConfig,
+        ctx.allocatedPoints,
+        selectedTalentIds.length,
+      );
 
       if (selectedTalentIds.length >= initialDrawCount) {
+        return true;
+      }
+
+      if (talentPointCost > 0 && remainingAttributePoints < talentPointCost) {
         return true;
       }
 

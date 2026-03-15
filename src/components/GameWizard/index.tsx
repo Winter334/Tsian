@@ -84,7 +84,6 @@ export function GameWizard({
     context.mode === "join-room" && context.worldConfig
       ? context.worldConfig
       : (context.worldConfig ?? authoredWorldConfig);
-  const requiredAttributePoints = worldConfig.pointBuyRules?.bonusPoints ?? 10;
 
   // 将 worldConfig 注入到 context 中（供步骤组件读取）
   useEffect(() => {
@@ -168,10 +167,7 @@ export function GameWizard({
     }
 
     if (currentStepId === "solo-char-attributes") {
-      const totalAllocated = Object.values(
-        context.allocatedPoints ?? {},
-      ).reduce((sum, value) => sum + value, 0);
-      setStepValid(totalAllocated === requiredAttributePoints);
+      setStepValid(currentStep.validate?.(context) ?? true);
       return;
     }
 
@@ -182,7 +178,6 @@ export function GameWizard({
     context,
     context.dimensionSelections,
     context.allocatedPoints,
-    requiredAttributePoints,
   ]);
 
   // 前进到下一步

@@ -581,8 +581,6 @@ export function normalizeTalentRules(
     typeof value.allowAcquireDuringGame === "boolean"
       ? value.allowAcquireDuringGame
       : undefined;
-  const freeDrawAttributeKey = toOptionalString(value.freeDrawAttributeKey);
-  const drawPointAttributeKey = toOptionalString(value.drawPointAttributeKey);
   const drawPointCost = toOptionalNonNegativeInteger(value.drawPointCost);
   const duplicatePolicy =
     value.duplicatePolicy === "exclude_owned" ||
@@ -603,8 +601,6 @@ export function normalizeTalentRules(
     initialDrawCount === undefined &&
     initialOffersPerDraw === undefined &&
     allowAcquireDuringGame === undefined &&
-    freeDrawAttributeKey === undefined &&
-    drawPointAttributeKey === undefined &&
     drawPointCost === undefined &&
     duplicatePolicy === undefined &&
     rarities.length === 0 &&
@@ -618,8 +614,6 @@ export function normalizeTalentRules(
     ...(initialDrawCount === undefined ? {} : { initialDrawCount }),
     ...(initialOffersPerDraw === undefined ? {} : { initialOffersPerDraw }),
     ...(allowAcquireDuringGame === undefined ? {} : { allowAcquireDuringGame }),
-    ...(freeDrawAttributeKey ? { freeDrawAttributeKey } : {}),
-    ...(drawPointAttributeKey ? { drawPointAttributeKey } : {}),
     ...(drawPointCost === undefined ? {} : { drawPointCost }),
     ...(duplicatePolicy === undefined ? {} : { duplicatePolicy }),
     ...(rarities.length > 0 ? { rarities } : {}),

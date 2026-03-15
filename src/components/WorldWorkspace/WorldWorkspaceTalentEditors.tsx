@@ -46,7 +46,7 @@ export function TalentRulesCardEditor({
           className="mt-1 text-xs"
           style={{ color: colorAlpha("textMuted", 0.72) }}
         >
-          这里控制角色创建阶段的抽取次数、候选规模、消耗字段与重复策略；品质、抽取池和保底规则在下方分区单独维护。
+          这里控制角色创建阶段的抽取次数、候选规模、属性点消耗与重复策略；品质、抽取池和保底规则在下方分区单独维护。
         </p>
       </div>
 
@@ -95,25 +95,7 @@ export function TalentRulesCardEditor({
             }))}
           />
         </Field>
-        <Field label="免费抽取属性键（可选）">
-          <Input
-            value={talentRules?.freeDrawAttributeKey ?? ""}
-            onChange={(event) =>
-              onChange({ freeDrawAttributeKey: event.target.value })
-            }
-            placeholder="free_talent_draws"
-          />
-        </Field>
-        <Field label="抽取点属性键（可选）">
-          <Input
-            value={talentRules?.drawPointAttributeKey ?? ""}
-            onChange={(event) =>
-              onChange({ drawPointAttributeKey: event.target.value })
-            }
-            placeholder="talent_draw_points"
-          />
-        </Field>
-        <Field label="每次抽取消耗点数（可选）">
+        <Field label="每次选择消耗属性点（可选）">
           <Input
             type="number"
             value={talentRules?.drawPointCost ?? ""}

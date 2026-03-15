@@ -15,6 +15,12 @@ import {
 import { createStaggerVariants } from "@/styles/motion-variants";
 import { color, colorAlpha, glow } from "@/styles/tokens";
 
+import {
+  getManualTalentIds,
+  getRemainingCreationAttributePoints,
+  getTalentAttributePointCost,
+  usesSharedTalentPointBudget,
+} from "../talent-point-budget";
 import type { StepProps } from "../types";
 
 type DrawPhase = "idle" | "offering";
@@ -410,15 +416,15 @@ export function SoloCharTalentsStep({
     return sources;
   }, [context.dimensionSelections, worldConfig.dimensions]);
 
-  const initialSelectedTalentIds = useMemo(() => {
-    const autoTalentIdSet = new Set(autoTalentIds);
-    const excludedTalentIdSet = new Set(excludedTalentIds);
-
-    return Array.from(new Set(context.talentIds ?? [])).filter(
-      (talentId) =>
-        !autoTalentIdSet.has(talentId) && !excludedTalentIdSet.has(talentId),
-    );
-  }, [autoTalentIds, context.talentIds, excludedTalentIds]);
+  const initialSelectedTalentIds = useMemo(
+    () =>
+      getManualTalentIds(
+        worldConfig,
+        context.dimensionSelections,
+        context.talentIds,
+      ),
+    [context.dimensionSelections, context.talentIds, worldConfig],
+  );
 
   const [selectedTalentIds, setSelectedTalentIds] = useState<string[]>(
     initialSelectedTalentIds,
@@ -432,6 +438,13 @@ export function SoloCharTalentsStep({
     () => [...new Set([...autoTalentIds, ...selectedTalentIds])],
     [autoTalentIds, selectedTalentIds],
   );
+  const talentPointCost = getTalentAttributePointCost(worldConfig);
+  const remainingAttributePoints = getRemainingCreationAttributePoints(
+    worldConfig,
+    context.allocatedPoints,
+    selectedTalentIds.length,
+  );
+  const isSharedBudgetMode = usesSharedTalentPointBudget(worldConfig);
 
   const remainingDraws = Math.max(
     initialDrawCount - selectedTalentIds.length,
@@ -440,6 +453,10 @@ export function SoloCharTalentsStep({
 
   const nextDrawPreview = useMemo(() => {
     if (remainingDraws <= 0) {
+      return { candidates: [], poolUsed: null };
+    }
+
+    if (isSharedBudgetMode && remainingAttributePoints < talentPointCost) {
       return { candidates: [], poolUsed: null };
     }
 
@@ -454,8 +471,11 @@ export function SoloCharTalentsStep({
     allTalents,
     characterLevel,
     excludedTalentIds,
+    isSharedBudgetMode,
     obtainedTalentIds,
+    remainingAttributePoints,
     remainingDraws,
+    talentPointCost,
     worldConfig.talentRules,
   ]);
 
@@ -464,7 +484,9 @@ export function SoloCharTalentsStep({
     !isOffering &&
     remainingDraws > 0 &&
     nextDrawPreview.candidates.length === 0;
-  const isComplete = remainingDraws === 0 || isPoolExhausted;
+  const isOutOfAttributePoints =
+    isSharedBudgetMode && remainingDraws > 0 && remainingAttributePoints < talentPointCost;
+  const isComplete = remainingDraws === 0 || isPoolExhausted || isOutOfAttributePoints;
 
   const obtainedRecords = useMemo((): ObtainedTalentRecord[] => {
     const records: ObtainedTalentRecord[] = [];
@@ -557,6 +579,9 @@ export function SoloCharTalentsStep({
             >
               每次抽取会生成一组候选天赋，你只能从当前候选中选择 1
               项。维度赠送的天赋会直接加入已获得列表，不消耗抽取次数。
+              {isSharedBudgetMode
+                ? ` 每次手动选择还会额外消耗 ${talentPointCost} 点属性点。`
+                : ""}
             </p>
           </div>
 
@@ -582,6 +607,27 @@ export function SoloCharTalentsStep({
                 }}
               >
                 +{autoTalentIds.length} 维度赠送
+              </span>
+            ) : null}
+
+            {isSharedBudgetMode ? (
+              <span
+                className="rounded-full px-3 py-1 text-xs font-medium"
+                style={{
+                  background: colorAlpha(
+                    remainingAttributePoints < talentPointCost ? "warning" : "primary",
+                    0.12,
+                  ),
+                  color: color(
+                    remainingAttributePoints < talentPointCost ? "warning" : "primary",
+                  ),
+                  border: `1px solid ${colorAlpha(
+                    remainingAttributePoints < talentPointCost ? "warning" : "primary",
+                    0.22,
+                  )}`,
+                }}
+              >
+                剩余属性点：{remainingAttributePoints}
               </span>
             ) : null}
 
@@ -623,9 +669,11 @@ export function SoloCharTalentsStep({
                 {isOffering
                   ? `从 ${currentCandidates.length} 个候选中选择 1 项`
                   : isComplete
-                    ? isPoolExhausted
-                      ? "可抽取的有效天赋已耗尽，本步已提前结束。"
-                      : "初始抽取已完成，可以进入下一步。"
+                    ? isOutOfAttributePoints
+                      ? "共享属性点不足，无法继续获得新的手动天赋。"
+                      : isPoolExhausted
+                        ? "可抽取的有效天赋已耗尽，本步已提前结束。"
+                        : "初始抽取已完成，可以进入下一步。"
                     : `准备开始第 ${selectedTalentIds.length + 1} 抽`}
               </p>
             </div>
@@ -679,6 +727,9 @@ export function SoloCharTalentsStep({
                 >
                   将根据当前等级、已拥有天赋与维度限制，生成一组新的候选天赋。确认后本轮会出现{" "}
                   {nextDrawPreview.candidates.length || 0} 个可选项。
+                  {isSharedBudgetMode
+                    ? ` 本次选择后还会扣除 ${talentPointCost} 点属性点。`
+                    : ""}
                 </p>
 
                 <Button
@@ -734,11 +785,19 @@ export function SoloCharTalentsStep({
                 className="flex min-h-48 flex-col items-center justify-center rounded-2xl border p-6 text-center"
                 style={{
                   borderColor: colorAlpha(
-                    isPoolExhausted ? "warning" : "success",
+                    isOutOfAttributePoints
+                      ? "warning"
+                      : isPoolExhausted
+                        ? "warning"
+                        : "success",
                     0.22,
                   ),
                   background: `linear-gradient(135deg, ${colorAlpha(
-                    isPoolExhausted ? "warning" : "success",
+                    isOutOfAttributePoints
+                      ? "warning"
+                      : isPoolExhausted
+                        ? "warning"
+                        : "success",
                     0.08,
                   )} 0%, ${colorAlpha("bgBase", 0.55)} 100%)`,
                 }}
@@ -747,10 +806,20 @@ export function SoloCharTalentsStep({
                   className="mb-4 flex h-14 w-14 items-center justify-center rounded-full"
                   style={{
                     background: colorAlpha(
-                      isPoolExhausted ? "warning" : "success",
+                      isOutOfAttributePoints
+                        ? "warning"
+                        : isPoolExhausted
+                          ? "warning"
+                          : "success",
                       0.14,
                     ),
-                    color: color(isPoolExhausted ? "warning" : "success"),
+                    color: color(
+                      isOutOfAttributePoints
+                        ? "warning"
+                        : isPoolExhausted
+                          ? "warning"
+                          : "success",
+                    ),
                   }}
                 >
                   <Check className="h-6 w-6" />
@@ -760,15 +829,21 @@ export function SoloCharTalentsStep({
                   className="text-lg font-semibold"
                   style={{ color: color("textPrimary") }}
                 >
-                  {isPoolExhausted ? "已无更多可抽取天赋" : "抽取完成"}
+                  {isOutOfAttributePoints
+                    ? "共享属性点已耗尽"
+                    : isPoolExhausted
+                      ? "已无更多可抽取天赋"
+                      : "抽取完成"}
                 </h4>
                 <p
                   className="mt-2 max-w-xl text-sm leading-relaxed"
                   style={{ color: colorAlpha("textMuted", 0.82) }}
                 >
-                  {isPoolExhausted
-                    ? "当前世界、等级与维度限制下已经没有新的有效候选，本次角色创建的天赋抽取提前结束。"
-                    : "你已经完成本次角色创建阶段的全部天赋抽取，可以继续下一步确认最终角色信息。"}
+                  {isOutOfAttributePoints
+                    ? "当前角色创建共享属性点已不足以支付新的手动天赋，本次天赋步骤提前结束。"
+                    : isPoolExhausted
+                      ? "当前世界、等级与维度限制下已经没有新的有效候选，本次角色创建的天赋抽取提前结束。"
+                      : "你已经完成本次角色创建阶段的全部天赋抽取，可以继续下一步确认最终角色信息。"}
                 </p>
               </motion.div>
             ) : null}

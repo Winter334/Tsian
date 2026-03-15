@@ -25,6 +25,11 @@ import {
 import { createStaggerVariants } from "@/styles/motion-variants";
 import { color, colorAlpha, glow } from "@/styles/tokens";
 
+import {
+  getManualTalentIds,
+  getSpentTalentAttributePoints,
+  getTalentAttributePointCost,
+} from "../talent-point-budget";
 import type { StepProps } from "../types";
 
 // ============================================================
@@ -525,12 +530,27 @@ export function SoloCharAttributesStep({
     return sourceMap;
   }, [context.dimensionSelections, worldConfig.dimensions]);
 
+  const manualTalentIds = useMemo(
+    () =>
+      getManualTalentIds(
+        worldConfig,
+        context.dimensionSelections,
+        context.talentIds,
+      ),
+    [context.dimensionSelections, context.talentIds, worldConfig],
+  );
+  const talentPointCost = getTalentAttributePointCost(worldConfig);
+  const spentOnTalents = getSpentTalentAttributePoints(
+    worldConfig,
+    manualTalentIds.length,
+  );
+
   // 总已分配 & 剩余
   const totalAllocated = useMemo(
     () => Object.values(allocated).reduce((sum, value) => sum + value, 0),
     [allocated],
   );
-  const remaining = bonusPoints - totalAllocated;
+  const remaining = bonusPoints - totalAllocated - spentOnTalents;
 
   // 计算最终属性值
   const computedAttributes = useMemo(() => {
@@ -613,7 +633,7 @@ export function SoloCharAttributesStep({
     });
   }, [allocated, computedAttributes, onUpdateContext]);
 
-  // 同步步骤有效性：必须把点数分配完（remaining === 0）
+  // 同步步骤有效性：必须把共享属性点预算分配完（remaining === 0）
   useEffect(() => {
     onValidationChange?.(remaining === 0);
   }, [remaining, onValidationChange]);
@@ -685,13 +705,68 @@ export function SoloCharAttributesStep({
         </Button>
       </motion.div>
 
+      {talentPointCost > 0 ? (
+        <motion.div
+          className="mb-6 rounded-2xl border p-4"
+          variants={itemVariants}
+          initial="hidden"
+          animate="visible"
+          custom={2}
+          style={{
+            borderColor: colorAlpha("primary", 0.18),
+            background: `linear-gradient(135deg, ${colorAlpha("primary", 0.08)} 0%, ${colorAlpha("bgBase", 0.7)} 100%)`,
+          }}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p
+                className="text-sm font-semibold"
+                style={{ color: color("textPrimary") }}
+              >
+                天赋与属性点共用创建预算
+              </p>
+              <p
+                className="mt-1 text-xs leading-relaxed"
+                style={{ color: colorAlpha("textMuted", 0.82) }}
+              >
+                每选择 1 个手动天赋会额外消耗 {talentPointCost}{" "}
+                点属性点。维度赠送天赋不消耗属性点。
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span
+                className="rounded-full px-3 py-1"
+                style={{
+                  background: colorAlpha("secondary", 0.12),
+                  color: color("secondary"),
+                  border: `1px solid ${colorAlpha("secondary", 0.22)}`,
+                }}
+              >
+                手动天赋 {manualTalentIds.length} 项
+              </span>
+              <span
+                className="rounded-full px-3 py-1"
+                style={{
+                  background: colorAlpha("primary", 0.12),
+                  color: color("primary"),
+                  border: `1px solid ${colorAlpha("primary", 0.22)}`,
+                }}
+              >
+                天赋已消耗 {spentOnTalents} 点
+              </span>
+            </div>
+          </div>
+        </motion.div>
+      ) : null}
+
       {/* 属性卡片网格 */}
       <motion.div
         className="grid grid-cols-1 sm:grid-cols-2 gap-3"
         variants={itemVariants}
         initial="hidden"
         animate="visible"
-        custom={2}
+        custom={3}
       >
         {allocatableKeys.map((key, index) => {
           const attrConfig = getAttrConfig(key, worldConfig);
@@ -703,7 +778,7 @@ export function SoloCharAttributesStep({
           return (
             <motion.div
               key={key}
-              custom={index + 3}
+              custom={index + 4}
               variants={itemVariants}
               initial="hidden"
               animate="visible"
@@ -740,7 +815,7 @@ export function SoloCharAttributesStep({
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: motionConfig.duration.fast }}
           >
-            还有 {remaining} 点未分配，请分配完毕后继续
+            还有 {remaining} 点共享创建点数未分配，请分配完毕后继续
           </motion.p>
         ) : (
           <motion.p
@@ -752,7 +827,7 @@ export function SoloCharAttributesStep({
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: motionConfig.duration.fast }}
           >
-            ✓ 点数分配完毕，点击“下一步”继续
+            ✓ 创建点数分配完毕，点击“下一步”继续
           </motion.p>
         )}
       </AnimatePresence>

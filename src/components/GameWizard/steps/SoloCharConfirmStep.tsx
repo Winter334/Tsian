@@ -29,6 +29,14 @@ import { createStaggerVariants } from "@/styles/motion-variants";
 import { color, colorAlpha, glow } from "@/styles/tokens";
 
 import { GradientDivider } from "../components";
+import {
+  getCreationAttributeBudget,
+  getManualTalentIds,
+  getRemainingCreationAttributePoints,
+  getSpentTalentAttributePoints,
+  getTalentAttributePointCost,
+  usesSharedTalentPointBudget,
+} from "../talent-point-budget";
 import type { StepProps } from "../types";
 
 // ============================================================
@@ -428,6 +436,28 @@ export function SoloCharConfirmStep({ context, onUpdateContext }: StepProps) {
     worldConfig.primaryAttributes,
   ]);
 
+  const manualTalentIds = useMemo(
+    () =>
+      getManualTalentIds(
+        worldConfig,
+        context.dimensionSelections,
+        context.talentIds,
+      ),
+    [context.dimensionSelections, context.talentIds, worldConfig],
+  );
+  const talentPointCost = getTalentAttributePointCost(worldConfig);
+  const spentTalentPoints = getSpentTalentAttributePoints(
+    worldConfig,
+    manualTalentIds.length,
+  );
+  const totalCreationAttributePoints = getCreationAttributeBudget(worldConfig);
+  const remainingCreationAttributePoints = getRemainingCreationAttributePoints(
+    worldConfig,
+    context.allocatedPoints,
+    manualTalentIds.length,
+  );
+  const isSharedBudgetMode = usesSharedTalentPointBudget(worldConfig);
+
   // 雷达图轴数据
   const radarAxes = useMemo((): RadarAxis[] => {
     return radarAttributeKeys
@@ -729,9 +759,35 @@ export function SoloCharConfirmStep({ context, onUpdateContext }: StepProps) {
                   border: `1px solid ${colorAlpha("primary", 0.14)}`,
                 }}
               >
-                <SectionTitle icon={<Sparkles className="w-3.5 h-3.5" />}>
-                  天赋
-                </SectionTitle>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <SectionTitle icon={<Sparkles className="w-3.5 h-3.5" />}>
+                    天赋
+                  </SectionTitle>
+                  {isSharedBudgetMode ? (
+                    <span
+                      className="rounded-full px-2.5 py-1 text-[10px]"
+                      style={{
+                        background: colorAlpha("primary", 0.12),
+                        border: `1px solid ${colorAlpha("primary", 0.24)}`,
+                        color: color("primary"),
+                      }}
+                    >
+                      已消耗 {spentTalentPoints}/{totalCreationAttributePoints}{" "}
+                      创建点数
+                    </span>
+                  ) : null}
+                </div>
+
+                {isSharedBudgetMode ? (
+                  <p
+                    className="mb-3 text-xs leading-relaxed"
+                    style={{ color: colorAlpha("textMuted", 0.8) }}
+                  >
+                    手动选择天赋 {manualTalentIds.length} 项，每项消耗{" "}
+                    {talentPointCost} 点属性点；当前剩余{" "}
+                    {remainingCreationAttributePoints} 点。
+                  </p>
+                ) : null}
 
                 {talentInfos.length > 0 ? (
                   <div className="space-y-2">

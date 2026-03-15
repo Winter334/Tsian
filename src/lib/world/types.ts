@@ -411,11 +411,7 @@ export interface WorldConfig {
     initialOffersPerDraw?: number;
     /** 是否允许游戏中获得新天赋（默认 true） */
     allowAcquireDuringGame?: boolean;
-    /** 免费抽取次数存储属性键 */
-    freeDrawAttributeKey?: string;
-    /** 抽取点数存储属性键 */
-    drawPointAttributeKey?: string;
-    /** 每次抽取消耗的点数 */
+    /** 每次手动选择天赋消耗的角色创建属性点数 */
     drawPointCost?: number;
     /** 重复抽取策略，默认 "exclude_owned" */
     duplicatePolicy?: "exclude_owned" | "allow_repeat";

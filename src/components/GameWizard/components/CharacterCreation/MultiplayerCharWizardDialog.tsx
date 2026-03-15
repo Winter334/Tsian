@@ -18,8 +18,14 @@ import { useCommand, useMotionTokens } from "@/hooks";
 import { getOrCreateUserId, getUniqueTag } from "@/lib/user-identity";
 import { getRuntimeWorldConfig } from "@/lib/world/resolve-config";
 import type { CharacterDimension, WorldConfig } from "@/lib/world/types";
+
 import { createStepVariants } from "@/styles/motion-variants";
 import { colorAlpha } from "@/styles/tokens";
+import {
+  getCreationAttributeBudget,
+  getManualTalentIds,
+  getRemainingCreationAttributePoints,
+} from "../../talent-point-budget";
 
 import { WizardFooter, WizardProgressBar } from "../../components";
 import {
@@ -58,7 +64,7 @@ function mapContextToCharacterPayload(
     gender: ctx.characterGender || undefined,
     dimensionSelections: ctx.dimensionSelections,
     talentIds: ctx.talentIds,
-    attributes: ctx.attributes ?? ctx.allocatedPoints,
+    attributes: ctx.attributes,
   };
 }
 
@@ -74,7 +80,7 @@ function mapContextToCharacterUpdates(
     gender: ctx.characterGender || undefined,
     dimensionSelections: ctx.dimensionSelections,
     talentIds: ctx.talentIds,
-    attributes: ctx.attributes ?? ctx.allocatedPoints,
+    attributes: ctx.attributes,
   };
 }
 
@@ -148,13 +154,24 @@ function getDefaultStepValid(
   }
 
   if (step.id === "solo-char-attributes") {
-    const requiredPoints =
-      context.worldConfig?.pointBuyRules?.bonusPoints ?? 10;
-    const totalAllocated = Object.values(context.allocatedPoints ?? {}).reduce(
-      (sum, value) => sum + value,
-      0,
+    const worldConfig = context.worldConfig;
+    if (!worldConfig) {
+      return false;
+    }
+
+    const manualTalentIds = getManualTalentIds(
+      worldConfig,
+      context.dimensionSelections,
+      context.talentIds,
     );
-    return totalAllocated === requiredPoints;
+
+    return (
+      getRemainingCreationAttributePoints(
+        worldConfig,
+        context.allocatedPoints,
+        manualTalentIds.length,
+      ) === 0 && getCreationAttributeBudget(worldConfig) > 0
+    );
   }
 
   return true;
