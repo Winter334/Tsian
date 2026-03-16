@@ -10,16 +10,10 @@
  * 4. 如需新模式，在 types.ts 的 GAME_MODES 中添加
  */
 
-import { generateTalentCandidates } from "@/lib/rules/talent-draw";
-import {
-  aggregateDimensionEffects,
-  type CharacterDimension,
-  type WorldConfig,
-} from "@/lib/world/types";
+import { type CharacterDimension, type WorldConfig } from "@/lib/world/types";
 import {
   getManualTalentIds,
   getRemainingCreationAttributePoints,
-  getTalentAttributePointCost,
 } from "./talent-point-budget";
 
 import type { GameMode, WizardContext, WizardStepConfig } from "./types";
@@ -81,46 +75,7 @@ const FIXED_STEP_REGISTRY: Record<
   },
   "solo-char-talents": {
     component: SoloCharTalentsStep,
-    validate: (ctx) => {
-      const worldConfig = ctx.worldConfig;
-      if (!worldConfig) {
-        return false;
-      }
-
-      const dimensionEffects = aggregateDimensionEffects(
-        worldConfig,
-        ctx.dimensionSelections ?? {},
-      );
-      const selectedTalentIds = getManualTalentIds(
-        worldConfig,
-        ctx.dimensionSelections,
-        ctx.talentIds,
-      );
-      const initialDrawCount = worldConfig.talentRules?.initialDrawCount ?? 2;
-      const talentPointCost = getTalentAttributePointCost(worldConfig);
-      const remainingAttributePoints = getRemainingCreationAttributePoints(
-        worldConfig,
-        ctx.allocatedPoints,
-        selectedTalentIds.length,
-      );
-
-      if (selectedTalentIds.length >= initialDrawCount) {
-        return true;
-      }
-
-      if (talentPointCost > 0 && remainingAttributePoints < talentPointCost) {
-        return true;
-      }
-
-      const nextDrawPreview = generateTalentCandidates({
-        allTalents: worldConfig.talents ?? [],
-        ownedTalentIds: Array.from(new Set(ctx.talentIds ?? [])),
-        talentRules: worldConfig.talentRules,
-        excludeTalentIds: dimensionEffects.excludedTalents,
-      });
-
-      return nextDrawPreview.candidates.length === 0;
-    },
+    validate: (ctx) => Boolean(ctx.worldConfig),
   },
   "solo-char-confirm": {
     component: SoloCharConfirmStep,
@@ -154,8 +109,8 @@ export function generateWizardSteps(
   const soloChain = [
     "solo-char-name",
     ...dimensionStepIds,
-    "solo-char-attributes",
     "solo-char-talents",
+    "solo-char-attributes",
     "solo-char-confirm",
   ];
 
@@ -318,8 +273,8 @@ export function getStepsForMode(
         "world-selection",
         "solo-char-name",
         ...dimensionStepIds,
-        "solo-char-attributes",
         "solo-char-talents",
+        "solo-char-attributes",
         "solo-char-confirm",
       ];
     }

@@ -108,6 +108,15 @@ function buildWizardSteps(worldConfig: WorldConfig): WizardStepItem[] {
     });
   }
 
+  if ((worldConfig.talents ?? []).length > 0) {
+    steps.push({
+      id: "solo-char-talents",
+      label: "天赋选择",
+      component: SoloCharTalentsStep,
+      requiresValidation: true,
+    });
+  }
+
   const allocatableAttributes =
     worldConfig.pointBuyRules?.allocatableAttributes ?? [];
   if (allocatableAttributes.length > 0) {
@@ -116,14 +125,6 @@ function buildWizardSteps(worldConfig: WorldConfig): WizardStepItem[] {
       label: "属性分配",
       component: SoloCharAttributesStep,
       requiresValidation: true,
-    });
-  }
-
-  if ((worldConfig.talents ?? []).length > 0) {
-    steps.push({
-      id: "solo-char-talents",
-      label: "天赋选择",
-      component: SoloCharTalentsStep,
     });
   }
 
@@ -172,6 +173,10 @@ function getDefaultStepValid(
         manualTalentIds.length,
       ) === 0 && getCreationAttributeBudget(worldConfig) > 0
     );
+  }
+
+  if (step.id === "solo-char-talents") {
+    return Boolean(context.worldConfig);
   }
 
   return true;

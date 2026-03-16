@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronRight, Sparkles, Star } from "lucide-react";
+import { Check, ChevronRight, Sparkles, Star, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button, Card } from "@/components/ui";
@@ -332,6 +332,9 @@ export function SoloCharTalentsStep({
   const [currentCandidates, setCurrentCandidates] = useState<TalentConfig[]>(
     [],
   );
+  const [pendingSkippedTalentIds, setPendingSkippedTalentIds] = useState<
+    string[]
+  >([]);
 
   const obtainedTalentIds = useMemo(
     () => [...new Set([...autoTalentIds, ...selectedTalentIds])],
@@ -350,43 +353,60 @@ export function SoloCharTalentsStep({
     0,
   );
 
-  const nextDrawPreview = useMemo(() => {
-    if (remainingDraws <= 0) {
-      return { candidates: [], poolUsed: null };
-    }
+  const nextDrawExcludedTalentIds = useMemo(
+    () => [...new Set([...excludedTalentIds, ...pendingSkippedTalentIds])],
+    [excludedTalentIds, pendingSkippedTalentIds],
+  );
 
-    if (isSharedBudgetMode && remainingAttributePoints < talentPointCost) {
-      return { candidates: [], poolUsed: null };
-    }
+  const getDrawPreview = useCallback(
+    (extraExcludedTalentIds: string[] = []) => {
+      if (remainingDraws <= 0) {
+        return { candidates: [], poolUsed: null };
+      }
 
-    return generateTalentCandidates({
+      if (isSharedBudgetMode && remainingAttributePoints < talentPointCost) {
+        return { candidates: [], poolUsed: null };
+      }
+
+      return generateTalentCandidates({
+        allTalents,
+        ownedTalentIds: obtainedTalentIds,
+        talentRules: worldConfig.talentRules,
+        excludeTalentIds: [
+          ...new Set([...nextDrawExcludedTalentIds, ...extraExcludedTalentIds]),
+        ],
+      });
+    },
+    [
       allTalents,
-      ownedTalentIds: obtainedTalentIds,
-      talentRules: worldConfig.talentRules,
-      excludeTalentIds: excludedTalentIds,
-    });
-  }, [
-    allTalents,
-    excludedTalentIds,
-    isSharedBudgetMode,
-    obtainedTalentIds,
-    remainingAttributePoints,
-    remainingDraws,
-    talentPointCost,
-    worldConfig.talentRules,
-  ]);
+      isSharedBudgetMode,
+      nextDrawExcludedTalentIds,
+      obtainedTalentIds,
+      remainingAttributePoints,
+      remainingDraws,
+      talentPointCost,
+      worldConfig.talentRules,
+    ],
+  );
+
+  const nextDrawPreview = useMemo(() => getDrawPreview(), [getDrawPreview]);
 
   const isOffering = drawPhase === "offering" && currentCandidates.length > 0;
-  const isPoolExhausted =
-    !isOffering &&
-    remainingDraws > 0 &&
-    nextDrawPreview.candidates.length === 0;
+  const isSelectionLimitReached = remainingDraws === 0;
   const isOutOfAttributePoints =
     isSharedBudgetMode &&
     remainingDraws > 0 &&
     remainingAttributePoints < talentPointCost;
-  const isComplete =
-    remainingDraws === 0 || isPoolExhausted || isOutOfAttributePoints;
+  const isPoolExhausted =
+    !isOutOfAttributePoints &&
+    remainingDraws > 0 &&
+    nextDrawPreview.candidates.length === 0;
+  const canStartDraw =
+    !isOffering &&
+    remainingDraws > 0 &&
+    !isOutOfAttributePoints &&
+    nextDrawPreview.candidates.length > 0;
+  const canLeaveStep = !isOffering;
 
   const obtainedRecords = useMemo((): ObtainedTalentRecord[] => {
     const records: ObtainedTalentRecord[] = [];
@@ -400,12 +420,12 @@ export function SoloCharTalentsStep({
       });
     }
 
-    selectedTalentIds.forEach((talentId, index) => {
+    selectedTalentIds.forEach((talentId) => {
       records.push({
         talentId,
         talent: talentsById.get(talentId) ?? createUnknownTalent(talentId),
         source: "draw",
-        reason: `第 ${index + 1} 抽获得`,
+        reason: "手动选择",
       });
     });
 
@@ -426,17 +446,48 @@ export function SoloCharTalentsStep({
   }, [obtainedTalentIds, onUpdateContext]);
 
   useEffect(() => {
-    onValidationChange?.(isComplete);
-  }, [isComplete, onValidationChange]);
+    onValidationChange?.(canLeaveStep);
+  }, [canLeaveStep, onValidationChange]);
 
   const handleStartDraw = useCallback(() => {
-    if (remainingDraws <= 0 || nextDrawPreview.candidates.length === 0) {
+    if (!canStartDraw) {
       return;
     }
 
     setCurrentCandidates(nextDrawPreview.candidates);
     setDrawPhase("offering");
-  }, [nextDrawPreview.candidates, remainingDraws]);
+    setPendingSkippedTalentIds([]);
+  }, [canStartDraw, nextDrawPreview.candidates]);
+
+  const handleRerollCurrentOffer = useCallback(() => {
+    if (!isOffering) {
+      return;
+    }
+
+    const skippedTalentIds = currentCandidates.map((talent) => talent.id);
+    const rerolledPreview = getDrawPreview(skippedTalentIds);
+
+    if (rerolledPreview.candidates.length > 0) {
+      setCurrentCandidates(rerolledPreview.candidates);
+      setPendingSkippedTalentIds([]);
+      return;
+    }
+
+    setPendingSkippedTalentIds(skippedTalentIds);
+    setCurrentCandidates([]);
+    setDrawPhase("idle");
+  }, [currentCandidates, getDrawPreview, isOffering]);
+
+  const handleRemoveSelectedTalent = useCallback(
+    (talentId: string) => {
+      if (isOffering) {
+        return;
+      }
+
+      setSelectedTalentIds((prev) => prev.filter((id) => id !== talentId));
+    },
+    [isOffering],
+  );
 
   const handleSelectCandidate = useCallback(
     (talentId: string) => {
@@ -477,8 +528,8 @@ export function SoloCharTalentsStep({
               className="mt-2 text-sm leading-relaxed"
               style={{ color: colorAlpha("textMuted", 0.82) }}
             >
-              每次抽取会生成一组候选天赋，你只能从当前候选中选择 1
-              项。维度赠送的天赋会直接加入已获得列表，不消耗抽取次数。
+              每次抽取会生成一组候选天赋，你可以从当前候选中选择 1
+              项，也可以重新抽取当前结果。维度赠送的天赋会直接加入已获得列表，不消耗手动选择槽位。
               {isSharedBudgetMode
                 ? ` 每次手动选择还会额外消耗 ${talentPointCost} 点属性点。`
                 : ""}
@@ -494,7 +545,7 @@ export function SoloCharTalentsStep({
                 border: `1px solid ${colorAlpha("primary", 0.22)}`,
               }}
             >
-              剩余抽取次数：{remainingDraws}/{initialDrawCount}
+              剩余可保留槽位：{remainingDraws}/{initialDrawCount}
             </span>
 
             {autoTalentIds.length > 0 ? (
@@ -573,20 +624,24 @@ export function SoloCharTalentsStep({
                 style={{ color: colorAlpha("textMuted", 0.78) }}
               >
                 {isOffering
-                  ? `从 ${currentCandidates.length} 个候选中选择 1 项`
-                  : isComplete
-                    ? isOutOfAttributePoints
-                      ? "共享属性点不足，无法继续获得新的手动天赋。"
-                      : isPoolExhausted
-                        ? "可抽取的有效天赋已耗尽，本步已提前结束。"
-                        : "初始抽取已完成，可以进入下一步。"
-                    : `准备开始第 ${selectedTalentIds.length + 1} 抽`}
+                  ? `当前有 ${currentCandidates.length} 个候选待处理，选择 1 项或重新抽取后才能继续。`
+                  : canStartDraw
+                    ? selectedTalentIds.length > 0
+                      ? "你可以继续抽取新的候选，也可以直接进入下一步。"
+                      : "你可以开始抽取天赋，也可以暂时不选直接进入下一步。"
+                    : isSelectionLimitReached
+                      ? "手动已选天赋已达上限；可移除已选项后继续抽取，或直接进入下一步。"
+                      : isOutOfAttributePoints
+                        ? "共享属性点不足；可移除已选项后继续抽取，或直接进入下一步。"
+                        : isPoolExhausted
+                          ? "当前已无新的有效候选；可直接进入下一步，或移除已选项后再试。"
+                          : "当前可以直接进入下一步。"}
               </p>
             </div>
           </div>
 
           <AnimatePresence mode="wait">
-            {!isOffering && !isComplete ? (
+            {!isOffering && canStartDraw ? (
               <motion.div
                 key="draw-ready"
                 initial={{ opacity: 0, y: 12 }}
@@ -620,17 +675,19 @@ export function SoloCharTalentsStep({
                   className="mt-2 max-w-xl text-sm leading-relaxed"
                   style={{ color: colorAlpha("textMuted", 0.82) }}
                 >
-                  将根据当前已拥有天赋与维度限制，生成一组新的候选天赋。确认后本轮会出现{" "}
-                  {nextDrawPreview.candidates.length || 0} 个可选项。
+                  将根据当前已拥有天赋与维度限制，生成一组新的候选天赋。你也可以先进入下一步，稍后再返回调整。
+                  {nextDrawPreview.candidates.length > 0
+                    ? ` 本轮预计出现 ${nextDrawPreview.candidates.length} 个可选项。`
+                    : ""}
                   {isSharedBudgetMode
-                    ? ` 本次选择后还会扣除 ${talentPointCost} 点属性点。`
+                    ? ` 若本轮选中天赋，还会额外消耗 ${talentPointCost} 点属性点。`
                     : ""}
                 </p>
 
                 <Button
                   onClick={handleStartDraw}
                   className="mt-6"
-                  disabled={nextDrawPreview.candidates.length === 0}
+                  disabled={!canStartDraw}
                 >
                   开始抽取
                   <ChevronRight className="ml-1.5 h-4 w-4" />
@@ -667,12 +724,18 @@ export function SoloCharTalentsStep({
                     </motion.div>
                   ))}
                 </div>
+
+                <div className="mt-4 flex justify-end">
+                  <Button variant="ghost" onClick={handleRerollCurrentOffer}>
+                    重新抽取
+                  </Button>
+                </div>
               </motion.div>
             ) : null}
 
-            {!isOffering && isComplete ? (
+            {!isOffering && !canStartDraw ? (
               <motion.div
-                key="draw-complete"
+                key="draw-blocked"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
@@ -680,19 +743,15 @@ export function SoloCharTalentsStep({
                 className="flex min-h-48 flex-col items-center justify-center rounded-2xl border p-6 text-center"
                 style={{
                   borderColor: colorAlpha(
-                    isOutOfAttributePoints
+                    isOutOfAttributePoints || isPoolExhausted
                       ? "warning"
-                      : isPoolExhausted
-                        ? "warning"
-                        : "success",
+                      : "secondary",
                     0.22,
                   ),
                   background: `linear-gradient(135deg, ${colorAlpha(
-                    isOutOfAttributePoints
+                    isOutOfAttributePoints || isPoolExhausted
                       ? "warning"
-                      : isPoolExhausted
-                        ? "warning"
-                        : "success",
+                      : "secondary",
                     0.08,
                   )} 0%, ${colorAlpha("bgBase", 0.55)} 100%)`,
                 }}
@@ -701,19 +760,15 @@ export function SoloCharTalentsStep({
                   className="mb-4 flex h-14 w-14 items-center justify-center rounded-full"
                   style={{
                     background: colorAlpha(
-                      isOutOfAttributePoints
+                      isOutOfAttributePoints || isPoolExhausted
                         ? "warning"
-                        : isPoolExhausted
-                          ? "warning"
-                          : "success",
+                        : "secondary",
                       0.14,
                     ),
                     color: color(
-                      isOutOfAttributePoints
+                      isOutOfAttributePoints || isPoolExhausted
                         ? "warning"
-                        : isPoolExhausted
-                          ? "warning"
-                          : "success",
+                        : "secondary",
                     ),
                   }}
                 >
@@ -724,21 +779,25 @@ export function SoloCharTalentsStep({
                   className="text-lg font-semibold"
                   style={{ color: color("textPrimary") }}
                 >
-                  {isOutOfAttributePoints
-                    ? "共享属性点已耗尽"
-                    : isPoolExhausted
-                      ? "已无更多可抽取天赋"
-                      : "抽取完成"}
+                  {isSelectionLimitReached
+                    ? "手动天赋已达上限"
+                    : isOutOfAttributePoints
+                      ? "共享属性点不足"
+                      : isPoolExhausted
+                        ? "已无更多可抽取天赋"
+                        : "当前无需继续抽取"}
                 </h4>
                 <p
                   className="mt-2 max-w-xl text-sm leading-relaxed"
                   style={{ color: colorAlpha("textMuted", 0.82) }}
                 >
-                  {isOutOfAttributePoints
-                    ? "当前角色创建共享属性点已不足以支付新的手动天赋，本次天赋步骤提前结束。"
-                    : isPoolExhausted
-                      ? "当前世界、已拥有天赋与维度限制下已经没有新的有效候选，本次角色创建的天赋抽取提前结束。"
-                      : "你已经完成本次角色创建阶段的全部天赋抽取，可以继续下一步确认最终角色信息。"}
+                  {isSelectionLimitReached
+                    ? "你已保留最多数量的手动天赋。若想继续追求更好的结果，可先从下方移除已选天赋，再继续抽取；也可以直接进入下一步。"
+                    : isOutOfAttributePoints
+                      ? "当前共享属性点不足以支付新的手动天赋。若想继续抽取，可先移除部分已选天赋回收预算；也可以直接进入下一步。"
+                      : isPoolExhausted
+                        ? "当前世界、已拥有天赋与维度限制下已经没有新的有效候选。你可以直接进入下一步，或移除已选天赋后重新尝试。"
+                        : "当前没有待处理候选，你可以直接进入下一步。"}
                 </p>
               </motion.div>
             ) : null}
@@ -765,7 +824,8 @@ export function SoloCharTalentsStep({
               className="mt-1 text-xs"
               style={{ color: colorAlpha("textMuted", 0.78) }}
             >
-              包含维度赠送与抽取选中的全部结果。最终会同步写入角色的 talentIds。
+              包含维度赠送与抽取选中的全部结果。手动选择获得的天赋可移除，维度赠送不可移除。最终会同步写入角色的
+              talentIds。
             </p>
           </div>
 
@@ -798,14 +858,32 @@ export function SoloCharTalentsStep({
                     initial="hidden"
                     animate="visible"
                   >
-                    <TalentCard
-                      talent={record.talent}
-                      rarity={rarity}
-                      rarityLabel={rarity?.label ?? null}
-                      source={record.source}
-                      reason={record.reason}
-                      interactive={false}
-                    />
+                    <div className="space-y-2">
+                      <TalentCard
+                        talent={record.talent}
+                        rarity={rarity}
+                        rarityLabel={rarity?.label ?? null}
+                        source={record.source}
+                        reason={record.reason}
+                        interactive={false}
+                      />
+
+                      {record.source === "draw" ? (
+                        <div className="flex justify-end">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              handleRemoveSelectedTalent(record.talentId)
+                            }
+                            disabled={isOffering}
+                          >
+                            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                            移除已选
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
                   </motion.div>
                 );
               })}
