@@ -5,7 +5,8 @@
  * 从已注册的 Schema 自动生成结构化的操作说明供 Parser AI 使用。
  */
 
-import type { WorldConfig } from "@/lib/world/types";
+import type { ItemCategory } from "@/domain/entities/item";
+import type { EquipSlotDefinition, WorldConfig } from "@/lib/world/types";
 
 import { actionSchemaRegistry } from "./registry";
 import type { ActionCategory, ActionParamSchema, ActionSchema } from "./types";
@@ -138,6 +139,25 @@ function renderSchema(schema: ActionSchema): string {
 
 // ─── 动态信息区块 ────────────────────────────────────────
 
+function formatAllowedCategories(
+  allowedCategories?: readonly ItemCategory[],
+): string {
+  if (!allowedCategories || allowedCategories.length === 0) {
+    return "全部类别";
+  }
+
+  return allowedCategories.join("/");
+}
+
+function renderEquipSlotDefinition(slot: EquipSlotDefinition): string {
+  const label = slot.label.trim() || slot.id;
+  const maxCount = slot.maxCount ?? 1;
+
+  return `- ${slot.id}（显示名：${label}，允许类别：${formatAllowedCategories(
+    slot.allowedCategories,
+  )}，槽位上限：${maxCount}）`;
+}
+
 function renderWorldInfo(
   worldConfig: WorldConfig,
   entities?: EntityInfo[],
@@ -165,6 +185,17 @@ function renderWorldInfo(
     '⚠️ 重要：当使用 scope="stat" 的 modifier 时，field 只能使用上方主属性 + 衍生属性中列出的 key；未在上方列出的 key 不可用。',
   );
 
+  // 装备槽位定义
+  const equipSlotDefinitions = worldConfig.inventoryRules?.equipSlotDefinitions;
+  if (equipSlotDefinitions && equipSlotDefinitions.length > 0) {
+    lines.push("");
+    lines.push("### 当前世界装备槽位");
+    lines.push("涉及 equipSlot / slot 时，只能使用以下真实槽位 ID：");
+    for (const slot of equipSlotDefinitions) {
+      lines.push(renderEquipSlotDefinition(slot));
+    }
+  }
+
   // 预定义状态
   if (worldConfig.conditions && worldConfig.conditions.length > 0) {
     lines.push("");
@@ -178,21 +209,6 @@ function renderWorldInfo(
         `- ${cond.id} (${cond.name})${triggerInfo}${
           cond.description ? `: ${cond.description}` : ""
         }`,
-      );
-    }
-  }
-
-  // 天赋列表
-  if (worldConfig.talents && worldConfig.talents.length > 0) {
-    lines.push("");
-    lines.push("### 可用天赋");
-    for (const talent of worldConfig.talents) {
-      const modInfo = talent.modifiers
-        ?.map((m) => `${m.scope}: ${m.reason}`)
-        .join(", ");
-      const mechanicPart = modInfo ? ` [自动修正: ${modInfo}]` : " [仅语义]";
-      lines.push(
-        `- ${talent.id} (${talent.name})${mechanicPart}: ${talent.description}`,
       );
     }
   }

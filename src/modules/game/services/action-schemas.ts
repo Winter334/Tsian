@@ -806,7 +806,7 @@ const spawnSchema: ActionSchema = {
     "attributes": { "str": 8, "int": 14 },
     "talentIds": ["bargain_master"],
     "initialItems": [
-      { "name": "精钢长剑", "category": "weapon", "equipSlot": "main_hand" },
+      { "name": "精钢长剑", "category": "weapon", "equipSlot": "<填写世界配置中的真实武器槽位ID>" },
       { "name": "治疗药水", "category": "consumable", "quantity": 3 }
     ],
     "initialSkills": [
@@ -825,8 +825,8 @@ const spawnSchema: ActionSchema = {
     "personality": "严肃尽职",
     "attributes": { "str": 14, "con": 12 },
     "initialItems": [
-      { "name": "铁剑", "category": "weapon", "equipSlot": "main_hand", "autoEquip": true },
-      { "name": "链甲", "category": "armor", "equipSlot": "body", "autoEquip": true }
+      { "name": "铁剑", "category": "weapon", "equipSlot": "<填写世界配置中的真实武器槽位ID>", "autoEquip": true },
+      { "name": "链甲", "category": "armor", "equipSlot": "<填写世界配置中的真实护甲槽位ID>", "autoEquip": true }
     ],
     "initialSkills": [
       { "name": "格挡", "category": "combat", "description": "使用盾牌或武器格挡攻击", "activeUsable": true, "cost": { "field": "sp", "amount": 5 } }

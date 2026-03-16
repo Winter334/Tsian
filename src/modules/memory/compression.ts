@@ -100,7 +100,7 @@ function emitCompressionFailedToast(
   );
 }
 
-function buildSummarizerUserMessage(
+function buildSummarizerSource(
   miniSummaries: MiniSummary[],
   megaSummaries: MegaSummary[],
 ): string {
@@ -132,7 +132,7 @@ function buildSummarizerVariableContext(
     mode: "solo",
     user: { name: "Summarizer" },
     chatHistory: [],
-    userInput: buildSummarizerUserMessage(miniSummaries, megaSummaries),
+    summarySource: buildSummarizerSource(miniSummaries, megaSummaries),
   };
 }
 
@@ -390,20 +390,19 @@ export async function checkAndTriggerCompression(
         summarizerPreset,
         variableContext,
       );
-      const hasUserMessage = assembledMessages.some(
-        (message) =>
-          message.role === "user" && message.content.trim().length > 0,
+      const hasRenderableMessage = assembledMessages.some(
+        (message) => message.content.trim().length > 0,
       );
 
-      if (!hasUserMessage) {
+      if (!hasRenderableMessage) {
         const duration = performance.now() - startedAt;
         reportSummarizerFailure({
           conversationId,
           turn: summarizerTurn,
           warningCode: WARNING_CODES.SUMMARIZER_NO_VALID_MESSAGES,
-          warning: "Summarizer 统一链路未组装出有效用户消息，已跳过本次压缩。",
+          warning: "Summarizer 统一链路未组装出有效提示消息，已跳过本次压缩。",
           duration,
-          error: "assembler_missing_user_message",
+          error: "assembler_missing_renderable_message",
           correlationId,
         });
         return;

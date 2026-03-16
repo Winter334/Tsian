@@ -151,6 +151,9 @@ class DefaultVariableResolver implements VariableResolver {
       case "user_input":
         return context.userInput ?? "";
 
+      case "summary_source":
+        return context.summarySource ?? "";
+
       case "group":
         if (context.mode === "multiplayer" && context.players) {
           return context.players.map((p) => p.name).join("、");

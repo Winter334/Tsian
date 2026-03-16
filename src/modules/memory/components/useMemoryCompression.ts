@@ -21,7 +21,7 @@ function buildCompressionVariableContext(
     mode: "solo",
     user: { name: "Summarizer" },
     chatHistory: [],
-    userInput: selectedText,
+    summarySource: selectedText,
   };
 }
 
@@ -56,14 +56,13 @@ export function useMemoryCompression(): UseMemoryCompressionResult {
         summarizerPreset,
         variableContext,
       );
-      const hasUserMessage = assembledMessages.some(
-        (message) =>
-          message.role === "user" && message.content.trim().length > 0,
+      const hasRenderableMessage = assembledMessages.some(
+        (message) => message.content.trim().length > 0,
       );
 
-      if (!hasUserMessage) {
+      if (!hasRenderableMessage) {
         throw new Error(
-          "Summarizer 预设未组装出有效用户消息，请检查 Marker 配置。",
+          "Summarizer 预设未组装出有效提示消息，请检查预设块配置。",
         );
       }
 

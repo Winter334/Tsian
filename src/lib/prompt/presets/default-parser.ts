@@ -253,24 +253,6 @@ export const defaultParserPreset: Preset = {
       enabled: true,
     },
     {
-      id: "memory-summary",
-      name: "分段记忆",
-      role: "system",
-      marker: true,
-      markerType: "memorySummary",
-      enabled: true,
-      content: "",
-      markerConfig: {
-        recentNarrativeCount: 1,
-        miniSummaryCount: 0,
-        megaSummaryMode: "all" as const,
-        megaSummaryLimit: 0,
-        compressionThreshold: 8,
-      },
-      injectionDepth: 0,
-      order: 6,
-    },
-    {
       id: "user-input",
       name: "用户输入",
       content: "{{user_input}}",
@@ -288,7 +270,6 @@ export const defaultParserPreset: Preset = {
     "plot-directives",
     "character-sheet",
     "anti-repeat-output-rules",
-    "memory-summary",
     "user-input",
   ],
   metadata: {

@@ -103,8 +103,8 @@ const grantItemSchema: ActionSchema = {
       json: `{ "type": "grantItem", "target": "player", "templateId": "iron_sword", "name": "铁剑", "description": "一把普通的铁制长剑", "category": "weapon", "reason": "商人赠送的武器" }`,
     },
     {
-      scenario: "发放带属性修正的锋利长剑",
-      json: `{ "type": "grantItem", "target": "player", "name": "锋利的长剑", "description": "一把锋利的制式长剑", "category": "weapon", "equipSlot": "main_hand", "effects": [{ "type": "modifier", "description": "增强力量属性", "modifiers": [{ "scope": "stat", "field": "str", "value": 2, "reason": "长剑力量加成" }] }] }`,
+      scenario: "发放带属性修正并声明默认装备槽位的武器",
+      json: `{ "type": "grantItem", "target": "player", "name": "锋利的长剑", "description": "一把锋利的制式长剑", "category": "weapon", "equipSlot": "<填写世界配置中的真实武器槽位ID>", "effects": [{ "type": "modifier", "description": "增强力量属性", "modifiers": [{ "scope": "stat", "field": "str", "value": 2, "reason": "长剑力量加成" }] }] }`,
     },
   ],
 };
@@ -192,8 +192,8 @@ const equipItemSchema: ActionSchema = {
   ],
   examples: [
     {
-      scenario: "装备铁剑到主手",
-      json: `{ "type": "equipItem", "target": "player", "instanceId": "item_001", "slot": "main_hand" }`,
+      scenario: "把武器装备到世界配置允许的目标槽位",
+      json: `{ "type": "equipItem", "target": "player", "instanceId": "item_001", "slot": "<填写世界配置中的真实槽位ID>" }`,
     },
   ],
 };
