@@ -514,6 +514,50 @@ const DEFAULT_CULTIVATION_MILESTONE_GROWTH: NonNullable<
   },
 ];
 
+const DEFAULT_CHECK_RULE_DC_PRESETS: NonNullable<CheckRuleConfig["dcPresets"]> =
+  {
+    melee_attack: {
+      label: "近身攻伐",
+      formula: "target.guard",
+      defaultSkill: "str",
+    },
+    movement_chase: {
+      label: "追逐遁行",
+      formula: "target.movement_roll",
+      defaultSkill: "movement_roll",
+    },
+    soul_attack: {
+      label: "神识冲击",
+      formula: "target.soul_resist",
+      defaultSkill: "spr",
+    },
+    insight_break: {
+      label: "勘破虚实",
+      formula: "target.insight",
+      defaultSkill: "insight",
+    },
+  };
+
+const DEFAULT_CHECK_RULE_OPPOSED_PRESETS: NonNullable<
+  CheckRuleConfig["opposedPresets"]
+> = {
+  stealth: {
+    label: "敛息潜行",
+    attackerSkill: "agi",
+    defenderSkill: "insight",
+  },
+  pursuit: {
+    label: "遁行追逐",
+    attackerSkill: "movement_roll",
+    defenderSkill: "movement_roll",
+  },
+  soul_duel: {
+    label: "神识交锋",
+    attackerSkill: "spr",
+    defenderSkill: "soul_resist",
+  },
+};
+
 export const DEFAULT_WORLD_CONFIG: WorldConfig = {
   version: 1,
   worldId: "lyra-zhetian",
@@ -691,6 +735,8 @@ export const DEFAULT_WORLD_CONFIG: WorldConfig = {
     criticalSuccessThreshold: 20,
     criticalFailureThreshold: 1,
     allowContest: true,
+    dcPresets: DEFAULT_CHECK_RULE_DC_PRESETS,
+    opposedPresets: DEFAULT_CHECK_RULE_OPPOSED_PRESETS,
     dcGuideline: {
       scale: [
         {

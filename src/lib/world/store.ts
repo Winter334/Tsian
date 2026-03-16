@@ -26,6 +26,39 @@ function generateWorldId(prefix = "world"): WorldId {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
+function patchBuiltinWorldMissingCheckRulePresets(world: World): World | null {
+  if (world.id !== defaultWorld.id || world.meta.source !== "lyra") {
+    return null;
+  }
+
+  const defaultCheckRules = defaultWorld.rules.checkRules;
+  const currentCheckRules = world.rules.checkRules ?? {};
+  const dcPresetsMissing =
+    currentCheckRules.dcPresets === undefined &&
+    defaultCheckRules.dcPresets !== undefined;
+  const opposedPresetsMissing =
+    currentCheckRules.opposedPresets === undefined &&
+    defaultCheckRules.opposedPresets !== undefined;
+
+  if (!dcPresetsMissing && !opposedPresetsMissing) {
+    return null;
+  }
+
+  return {
+    ...world,
+    rules: {
+      ...world.rules,
+      checkRules: {
+        ...currentCheckRules,
+        ...(dcPresetsMissing ? { dcPresets: defaultCheckRules.dcPresets } : {}),
+        ...(opposedPresetsMissing
+          ? { opposedPresets: defaultCheckRules.opposedPresets }
+          : {}),
+      },
+    },
+  };
+}
+
 interface WorldStoreState {
   worlds: WorldIndex[];
   activeWorldId: WorldId | null;
@@ -80,11 +113,23 @@ export const useWorldStore = create<WorldStoreState>()(
           index = worldStorage.getWorldIndex();
         } else {
           const builtinWorld = await worldStorage.loadWorld(defaultWorld.id);
+          const patchedBuiltinWorld =
+            builtinWorld !== null
+              ? patchBuiltinWorldMissingCheckRulePresets(builtinWorld)
+              : null;
+          const builtinWorldForRefresh = patchedBuiltinWorld ?? builtinWorld;
+
+          if (patchedBuiltinWorld) {
+            await worldStorage.saveWorld(patchedBuiltinWorld);
+            index = worldStorage.getWorldIndex();
+          }
+
           const shouldRefreshBuiltinSeed =
-            builtinWorld !== null &&
-            builtinWorld.meta.source === "lyra" &&
-            builtinWorld.meta.updatedAt <= 0 &&
-            JSON.stringify(builtinWorld) !== JSON.stringify(defaultWorld);
+            builtinWorldForRefresh !== null &&
+            builtinWorldForRefresh.meta.source === "lyra" &&
+            builtinWorldForRefresh.meta.updatedAt <= 0 &&
+            JSON.stringify(builtinWorldForRefresh) !==
+              JSON.stringify(defaultWorld);
 
           if (shouldRefreshBuiltinSeed) {
             await worldStorage.saveWorld(defaultWorld);
